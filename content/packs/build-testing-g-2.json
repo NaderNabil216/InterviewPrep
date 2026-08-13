@@ -287,15 +287,16 @@
         {
           "title": "Sign your app",
           "url": "https://developer.android.com/studio/publish/app-signing",
-          "checked": "2026-08-12"
+          "checked": "2026-08-13"
         },
         {
-          "title": "Announcing Google Play App Signing",
-          "url": "https://android-developers.googleblog.com/2017/09/announcing-google-play-app-signing.html",
-          "checked": "2026-08-12"
+          "title": "APK Signature Scheme v3 — key rotation from Android 9",
+          "url": "https://source.android.com/docs/security/features/apksigning/v3",
+          "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.16"
     },
     {
       "id": "bt-0019",
