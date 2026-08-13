@@ -1,0 +1,355 @@
+{
+  "id": "kotlin-a",
+  "title": "Kotlin Language",
+  "track": "kotlin",
+  "items": [
+    {
+      "id": "kt-0001",
+      "track": "kotlin",
+      "topic": "Null safety",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "null-safety",
+        "basics"
+      ],
+      "q": "How does Kotlin's null safety actually work, and what is a platform type?",
+      "shortAnswer": [
+        "Nullability is part of the type system: `String` and `String?` are different types, checked at compile time.",
+        "The compiler inserts intrinsic null checks at Java interop boundaries, so NPEs surface at the boundary rather than deep in your code.",
+        "A platform type (`String!`) comes from Java where nullability is unknown — the compiler relaxes checks, which is exactly where NPEs still leak in."
+      ],
+      "answer": "Kotlin encodes nullability in the type system rather than in annotations or convention. `String` can never hold null; `String?` can. The compiler refuses unsafe calls on nullable types, so you must handle absence explicitly.\n\n#### The operators\n- `?.` safe call — returns null instead of throwing.\n- `?:` elvis — supplies a fallback, and because `throw`/`return` are expressions of type `Nothing`, `?: return` and `?: error(\"…\")` are idiomatic guard clauses.\n- `!!` not-null assertion — deliberately ugly; it throws `NullPointerException` by design so it is greppable in review.\n\n#### Platform types — the real interview point\nWhen Kotlin calls Java, the compiler often cannot know whether a value is nullable. It assigns a **platform type**, written `String!` in error messages but not writable by you. On a platform type the compiler applies **no** null checks — you can assign it to `String` and it will only blow up at runtime.\n\nMitigations: annotate the Java side (`@Nullable`/`@NonNull`, JSR-305), or declare the Kotlin type explicitly so the compiler inserts a check at assignment. Modern AndroidX is heavily annotated, so most framework calls give you real nullable types.\n\n#### Where NPEs still come from in Kotlin\n1. `!!`\n2. Platform types from unannotated Java\n3. `lateinit` accessed before initialization (throws `UninitializedPropertyAccessException`)\n4. Leaking `this` from a constructor into code that reads not-yet-initialized properties\n5. External Java libraries returning null from a method declared non-null",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Guard clauses using Nothing-typed expressions",
+          "src": "fun render(user: User?) {\n    val u = user ?: return                 // Nothing collapses into any type\n    val name = u.displayName ?: u.email ?: \"Anonymous\"\n    // smart cast: after the null check the compiler knows u.avatar is non-null\n    val avatar = u.avatar\n    if (avatar != null) {\n        load(avatar)                        // no ?. needed here\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Why can't the compiler smart-cast a `var` property from another module?",
+        "What does `lateinit` compile to, and why can't it be used on primitives?",
+        "How would you model 'value absent' vs 'value not loaded yet' — is `null` enough?"
+      ],
+      "traps": [
+        "Saying 'Kotlin has no NPEs'. It reduces them; it does not eliminate them. Naming platform types and `lateinit` is what separates a strong answer.",
+        "Using `!!` in the code you write on the whiteboard. Interviewers read it as not having thought about the absent case."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Null safety",
+          "url": "https://kotlinlang.org/docs/null-safety.html",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0002",
+      "track": "kotlin",
+      "topic": "Classes & data modeling",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "data-class",
+        "equals",
+        "modeling"
+      ],
+      "q": "What does `data class` generate, and when is it the wrong choice?",
+      "shortAnswer": [
+        "It generates `equals`/`hashCode`/`toString`/`componentN`/`copy` from the properties in the **primary constructor only**.",
+        "Wrong choice when identity matters, when you need inheritance, or when a `copy()` can bypass validation invariants.",
+        "`copy()` ignores `init` block validation — that's the classic gotcha."
+      ],
+      "answer": "`data class` is a codegen convenience for value-like aggregates.\n\n#### What is generated\n- `equals()`/`hashCode()` over primary-constructor properties\n- `toString()` of the form `User(id=1, name=Ada)`\n- `componentN()` enabling destructuring\n- `copy()` with defaults from the current instance\n\n#### The traps\n**Only primary-constructor properties count.** A body-declared property is invisible to `equals`, `hashCode`, `toString`, and `copy` — two instances differing only in a body property compare equal.\n\n**`copy()` bypasses nothing, but broadens reach.** `copy()` re-runs the constructor so `init` *does* run, yet it also lets callers construct states you never intended to be reachable, and it is `public` even if your constructor is `private`. Kotlin warns about data classes with non-public constructors: expose a factory or use explicit `copy`-like functions instead.\n\n**Inheritance.** A data class cannot be `open`. Model variants with a `sealed interface` whose implementations are data classes.\n\n**Mutable properties.** `var` fields change the hash code after insertion into a `HashSet`, making the element unfindable. Keep them `val`.\n\n#### When to use what\n- **`data class`** — DTOs, UI state, value aggregates.\n- **plain `class`** — entities with identity, classes with behavior.\n- **`value class`** — a single wrapped value you want type-safe and allocation-free at runtime.\n- **`sealed interface` + data classes** — a closed set of variants, exhaustively checkable in `when`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The body-property trap, and the sealed-variant alternative",
+          "src": "data class Session(val id: String) {\n    var lastSeen: Long = 0L        // NOT part of equals/hashCode/copy/toString\n}\n\nSession(\"a\").apply { lastSeen = 1 } == Session(\"a\").apply { lastSeen = 2 } // true (!)\n\n// Closed variant modeling — exhaustive `when`, no `else` branch needed\nsealed interface UiState {\n    data object Loading : UiState\n    data class Content(val items: List<Item>) : UiState\n    data class Error(val cause: Throwable, val retryable: Boolean) : UiState\n}"
+        }
+      ],
+      "followUps": [
+        "Why does `data object` exist, and how does its `toString` differ from `object`?",
+        "How do you keep a data class stable for Compose skipping if it holds a `List`?",
+        "What happens to `equals` if you override `hashCode` only?"
+      ],
+      "traps": [
+        "Not knowing that body-declared properties are excluded from generated members.",
+        "Reaching for `data class` on an entity with identity semantics — two rows with the same content are not the same row."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Data classes",
+          "url": "https://kotlinlang.org/docs/data-classes.html",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0003",
+      "track": "kotlin",
+      "topic": "Classes & data modeling",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "value-class",
+        "performance",
+        "internals"
+      ],
+      "q": "What is a `value class` (inline class), and when does it actually get boxed?",
+      "shortAnswer": [
+        "A single-property wrapper the compiler erases at runtime, giving you type safety with no allocation in the common path.",
+        "It boxes whenever it must be used as a reference: as a generic type argument, when nullable, when stored in a collection, or when used as a supertype-typed value.",
+        "Function names get mangled to avoid JVM signature clashes — that breaks Java interop unless you add `@JvmName`."
+      ],
+      "answer": "`@JvmInline value class UserId(val raw: String)` compiles so that most usages pass the underlying `String` directly. You get a distinct compile-time type — you can no longer swap `UserId` and `OrderId` by accident — for zero runtime cost in the happy path.\n\n#### When boxing happens\nThe wrapper is materialized as a real object whenever the JVM needs a reference:\n- used as a generic type argument: `List<UserId>`, `Flow<UserId>`\n- nullable: `UserId?`\n- assigned to a supertype it implements (`Any`, or an interface)\n- captured in a way that requires an object identity\n\nSo `fun load(id: UserId)` is free, but `fun loadAll(ids: List<UserId>)` boxes every element.\n\n#### Name mangling\nBecause `fun send(id: UserId)` and `fun send(name: String)` would both erase to `send(String)`, the compiler mangles the name (`send-abc123`). From Kotlin this is invisible; from Java the function is effectively uncallable. Annotate with `@JvmName(\"sendById\")` if Java must call it.\n\n#### Practical Android use\n- Type-safe IDs (`UserId`, `TrackId`) so you cannot transpose arguments.\n- Units (`Millis`, `Dp`-like wrappers) — Compose's own `Dp`, `Color`, and `Offset` are value classes for exactly this reason; `Color` packs into a `ULong`.\n- Validated primitives (`Email`, `NonEmptyString`) with a private constructor plus a factory returning `Result`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Type-safe IDs and where the boxing hides",
+          "src": "@JvmInline\nvalue class UserId(val raw: String)\n\n@JvmInline\nvalue class OrderId(val raw: String)\n\nfun fetch(user: UserId, order: OrderId) { /* … */ }\n// fetch(orderId, userId) — now a compile error, not a 3am incident\n\nfun direct(id: UserId) { }          // no allocation\nfun boxed(ids: List<UserId>) { }    // every element is boxed\nfun alsoBoxed(id: UserId?) { }      // nullable => boxed"
+        }
+      ],
+      "followUps": [
+        "How would you validate the wrapped value and still keep construction cheap?",
+        "Why is `Dp` in Compose a value class rather than a typealias for Float?",
+        "What's the difference between a `value class` and a `typealias` for safety purposes?"
+      ],
+      "traps": [
+        "Claiming value classes are 'always free'. The boxing rules are the actual question being asked.",
+        "Using a `typealias` and calling it type safety — a typealias is a pure alias with zero enforcement."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Inline value classes",
+          "url": "https://kotlinlang.org/docs/inline-classes.html",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1"
+    },
+    {
+      "id": "kt-0004",
+      "track": "kotlin",
+      "topic": "Functions",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "inline",
+        "reified",
+        "performance",
+        "internals"
+      ],
+      "q": "Explain `inline`, `noinline`, `crossinline`, and `reified`. When does inlining hurt?",
+      "shortAnswer": [
+        "`inline` copies the function body **and its lambda bodies** into the call site, removing the `Function` object allocation and enabling non-local returns.",
+        "`noinline` opts a single lambda out (so you can store or pass it); `crossinline` keeps it inlined but forbids non-local return (needed when the lambda runs inside another object).",
+        "`reified` is only possible because the body is inlined — the concrete type is substituted at the call site, defeating erasure."
+      ],
+      "answer": "#### What inlining buys you\nA higher-order function normally allocates a `Function0`/`Function1` object per lambda and adds a virtual call; `inline` pastes the body at the call site instead. It also enables:\n- **non-local return** — `return` inside the lambda returns from the *enclosing* function, which is what makes `forEach { … return }` work like a real loop.\n- **`reified` type parameters** — the type argument is known at each call site, so `T::class`, `is T`, and `as T` become legal.\n\n#### The modifiers\n- **`noinline`** — this specific lambda parameter is *not* inlined. Needed when you want to store it in a field, return it, or pass it to a non-inline function.\n- **`crossinline`** — still inlined, but non-local return is banned. Required when the lambda is invoked from inside another lambda or object (e.g. inside a `Runnable`), where returning from the outer function is not meaningful.\n\n#### When inlining hurts\n1. **Code size.** The body is duplicated at every call site; a large inline function called from 200 places is 200 copies — bad for APK size and instruction cache. The compiler warns when you inline a function with no lambda parameters.\n2. **Binary compatibility.** Inlined code is baked into consumers, so changing an inline function's body in a library does not take effect until dependents recompile.\n3. **Visibility.** A public inline function cannot touch non-public API, since the body ends up in the caller's module.\n\nRule of thumb: inline functions whose *reason for existing* is a lambda parameter, and keep them small.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "All four modifiers in one example",
+          "src": "inline fun <reified T> Bundle.require(key: String): T =\n    get(key) as? T ?: error(\"Missing ${T::class.simpleName} for $key\")\n\ninline fun measure(\n    tag: String,\n    noinline onDone: (Long) -> Unit,   // stored later => must not be inlined\n    crossinline block: () -> Unit      // runs inside a Runnable => no non-local return\n) {\n    val start = System.nanoTime()\n    Runnable { block() }.run()\n    val elapsed = System.nanoTime() - start\n    pending += onDone                  // legal only because it is noinline\n    onDone(elapsed)\n}"
+        }
+      ],
+      "followUps": [
+        "Why does `crossinline` exist at all — what would break without it?",
+        "How do `inline` functions interact with coroutines and `suspend`?",
+        "Why does the compiler warn on `inline fun sum(a: Int, b: Int)`?"
+      ],
+      "traps": [
+        "Saying inline is 'a performance optimization you should apply everywhere'. Code-size blowup is a real cost and interviewers probe for it.",
+        "Not connecting `reified` to inlining — they are the same mechanism, not two features."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Inline functions",
+          "url": "https://kotlinlang.org/docs/inline-functions.html",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0005",
+      "track": "kotlin",
+      "topic": "Generics",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "generics",
+        "variance"
+      ],
+      "q": "Explain declaration-site vs use-site variance, and what `in`/`out`/star-projection mean.",
+      "shortAnswer": [
+        "`out T` = covariant, T only appears in output position → `Flow<Dog>` is a `Flow<Animal>`.",
+        "`in T` = contravariant, T only in input position → `Comparator<Any>` is usable as a `Comparator<String>`.",
+        "Use-site variance (`List<out Animal>`) is Kotlin's version of Java wildcards; `*` is a star projection meaning 'some unknown type, safe to read as the upper bound'."
+      ],
+      "answer": "Generics are invariant by default: `List<Dog>` is not a `List<Animal>`, because if it were, you could add a `Cat` to it.\n\n#### Declaration-site variance\nAnnotate the type parameter once at the class:\n- **`out T`** (covariant, producer): T may only appear in return positions — `interface Flow<out T>`, `List<out E>`. Then `Flow<Dog>` **is a** `Flow<Animal>`, safe because you can only take Dogs out.\n- **`in T`** (contravariant, consumer): T may only appear in parameter positions — `interface Comparator<in T>`. Then `Comparator<Any>` **is a** `Comparator<String>`, safe because anything that can compare Anys can compare Strings.\n\nMnemonic: **PECS** — Producer `out`, Consumer `in`.\n\n#### Use-site variance\nWhen a class must be invariant (e.g. `MutableList<T>` both produces and consumes), restrict variance at a single usage: `fun copy(from: Array<out Any>, to: Array<Any>)`. Inside `copy`, `from` is read-only — exactly Java's `Array<? extends Object>`.\n\n#### Star projection\n`List<*>` means \"a list of *some* type I don't know\". You can read elements as the upper bound (`Any?`) and you cannot write anything except `null`. Use it when you genuinely don't care about the argument.\n\n#### Where this bites in Android\n- `Flow<out T>` is why a `Flow<LoadingState.Success>` flows into a `Flow<LoadingState>`.\n- `LiveData<T>` is invariant, a common friction point when migrating.\n- `UiState<out T>` lets `UiState.Loading` be a shared `object` usable at every T.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A generic UI state that composes cleanly thanks to `out`",
+          "src": "sealed interface UiState<out T> {\n    data object Loading : UiState<Nothing>       // Nothing is a subtype of everything\n    data class Success<T>(val data: T) : UiState<T>\n    data class Failure(val error: Throwable) : UiState<Nothing>\n}\n\n// Because of `out`, this compiles:\nval state: UiState<List<User>> = UiState.Loading\n\nfun <T> render(state: UiState<T>) = when (state) {\n    UiState.Loading   -> showSpinner()\n    is UiState.Success -> showData(state.data)\n    is UiState.Failure -> showError(state.error)\n}   // exhaustive — no else branch"
+        }
+      ],
+      "followUps": [
+        "Why is `Nothing` the right type argument for `Loading` and `Failure`?",
+        "What does `MutableList<out T>` actually let you do?",
+        "How does erasure limit what you can check at runtime, and how does `reified` help?"
+      ],
+      "traps": [
+        "Mixing up `in`/`out` under pressure. Say PECS out loud and reason from 'can I safely take one out / put one in'.",
+        "Claiming variance is checked at runtime — it is purely a compile-time relation; the JVM erases it all."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Generics: variance",
+          "url": "https://kotlinlang.org/docs/generics.html",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0006",
+      "track": "kotlin",
+      "topic": "Collections",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "collections",
+        "sequences",
+        "performance"
+      ],
+      "q": "`List` operator chains vs `Sequence` — when does each win?",
+      "shortAnswer": [
+        "List operators are **eager and horizontal**: each step allocates a full intermediate list.",
+        "Sequences are **lazy and vertical**: each element flows through the whole chain before the next one starts, so nothing intermediate is allocated.",
+        "Sequences win on large collections, long chains, or early termination (`first`, `take`); lists win on small data because sequences have per-element iterator overhead."
+      ],
+      "answer": "#### The mechanical difference\n`listOf(1,2,3).map { f(it) }.filter { g(it) }` runs `map` over **all** elements producing a new list, then `filter` over all of those producing another list. Two allocations, `2N` operations.\n\n`listOf(1,2,3).asSequence().map { f(it) }.filter { g(it) }.toList()` runs `f(1)`, `g(1)`, `f(2)`, `g(2)`… one element at a time. One allocation at `toList()`.\n\n#### When sequences win\n- **Large N** — avoids N intermediate objects per step.\n- **Long chains** — savings compound.\n- **Early termination** — `.first { … }`, `.take(10)`, `.any { … }` stop the whole pipeline immediately. On a list, `map` has already processed everything before `first` runs.\n- **Infinite/generated sources** — `generateSequence`, `sequence { yield(…) }`.\n\n#### When lists win\nFor small collections (roughly < 100 elements, few steps) the sequence machinery — an `Iterator` object per stage plus a virtual call per element — costs more than the intermediate lists. Default to lists for typical UI-sized data; reach for sequences when the data is big or the chain terminates early.\n\n#### Terminal vs intermediate\nSequences do nothing until a **terminal** operation (`toList`, `first`, `sum`, `forEach`) runs. Forgetting the terminal is a real bug: the code compiles and does nothing.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Early termination is where the gap is dramatic",
+          "src": "// eager: maps 1,000,000 items, then takes 5\nval a = hugeList.map { expensive(it) }.filter { it.isValid }.take(5)\n\n// lazy: does just enough work to produce 5 valid results\nval b = hugeList.asSequence()\n    .map { expensive(it) }\n    .filter { it.isValid }\n    .take(5)\n    .toList()      // terminal — without this, nothing runs at all"
+        }
+      ],
+      "followUps": [
+        "How do sequences relate to `Flow`? What's the key difference?",
+        "What does `buildList { }` give you over `mutableListOf()` + `toList()`?",
+        "Why is `List` read-only rather than immutable, and why does that matter?"
+      ],
+      "traps": [
+        "Saying 'sequences are always faster'. For small lists they are measurably slower — say so.",
+        "Confusing `List` (read-only interface) with immutability. A `List` reference can point at a `MutableList` that someone else mutates."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Sequences",
+          "url": "https://kotlinlang.org/docs/sequences.html",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "kt-0007",
+      "track": "kotlin",
+      "topic": "Functions",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "scope-functions",
+        "basics",
+        "idiom"
+      ],
+      "q": "Distinguish `let`, `run`, `with`, `apply`, and `also`. How do you pick?",
+      "shortAnswer": [
+        "Two axes: how the object is referenced (`it` vs `this`) and what is returned (the lambda result vs the object itself).",
+        "`let`/`run`/`with` return the **lambda result**; `apply`/`also` return the **receiver**.",
+        "`let`/`also` expose it as `it`; `run`/`with`/`apply` expose it as `this`."
+      ],
+      "answer": "| Function | Reference | Returns | Typical use |\n|---|---|---|---|\n| `let` | `it` | lambda result | null-safe transform: `x?.let { … }` |\n| `run` | `this` | lambda result | compute a value using an object's members |\n| `with` | `this` | lambda result | same as `run` but not an extension (no null-safe call) |\n| `apply` | `this` | receiver | configure and return: builders, view setup |\n| `also` | `it` | receiver | side effect in a chain: logging, validation |\n\n#### Picking in practice\n- Need the object back for chaining? → `apply` or `also`.\n- Need a *different* value out? → `let` or `run`.\n- Doing a side effect and want the name visible? → `also { logger.d(it) }`.\n- Null-safe scoping? → `?.let { }` (it's an extension, so `?.` works).\n\n#### The readability trap\nNesting scope functions destroys readability because `it` and `this` start shadowing each other. If you nest more than one level, name the parameter explicitly (`?.let { user -> … }`) or extract a function. `apply` blocks that mutate five things and also do logic are a code smell.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Each in its natural habitat",
+          "src": "// apply: configure, return receiver\nval intent = Intent(context, DetailActivity::class.java).apply {\n    putExtra(EXTRA_ID, id)\n    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP\n}\n\n// let: null-safe transform to a different value\nval label: String = user?.let { \"${it.first} ${it.last}\" } ?: \"Guest\"\n\n// also: side effect, keeps the chain intact\nrepository.load()\n    .also { logger.d(\"loaded ${it.size} rows\") }\n    .filter { it.isActive }\n\n// run: compute using members, return a result\nval area = rect.run { width * height }"
+        }
+      ],
+      "followUps": [
+        "Why can `?.let {}` do null-safe scoping but `with()` cannot?",
+        "What's the difference between `run { }` with no receiver and `apply`?",
+        "When would you deliberately prefer a plain `if (x != null)` over `x?.let`?"
+      ],
+      "traps": [
+        "Using `let` purely as a null check with a body that ignores `it` — a plain `if` is clearer.",
+        "Nesting `apply` inside `let` inside `run`. Interviewers read this as unfamiliarity, not fluency."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Scope functions",
+          "url": "https://kotlinlang.org/docs/scope-functions.html",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1"
+    },
+    {
+      "id": "kt-0008",
+      "track": "kotlin",
+      "topic": "Delegation",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "delegation",
+        "by",
+        "lazy"
+      ],
+      "q": "How does property delegation (`by`) work, and what does `by lazy` cost?",
+      "shortAnswer": [
+        "`by` rewrites property access into `getValue`/`setValue` calls on a delegate object — the compiler generates the plumbing.",
+        "`by lazy` is thread-safe by default (`SYNCHRONIZED`), which means a lock check on first access; use `LazyThreadSafetyMode.NONE` when you know access is single-threaded.",
+        "Class delegation (`class A(b: B) : B by b`) forwards interface methods, giving composition without boilerplate — but it captures the instance at construction."
+      ],
+      "answer": "#### Property delegation\n`val x: T by delegate` compiles to a hidden field holding the delegate plus `get()` forwarding to `delegate.getValue(thisRef, property)`. Any object with the right operator functions works, which is how `viewModels()`, `savedStateHandle`, `preferences`, and `lazy` all share the same syntax.\n\n#### `by lazy` modes\n- `SYNCHRONIZED` (default) — double-checked locking; safe from any thread, small cost per access.\n- `PUBLICATION` — the initializer may run on multiple threads concurrently, but the first result wins.\n- `NONE` — no synchronization at all; fastest, and correct only if you guarantee single-thread access. Common for values initialized on the main thread in Android.\n\n#### `lateinit` vs `by lazy`\n| | `lateinit var` | `val … by lazy` |\n|---|---|---|\n| Mutability | `var` | `val` |\n| Who initializes | you, externally | the initializer block |\n| Primitives | not allowed | allowed |\n| Failure mode | `UninitializedPropertyAccessException` | cannot fail to initialize |\n\nUse `lateinit` for dependency injection and lifecycle-assigned fields (views bound in `onCreate`); use `lazy` for expensive values computed from things already available.\n\n#### Class delegation\n`class LoggingRepo(private val real: Repo) : Repo by real` forwards every `Repo` member to `real`, so you override only what you want to change. Caveat: the delegate is captured at construction, and overrides in the delegating class are **not** seen by the delegate's own internal calls — the delegate calls its own methods, not yours.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Delegation flavors, plus a custom delegate",
+          "src": "class Screen : Fragment() {\n    private val viewModel: FeedViewModel by viewModels()          // delegate from AndroidX\n    private val formatter by lazy(LazyThreadSafetyMode.NONE) {    // main-thread only\n        DateTimeFormatter.ofPattern(\"dd MMM\")\n    }\n    private lateinit var binding: FragmentFeedBinding             // assigned in onCreateView\n}\n\n// A custom delegate: SharedPreferences-backed property\nclass PrefDelegate(private val prefs: SharedPreferences, private val key: String, private val default: Boolean) {\n    operator fun getValue(thisRef: Any?, prop: KProperty<*>) = prefs.getBoolean(key, default)\n    operator fun setValue(thisRef: Any?, prop: KProperty<*>, value: Boolean) =\n        prefs.edit().putBoolean(key, value).apply()\n}\n\nvar onboardingSeen: Boolean by PrefDelegate(prefs, \"onboarding_seen\", false)"
+        }
+      ],
+      "followUps": [
+        "Why does `by viewModels()` need to be a delegate rather than a plain function call?",
+        "What happens if a `by lazy` initializer throws?",
+        "In class delegation, why don't the delegate's internal calls dispatch to your overrides?"
+      ],
+      "traps": [
+        "Using `by lazy` for something that depends on lifecycle state — it caches forever, including across configuration changes if the holder survives.",
+        "Assuming class delegation is inheritance. It is forwarding; `super` semantics do not apply."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Delegated properties",
+          "url": "https://kotlinlang.org/docs/delegated-properties.html",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1"
+    }
+  ]
+}

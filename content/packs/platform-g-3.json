@@ -1,0 +1,363 @@
+{
+  "id": "platform-g-3",
+  "title": "Platform & Framework",
+  "track": "platform",
+  "items": [
+    {
+      "id": "pf-0031",
+      "track": "platform",
+      "topic": "Permissions",
+      "level": 1,
+      "type": "qa",
+      "tags": ["permissions", "normal", "dangerous", "special-access"],
+      "q": "What are the permission categories on Android, and what is 'special access'?",
+      "shortAnswer": [
+        "Normal permissions (like `INTERNET`) are granted silently at install; dangerous permissions (camera, location, notifications) are requested at runtime.",
+        "Signature permissions are granted only to apps signed with the same certificate — the way your own components protect themselves from other apps.",
+        "Special access is a separate set of toggles in Settings (exact alarms, overlays, all-files access, notification access) that the user flips explicitly, and Play restricts."
+      ],
+      "answer": "#### The three mainstream categories\n- **Normal**: no risk to privacy or the system — `INTERNET`, `VIBRATE`, `ACCESS_NETWORK_STATE`. Granted automatically at install; the user never sees a dialog.\n- **Dangerous**: access to private data or hardware — `CAMERA`, `RECORD_AUDIO`, `ACCESS_FINE_LOCATION`, `POST_NOTIFICATIONS`, the `READ_MEDIA_*` group. These need runtime requests, can be revoked, and must be checked before use.\n- **Signature**: only apps signed with the same certificate are granted. `android:protectionLevel=\"signature\"` is how your exported components gate access to your own suite of apps — a strong alternative to exposing them to everyone.\n\n#### Special access\nA separate bucket in Settings (`Special app access`) covering powers that do not fit the install/runtime model: `SCHEDULE_EXACT_ALARM` (exact alarms), `SYSTEM_ALERT_WINDOW` (draw over other apps), `MANAGE_EXTERNAL_STORAGE` (all-files access), `USE_FULL_SCREEN_INTENT`, notification access, battery optimization. These are not requested with the permission dialog — you deep-link the user to the relevant Settings screen and they flip the toggle, and Play policy restricts several of them to apps whose core function justifies them.\n\n#### One-time and partial grants\nAndroid 11 added **one-time permissions** for location/camera/mic: the grant lasts until the app stops being used or the task is swiped away. Android 14 adds partial media access (\"select photos\") — a 'granted' that is not binary.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Routing a special access request to its Settings screen",
+          "src": "fun requestExactAlarmAccess(context: Context) {\n    val alarmManager = context.getSystemService(AlarmManager::class.java)\n    if (alarmManager.canScheduleExactAlarms()) return\n\n    val intent = Intent(\n        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,\n        Uri.parse(\"package:${context.packageName}\")\n    )\n    context.startActivity(intent)\n}"
+        }
+      ],
+      "followUps": [
+        "Which of these can be revoked while your app is backgrounded?",
+        "Why is `signature` protection better than a custom runtime permission for your own apps?",
+        "How is 'special access' different from a dangerous permission flow?"
+      ],
+      "traps": [
+        "Treating `SYSTEM_ALERT_WINDOW` like a runtime permission — it is a special-access toggle and Play rejects its casual use.",
+        "Forgetting that dangerous grants can be revoked at any time and must be re-checked."
+      ],
+      "refs": [
+        { "title": "Permissions overview", "url": "https://developer.android.com/guide/topics/permissions/overview", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0032",
+      "track": "platform",
+      "topic": "Storage & files",
+      "level": 3,
+      "type": "qa",
+      "tags": ["scoped-storage", "mediastore", "saf", "storage-migration"],
+      "q": "What is scoped storage, and when should you use MediaStore versus the Storage Access Framework?",
+      "shortAnswer": [
+        "Since Android 10/11 apps no longer get blanket read/write on shared storage — scoped storage limits you to your own app-specific directories plus explicit user-granted access.",
+        "Media files you create or need to query go through `MediaStore`; files the user picks from any provider go through the Storage Access Framework (SAF) with `ACTION_OPEN_DOCUMENT`.",
+        "The legacy `READ_EXTERNAL_STORAGE` blanket grant is gone — `MANAGE_EXTERNAL_STORAGE` exists but is a special access Play restricts, so treat it as a last resort."
+      ],
+      "answer": "#### The model\nScoped storage (Android 10, enforced for targetSdk 30+) means your app may read and write **its own** `getExternalFilesDir`/`getExternalCacheDir` without permission, but shared storage (photos, downloads, documents) is only reachable through APIs that carry explicit user intent.\n\n#### MediaStore\nMediaStore is the index of shared media. To *add* a photo you `insert` a `MediaStore.Images` row and write through the returned `content://` Uri; to *read* the gallery you `query` with a `ContentResolver`. Ownership matters: media you contribute are owned by your app and readable without permission; other apps' media require the `READ_MEDIA_*` grants — or the **Photo Picker**, which needs none. Since Android 14, partial grants (`READ_MEDIA_VISUAL_USER_SELECTED`) mean you must treat a grant as 'some items', not the library.\n\n#### SAF\nFor documents outside media — PDFs, archives, arbitrary files — use the Storage Access Framework: `ACTION_OPEN_DOCUMENT`/`ACTION_CREATE_DOCUMENT` hand you a `content://` Uri with `takePersistableUriPermission` so you can re-open it later. SAF works across providers (Drive, cloud apps) and never needs a broad permission.\n\n#### Migration traps\n- Raw filesystem paths into shared storage fail or silently write app-specific copies.\n- `android:requestLegacyExternalStorage` only applies to targetSdk 29 — it is not a path forward.\n- `MANAGE_EXTERNAL_STORAGE` grants all-files access but Play rejects it outside genuine file-manager apps.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Creating a photo via MediaStore, and picking a document via SAF",
+          "src": "fun capturePhoto(uri: Uri) {\n    val values = ContentValues().apply {\n        put(MediaStore.Images.Media.DISPLAY_NAME, \"photo_${System.currentTimeMillis()}.jpg\")\n        put(MediaStore.Images.Media.MIME_TYPE, \"image/jpeg\")\n    }\n    contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)\n}\n\nval openDocument = registerForActivityResult(\n    ActivityResultContracts.OpenDocument()\n) { uri -> uri?.let { takeDocumentPermission(it) } }\n\nfun pickPdf() = openDocument.launch(arrayOf(\"application/pdf\"))\n\nfun takeDocumentPermission(uri: Uri) {\n    contentResolver.takePersistableUriPermission(\n        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION\n    )\n}"
+        }
+      ],
+      "followUps": [
+        "What breaks when you target 30+ and still use raw shared-storage paths?",
+        "Why is the Photo Picker preferred over `READ_MEDIA_IMAGES`?",
+        "How does `takePersistableUriPermission` let SAF access survive process restarts?"
+      ],
+      "traps": [
+        "Reaching for `MANAGE_EXTERNAL_STORAGE` to dodge scoped storage — a Play-rejection special access.",
+        "Assuming MediaStore rows you did not create are readable without a permission grant."
+      ],
+      "refs": [
+        { "title": "Data storage overview", "url": "https://developer.android.com/training/data-storage", "checked": "2026-08-13" },
+        { "title": "Storage Access Framework", "url": "https://developer.android.com/training/data-storage/shared/documents-files", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0033",
+      "track": "platform",
+      "topic": "Storage & files",
+      "level": 1,
+      "type": "qa",
+      "tags": ["files", "internal-storage", "cache"],
+      "q": "Where should an app put its own files, and when does it need a permission to write them?",
+      "shortAnswer": [
+        "App-specific directories — `filesDir`, `cacheDir`, `getExternalFilesDir`, `getExternalCacheDir` — need **no permission** at all.",
+        "`filesDir` is the default for data that should not be user-facing; `getExternalFilesDir` is app-specific but visible to the user via a file manager.",
+        "Anything in shared storage (the gallery, Downloads) is a different story — MediaStore, SAF, or scoped-storage permissions apply there."
+      ],
+      "answer": "#### The no-permission zone\nEvery app owns directories it can read and write freely: `Context.getFilesDir()` (internal, invisible to users, removed on uninstall), `Context.getCacheDir()` (internal cache the system may reclaim), `getExternalFilesDir()` and `getExternalCacheDir()` (app-specific on external storage, shown in a file manager under `Android/data/<package>` but still exclusive to your app). None of these require a storage permission — that is the default place for downloads, images, and databases your app itself owns.\n\n#### Internal vs app-specific external\n- `filesDir`: internal (device) storage, private, backed up by default (unless you opt out with `allowBackup`/backup rules). Good for a database or user content.\n- `getExternalFilesDir`: external, app-specific, no permission, but *visible* — put user-accessible files (\"Download this report\") here and users can find them.\n- `cacheDir` / `getExternalCacheDir`: throwaway; clear it when storage is tight.\n\n#### When you do need something else\n- Reading other apps' media → `READ_MEDIA_*` runtime permission or the Photo Picker.\n- Writing to the user's *shared* Downloads/Documents → SAF (`ACTION_CREATE_DOCUMENT`).\n- Raw paths on shared storage → banned by scoped storage since Android 10/11.\n\nA quick rule of thumb: if a file is only meaningful to your app, `filesDir`; if the user should see it, `getExternalFilesDir`; if the user must place it in their own folders, SAF.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Picking the right directory — no permissions involved",
+          "src": "fun saveUserFile(context: Context, name: String, bytes: ByteArray) {\n    val file = File(context.filesDir, name)          // private, backed up\n    file.writeBytes(bytes)\n}\n\nfun shareReport(context: Context, bytes: ByteArray) {\n    val out = File(context.getExternalFilesDir(null), \"report.pdf\")\n    out.writeBytes(bytes)                            // app-specific, user-visible\n}"
+        }
+      ],
+      "followUps": [
+        "What is the difference between `filesDir` and `getExternalFilesDir`?",
+        "When is `cacheDir` appropriate and what risk does it carry?",
+        "Why is there no permission needed for app-specific external storage?"
+      ],
+      "traps": [
+        "Declaring a storage permission for files the app owns itself — unnecessary and a policy smell.",
+        "Writing user content to `cacheDir` — the system can delete it at any time."
+      ],
+      "refs": [
+        { "title": "App-specific storage", "url": "https://developer.android.com/training/data-storage/app-specific", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0034",
+      "track": "platform",
+      "topic": "Background work",
+      "level": 4,
+      "type": "qa",
+      "tags": ["workmanager", "expedited", "chaining", "testing"],
+      "q": "Go deep on WorkManager: expedited work, chaining, uniqueness, and how you test a Worker.",
+      "shortAnswer": [
+        "`setExpedited()` runs short critical work under a per-app quota with an `OutOfQuotaPolicy` telling the system what to do when the quota is gone.",
+        "Chains are `beginWith(a).then(b).then(c)` — failure short-circuits the rest, and `enqueueUniqueWork` with `KEEP`/`REPLACE`/`APPEND` stops you from stacking duplicate sync jobs.",
+        "Testing means a fake `CoroutineWorker` through `TestListenableWorkerBuilder` or asserting on `WorkInfo` with the `WorkManager` test driver — never running the real scheduler."
+      ],
+      "answer": "#### Expedited work\nThe `EXPEDITED` run type is for short, user-critical work that must start promptly — a chat message send, a payment confirm. It carries a per-app quota and needs `setExpedited(OutOfQuotaPolicy)`: `RUN_AS_NON_EXPEDITED_WORK_REQUEST` degrades gracefully, `DROP_WORK_REQUEST` drops. Expedited is *not* foreground-service work and is subject to system policy.\n\n#### Chaining\n`beginWith(OneTimeWorkRequest)` returns a `WorkContinuation`; `.then(...)` adds dependent requests. A failure (non-retry `Result.failure()`) cancels the remainder of the chain — unless you use `WorkContinuation` composition or handle it with a continuation at each branch. Chains are a DAG: `beginWith(a, b)` fans out, then `then(c)` converges.\n\n#### Uniqueness\n`enqueueUniqueWork(name, ExistingWorkPolicy, request)` is how you keep one sync job: `KEEP` ignores the new one, `REPLACE` cancels the old and enqueues the new, `APPEND` chains them. The same name across app launches is your dedup key. Periodic work has a 15-minute minimum and is never exact.\n\n#### Testing\n- **CoroutineWorker**: `TestListenableWorkerBuilder<MyWorker>(context)` gives you a fake context to run `doWork()` in `runTest`.\n- **Scheduling**: the `WorkManagerTestInitHelper` test driver lets you `setPeriodDelayMet`, `runUniqueWork`, and assert via `getWorkInfosByTag`/`getWorkInfosForUniqueWork`.\n- Idempotency is the hard rule either way — workers can run twice, and tests should exercise the retry path (`runAttemptCount`).",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Expedited unique work, plus the unit-test harness",
+          "src": "val request = OneTimeWorkRequestBuilder<SendWorker>()\n    .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)\n    .build()\nWorkManager.getInstance(context).enqueueUniqueWork(\n    \"send-message\", ExistingWorkPolicy.REPLACE, request\n)\n\n// Unit test — real Worker, fake context\n@Test\nfun sendWorker_retries_thenFails() = runTest {\n    val worker = TestListenableWorkerBuilder<SendWorker>(appContext).build()\n    val result = worker.doWork()\n    assertTrue(result is ListenableWorker.Result.retry)\n}"
+        }
+      ],
+      "followUps": [
+        "What is the expedited quota, and what happens when you exhaust it?",
+        "How do you build a chain that must not short-circuit when one branch fails?",
+        "Why is `APPEND` the policy that turns a debounce bug into a queue?"
+      ],
+      "traps": [
+        "Using expedited work as a foreground-service replacement — it has a quota and a runtime window.",
+        "Testing a worker through the real scheduler instead of the test driver, and getting flaky timing-dependent tests."
+      ],
+      "refs": [
+        { "title": "WorkManager", "url": "https://developer.android.com/topic/libraries/architecture/workmanager", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0035",
+      "track": "platform",
+      "topic": "Background work",
+      "level": 3,
+      "type": "qa",
+      "tags": ["alarmmanager", "exact-alarm", "jobscheduler"],
+      "q": "When is `AlarmManager` the right tool, and what does the exact-alarm permission change?",
+      "shortAnswer": [
+        "`AlarmManager` is for wall-clock timing — alarms, calendar reminders, medication — where 'approximately now' is not good enough.",
+        "Exact alarms need `SCHEDULE_EXACT_ALARM` (a special access the user grants per-app, or `USE_EXACT_ALARM` for alarm/calendar apps) and are still windowed by Doze.",
+        "Anything deferrable belongs in `JobScheduler` or WorkManager: constraint-based, batched, and without the exact-alarm baggage — WorkManager sits on top of JobScheduler on modern Android."
+      ],
+      "answer": "#### The two schedules\n`AlarmManager` fires at a wall-clock moment and can wake the device. `JobScheduler` batches work against constraints (network, charging, idle) and defers it — it does not care what time it is. Choose by whether the *time* matters. Exact alarms are for user-expected moments; everything else is a job.\n\n#### The exact-alarm permission\nAndroid 12 added `SCHEDULE_EXACT_ALARM` as a special access: the user must approve the app in Settings before `setExactAndAllowWhileIdle`/`setExact` succeed (check with `canScheduleExactAlarms()`), and new installs default to denied unless the app is exempt. Alarm/calendar apps can declare `USE_EXACT_ALARM`, granted at install — but only for genuine alarm-clock functionality; Play restricts it. If the user revokes access, your exact calls fail and you must degrade to `setWindow`/`setInexactRepeating`.\n\n#### Doze still applies\n`setExactAndAllowWhileIdle` guarantees roughly one wakeup per 9 minutes in Doze — it keeps *timing*, not *frequency*: you cannot spam it. `setAlarmClock` is the user-visible alarm API that wins over Doze and shows the alarm indicator.\n\n#### The relationship to WorkManager\n`WorkManager` builds on `JobScheduler` (a custom AlarmManager-based scheduler on older API levels) for *all* its constraints and deferrable work. So the stack is: exact wall-clock → `AlarmManager`; deferrable + constraints + survives reboot → `WorkManager`/`JobScheduler`. Choosing `AlarmManager` for a sync job is choosing the wrong layer.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Exact alarm gated on the special access",
+          "src": "fun scheduleReminder(context: Context, at: Long) {\n    val am = context.getSystemService(AlarmManager::class.java)\n    if (!am.canScheduleExactAlarms()) {\n        showSettingsPrompt()          // ACTION_REQUEST_SCHEDULE_EXACT_ALARM\n        return\n    }\n    val pi = PendingIntent.getBroadcast(\n        context, 0,\n        Intent(context, ReminderReceiver::class.java),\n        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE\n    )\n    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)\n}"
+        }
+      ],
+      "followUps": [
+        "What does `setExactAndAllowWhileIdle` guarantee in Doze, and what does it not?",
+        "Why is `USE_EXACT_ALARM` not available to a random app?",
+        "How does WorkManager relate to JobScheduler under the hood?"
+      ],
+      "traps": [
+        "Using exact alarms for routine sync — a battery and policy anti-pattern that the permission now blocks.",
+        "Assuming an exact alarm fires on time in Doze — the 9-minute windowing still applies to `*AndAllowWhileIdle`."
+      ],
+      "refs": [
+        { "title": "Schedule alarms", "url": "https://developer.android.com/develop/background-work/services/alarms/schedule", "checked": "2026-08-13" },
+        { "title": "JobScheduler", "url": "https://developer.android.com/reference/android/app/job/JobScheduler", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0036",
+      "track": "platform",
+      "topic": "Notifications",
+      "level": 2,
+      "type": "qa",
+      "tags": ["notification-channels", "post-notifications", "importance"],
+      "q": "Walk through notification channels and `POST_NOTIFICATIONS`. What actually decides whether a notification shows?",
+      "shortAnswer": [
+        "A channel is a user-facing category with an importance level; since Android 8 every notification must target an existing channel.",
+        "Since Android 13 `POST_NOTIFICATIONS` is a runtime permission — if denied, your notifications are silently dropped, so request it in context.",
+        "Whether a notification is intrusive (heads-up, sound) is decided by channel importance, not by what you call the notification — and the user can downgrade it at any time."
+      ],
+      "answer": "#### Channels\nA notification channel is a named category (\"Messages\", \"Promotions\") with an importance from `IMPORTANCE_NONE`/`MIN` (silent) through `LOW`/`DEFAULT` to `HIGH`/`MAX`. You must create the channel **before** posting — `notify` against a missing channel on Android 8+ is a silent no-op. Once created, the *app* cannot change importance; only the user can, in the notification settings. Channel groups let you bundle related channels.\n\n#### The permission\nThe gate on Android 13+ is `POST_NOTIFICATIONS`, a dangerous runtime permission. If denied, the system drops your notifications without error — you do not crash, they just never appear. So the flow is: create channels early (cheap, no permission needed), request `POST_NOTIFICATIONS` at the moment you first need to notify (a messaging prompt, not on launch), and if denied — including permanently — degrade to an in-app surface or a Settings deep link.\n\n#### What decides what the user sees\n- **Channel importance** controls the presentation: `HIGH` = heads-up with sound; `DEFAULT` = notification shade only; `NONE` = nothing visible.\n- A heads-up also needs the conditions: high importance *plus* the user's gesture/lock settings — `setPriority` alone does not guarantee it.\n- The permission sits on top: no grant, no notification regardless of channel.\n\n#### Legacy note\nBelow Android 13 there is no permission; channel importance is the whole story, which is why the same code behaves so differently across devices.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Channel creation, in-context permission request, and post",
+          "src": "fun ensureChannel(context: Context) {\n    val channel = NotificationChannel(\n        \"messages\", \"Messages\",\n        NotificationManager.IMPORTANCE_HIGH      // heads-up capable\n    ).apply {\n        description = \"Chat messages\"\n        enableVibration(true)\n    }\n    context.getSystemService(NotificationManager::class.java)\n        .createNotificationChannel(channel)\n}\n\nval requestNotifPermission = registerForActivityResult(\n    ActivityResultContracts.RequestPermission()\n) { granted -> if (granted) postMessageNotification() }\n\nfun onFirstMessage() {\n    val granted = ContextCompat.checkSelfPermission(\n        this, Manifest.permission.POST_NOTIFICATIONS\n    ) == PackageManager.PERMISSION_GRANTED\n    if (granted) postMessageNotification() else requestNotifPermission.launch(\n        Manifest.permission.POST_NOTIFICATIONS\n    )\n}"
+        }
+      ],
+      "followUps": [
+        "What happens if you post to a channel that was never created?",
+        "Why can't an app raise a channel's importance after creation?",
+        "What is the correct time to request `POST_NOTIFICATIONS`?"
+      ],
+      "traps": [
+        "Requesting `POST_NOTIFICATIONS` on first launch — it tanks grant rates and signals bad practice.",
+        "Believing `setPriority(HIGH)` makes a heads-up. Channel importance plus system conditions do."
+      ],
+      "refs": [
+        { "title": "Notification channels", "url": "https://developer.android.com/develop/ui/views/notifications/channels", "checked": "2026-08-13" },
+        { "title": "Notification runtime permission", "url": "https://developer.android.com/develop/ui/views/notifications/notification-permission", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0037",
+      "track": "platform",
+      "topic": "Notifications",
+      "level": 3,
+      "type": "qa",
+      "tags": ["full-screen-intent", "heads-up", "notification-trampoline"],
+      "q": "When do you use a full-screen intent, and what is a notification trampoline?",
+      "shortAnswer": [
+        "A full-screen intent launches an Activity over the lock screen for truly urgent events — calls and alarms — and needs `USE_FULL_SCREEN_INTENT`, which since Android 14 Play only grants to calling/alarm apps.",
+        "A trampoline is a Service or Receiver that notification taps route through before an Activity starts; starting an Activity from one is blocked since Android 12 (targetSdk 31+).",
+        "So the notification's `PendingIntent` must target the Activity directly, and if you cannot guarantee FSI permission you degrade to a heads-up notification."
+      ],
+      "answer": "#### Full-screen intents\n`setFullScreenIntent(pendingIntent, highPriority)` fires an Activity full-screen — over the keyguard, waking the screen — for the cases where a notification is not enough: an incoming call, a ringing alarm. Because it interrupts so aggressively, `USE_FULL_SCREEN_INTENT` is a **special access**: on Android 14+ it defaults off for newly installed apps, Play grants it only to calling and alarm apps, and your code must check `NotificationManager.canUseFullScreenIntent()` and fall back to a heads-up notification when it is unavailable.\n\n#### The trampoline ban\nA notification trampoline is the pattern of pointing the tap `PendingIntent` at a Receiver or Service that then calls `startActivity`. Apps targeting Android 12+ can no longer do that: the system blocks the Activity start from a trampoline component (logcat shows the `NotificationTrampolineError`). The fix is to make the notification's `PendingIntent` launch the Activity directly — `PendingIntent.getActivity(...)` with an explicit component. Real work that used to happen in the receiver moves into the Activity (or an `onCreate` branch keyed by the intent).\n\n#### Heads-up as the fallback\nWhen a full-screen intent is unavailable or unjustified, the degraded path is a high-importance notification that shows heads-up: same `IMPORTANCE_HIGH` channel, no FSI permission needed, and the user can dismiss it.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Direct-to-Activity tap intent — no trampoline",
+          "src": "val contentIntent = Intent(context, CallActivity::class.java).apply {\n    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP\n}\nval tapPi = PendingIntent.getActivity(\n    context, 0, contentIntent,\n    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE\n)\n\nval builder = NotificationCompat.Builder(context, \"calls\")\n    .setSmallIcon(R.drawable.ic_call)\n    .setContentTitle(\"Incoming call\")\n    .setContentText(caller)\n    .setContentIntent(tapPi)          // straight to the Activity, no trampoline\n\nif (nm.canUseFullScreenIntent()) {\n    val fsi = PendingIntent.getActivity(\n        context, 1, contentIntent,\n        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE\n    )\n    builder.setFullScreenIntent(fsi, true)\n}"
+        }
+      ],
+      "followUps": [
+        "Why does Play reject `USE_FULL_SCREEN_INTENT` for most apps?",
+        "What exactly is blocked — starting any Activity from a receiver, or only ones triggered by notifications?",
+        "How do you test the trampoline block and the FSI fallback?"
+      ],
+      "traps": [
+        "Keeping a tap-routing receiver and wondering why taps do nothing on Android 12+.",
+        "Declaring `USE_FULL_SCREEN_INTENT` for a chat app — a guaranteed Play rejection."
+      ],
+      "refs": [
+        { "title": "Create a notification (full-screen intents)", "url": "https://developer.android.com/develop/ui/compose/notifications/create-notification", "checked": "2026-08-13" },
+        { "title": "Android 12 behavior changes (trampolines)", "url": "https://developer.android.com/about/versions/12/behavior-changes-12", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0038",
+      "track": "platform",
+      "topic": "Security & intents",
+      "level": 4,
+      "type": "qa",
+      "tags": ["pendingintent", "mutability", "intent-security"],
+      "q": "What does `PendingIntent` mutability control, and when do you actually need `FLAG_MUTABLE`?",
+      "shortAnswer": [
+        "A `PendingIntent` is a token that lets another component run your intent on your behalf; `FLAG_IMMUTABLE` (the default since Android 12) forbids the recipient from modifying that intent before it fires.",
+        "`FLAG_MUTABLE` lets the recipient fill in the intent — needed for direct-reply notifications, some widgets, and when the system must add fields — but hands an attacker a way to redirect or alter your action.",
+        "Targeting Android 12+, you must explicitly choose one flag; the rule is immutable by default, mutable only when an API genuinely requires it."
+      ],
+      "answer": "#### What it is\nA `PendingIntent` wraps an `Intent` and a component, and hands that capability to someone else — the system (a notification, an alarm, a widget) or another app. Whoever holds the token triggers the launch; the token keeps your identity (`getCreatorPackage`), so it is your UID doing the action. Mutability decides whether that holder can rewrite the wrapped intent's extras, action, component, or flags before firing.\n\n#### The attack\nA **mutable** PendingIntent in a notification, widget, or exported component can be modified by whichever app obtains it. The payoff for an attacker is intent redirection: swap the target or inject extras, and your app performs an action it never meant — with a URI grant attached if you set one. That is why `FLAG_IMMUTABLE` is the default since Android 12 and why targeting 31+ forces you to declare the flag explicitly.\n\n#### When mutable is genuinely required\nThe short list is APIs that *need* the system to fill fields: notification **direct reply** (`RemoteInput` fills the reply extra), some `AppWidgetProvider` flows, and `getActivity` for an activity result in certain cases. The safe pattern is immutable everywhere, mutable exactly where the API breaks without it, and no grant flags on a mutable intent.\n\n#### Detection and hygiene\n`StrictMode.VmPolicy.Builder().detectUnsafeIntentLaunch()` surfaces the unsafe launch patterns; `PendingIntent.getActivity/getBroadcast/getService` should carry `FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE` as the default, and `FLAG_MUTABLE` gets a code review.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Immutable by default; mutable only for direct reply",
+          "src": "// Default: immutable — the system cannot rewrite this intent\nval pi = PendingIntent.getActivity(\n    context, 0, intent,\n    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE\n)\n\n// Mutable ONLY because RemoteInput must inject the reply text\nval replyIntent = Intent(context, ReplyReceiver::class.java)\nval replyPi = PendingIntent.getBroadcast(\n    context, requestCode, replyIntent,\n    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE\n)\nval remoteInput = RemoteInput.Builder(KEY_REPLY).setLabel(\"Reply\").build()\nval action = NotificationCompat.Action.Builder(\n    R.drawable.ic_reply, \"Reply\", replyPi\n).addRemoteInput(remoteInput).build()"
+        }
+      ],
+      "followUps": [
+        "What exactly can an attacker do with a mutable PendingIntent?",
+        "Why does direct reply force `FLAG_MUTABLE`?",
+        "How do URI grants interact with PendingIntent mutability?"
+      ],
+      "traps": [
+        "Passing `0` for flags on Android 12+ and letting the default bite — targeting 31+ requires an explicit mutability choice.",
+        "Marking a PendingIntent mutable 'just in case' — every mutable token is a redirection opportunity."
+      ],
+      "refs": [
+        { "title": "PendingIntent reference", "url": "https://developer.android.com/reference/android/app/PendingIntent", "checked": "2026-08-13" },
+        { "title": "Android 12 behavior changes (PendingIntent mutability)", "url": "https://developer.android.com/about/versions/12/behavior-changes-12", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0039",
+      "track": "platform",
+      "topic": "UI & configuration",
+      "level": 3,
+      "type": "qa",
+      "tags": ["edge-to-edge", "window-insets", "system-bars"],
+      "q": "Edge-to-edge is enforced now. What actually breaks, and how do insets keep you out of trouble?",
+      "shortAnswer": [
+        "Edge-to-edge means your content draws under the system bars by default, so anything positioned against the screen edge sits under the status bar or gesture pill unless you account for insets.",
+        "`WindowInsets` reports where the bars and cutout are; you apply them as padding to the surfaces that need it and let scrollable content draw through.",
+        "The classic bug is double-padding: applying an inset that a parent already consumed, or using `padding()` where the inset was already applied — `consumeWindowInsets` and `Scaffold`'s `contentPadding` exist precisely to avoid it."
+      ],
+      "answer": "#### The enforcement\nApps targeting Android 15+ are edge-to-edge by default; targeting 36, the old opt-out APIs are gone. `setDecorFitsSystemWindows(true)` (the historical default that reserved bar space for you) no longer saves you — your layout now owns the whole window, bars included. The immediate breakage is visual: toolbars, bottom sheets, and FABs sliding under the status bar or gesture nav area.\n\n#### The inset model\n`WindowInsets` is a set of typed amounts — `statusBars`, `navigationBars`, `displayCutout`, `ime` — delivered through `ViewCompat.setOnApplyWindowInsetsListener` (or the Compose `WindowInsets` flows / `Modifier.windowInsetsPadding`). The discipline is to **draw under** the bars and **pad only the surfaces that need it**: a top bar applies `statusBars` as top padding; a scrollable list uses `contentPadding` so the last row clears the gesture pill; full-bleed backgrounds intentionally draw through.\n\n#### The double-padding trap\nInsets are *consumed*: once a parent applies them, children asking again get zero. `Modifier.windowInsetsPadding()` consumes; `Modifier.padding(insets.asPaddingValues())` does not — so a child that also applies the inset adds it a second time. In Compose, `Scaffold` consumes the bars and hands you `contentPadding`; forgetting to apply it is the most common edge-to-edge bug. On the View side, apply insets once per window and pass them down.\n\n#### Navigation bar contrast\nGesture navigation adds a translucent bar over your content; if you draw a light surface behind it you must also handle the bar's icon contrast (`WindowInsetsControllerCompat` and the dark scrim), or the pill becomes invisible.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Applying insets exactly once in a View screen",
+          "src": "ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->\n    val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())\n    val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())\n    val top = maxOf(bars.top, cutout.top)\n    val bottom = maxOf(bars.bottom, cutout.bottom)\n\n    // top bar pads down from the status bar\n    topBar.updatePadding(top = top)\n    // bottom sheet clears the gesture pill\n    bottomSheet.updatePadding(bottom = bottom)\n    // the list scrolls under the bars but clears them at the end\n    list.updatePadding(bottom = bottom)\n\n    insets   // returning it keeps it unconsumed for descendants\n}"
+        }
+      ],
+      "followUps": [
+        "What is the difference between an inset that is consumed and one that is not?",
+        "Why does `Scaffold`'s `contentPadding` exist, and what happens when you ignore it?",
+        "How does the IME inset differ from system-bar insets?"
+      ],
+      "traps": [
+        "Hard-coding bar heights or assuming an old opt-out still applies on targetSdk 36.",
+        "Applying an inset twice — the consume/padding confusion is the number one edge-to-edge bug."
+      ],
+      "refs": [
+        { "title": "Edge-to-edge", "url": "https://developer.android.com/develop/ui/views/layout/edge-to-edge", "checked": "2026-08-13" },
+        { "title": "Window insets", "url": "https://developer.android.com/develop/ui/views/layout/insets", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0040",
+      "track": "platform",
+      "topic": "UI & configuration",
+      "level": 2,
+      "type": "qa",
+      "tags": ["locale", "per-app-language", "localization"],
+      "q": "How does per-app language work, and what does a locale change do to your app?",
+      "shortAnswer": [
+        "Since Android 13 users can set a language per app independently of the system; the app declares supported locales with `android:localeConfig` and switches via `AppCompatDelegate.setApplicationLocales` or `LocaleManager`.",
+        "A locale change is a configuration change — the Activity is recreated and all `values-<lang>` resources re-resolve, so your UI must survive recreation cleanly.",
+        "The traps are untranslated strings leaking through, numbers/dates formatted with the wrong locale, and UI that assumes the system language matches the app language."
+      ],
+      "answer": "#### The mechanism\nPer-app language (Android 13+) decouples your app's language from the device language. You ship an `android:localeConfig` XML listing supported locales, set `android:localeConfig` on the `<application>`, and the user picks a language in Settings → Apps → your app. At runtime you switch with `AppCompatDelegate.setApplicationLocales(locales)` (which persists and re-applies on restart) or the `LocaleManager` platform API. On devices below 13, `AppCompatDelegate` provides the same behavior via `setApplicationLocales`.\n\n#### The locale-list detail\nA locale is language plus region — `en`, `en-US`, `pt-BR` differ in number and date formatting even when the text is identical. Set the whole `LocaleList`, not a single locale, so the platform falls back through your list instead of jumping to an arbitrary default.\n\n#### What breaks\n- **Resources**: switching locale is a config change; Activities are recreated and `values-<lang>` resources re-resolve. A screen that does not survive recreation (or caches localized strings in a process-lifetime singleton) shows stale text.\n- **Formatting**: `String.format` and `SimpleDateFormat` default to the device locale, not your app's — format with the app's locale explicitly.\n- **Non-localized UI**: images with baked-in text, hard-coded strings in code, and content generated on the server all bypass `values-*`.\n- **dark/light**: uiMode is a separate configuration axis — changing language does not touch it, but recreation still happens.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Declaring and switching app locales",
+          "src": "// res/xml/locales_config.xml\n// <locale-config xmlns:android=\"http://schemas.android.com/apk/res/android\">\n//     <locale android:name=\"en\" />\n//     <locale android:name=\"es\" />\n//     <locale android:name=\"fr\" />\n// </locale-config>\n\n// Switching the app language\nval appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(\"es\")\nAppCompatDelegate.setApplicationLocales(appLocale)\n\n// Persisted by the framework; the Activity is recreated, like any config change\n// Format numbers/dates with the APP locale, not the device default\nval formatted = NumberFormat.getNumberInstance(appLocale.toLocale()).format(1234.5)"
+        }
+      ],
+      "followUps": [
+        "Why should you set a `LocaleList` rather than a single locale?",
+        "What is the difference between per-app language and the system language?",
+        "Why does a locale switch recreate your Activity?"
+      ],
+      "traps": [
+        "Formatting dates with the device locale inside an app whose language the user changed — mixed-language output.",
+        "Caching translated strings process-lifetime, so a locale switch never applies to the old screens."
+      ],
+      "refs": [
+        { "title": "Per-app language preferences", "url": "https://developer.android.com/guide/topics/resources/app-languages", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    }
+  ]
+}

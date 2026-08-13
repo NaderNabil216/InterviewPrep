@@ -1,0 +1,386 @@
+{
+  "id": "build-testing-g-6",
+  "title": "Build, Tooling & Testing",
+  "track": "build-testing",
+  "items": [
+    {
+      "id": "bt-0053",
+      "track": "build-testing",
+      "topic": "Gradle internals",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "gradle",
+        "daemon",
+        "configuration-cache"
+      ],
+      "q": "How does the Gradle daemon actually speed up builds, and what can and cannot cross the configuration cache boundary?",
+      "shortAnswer": [
+        "The daemon is a long-lived JVM that stays warm between builds, so the fixed overhead of JVM start and classpath loading disappears on every invocation after the first.",
+        "The configuration cache serializes the configured task graph to disk and reuses it, so a second build skips configuration entirely — but only if every execution-time value is serializable or a lazy provider.",
+        "Execution-time code cannot reach into configuration-time state: no reading System.getProperty or System.getenv in a task action, no non-serializable task properties, no touching Project at execution."
+      ],
+      "answer": "The daemon and the configuration cache attack two different costs. The **daemon** is a long-lived JVM that stays warm between builds — no JVM start, no classpath reloading — so it shaves the fixed overhead on every invocation. Gradle picks an idle daemon compatible with your JDK and JVM args, and you control the fleet through `org.gradle.daemon`, the idle timeout, and `gradle --stop`.\n\n#### The configuration cache\nIt serializes the configured task graph to disk after one run, so the next build deserializes it and skips configuration entirely. That only works if every value a task needs at execution is either **serializable** or declared as a **lazy provider**. Gradle reports each violation as a validation problem with a fix, which is why the first run after enabling it is a fix-up pass.\n\n#### What cannot cross the boundary\n- A non-serializable task property: a plain lambda, a `LocalDateTime`, a mutable holder captured at configuration time.\n- Reading `System.getProperty` or `System.getenv` inside a task action.\n- Touching the `Project` at execution time.\n- State sampled eagerly during configuration that is then read at execution.\n\nThe rule of thumb: execution-time code must read the world through **declared inputs and providers**, not by reaching into configuration-time state. Lazy providers are the sanctioned escape hatch — they serialize as a reference and re-resolve at execution.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A configuration-cache-safe task: lazy provider declared as an input",
+          "src": "// build.gradle.kts\nabstract class EnvCheckTask : DefaultTask() {\n    @get:Input\n    abstract val userName: Property<String>\n\n    @TaskAction\n    fun run() {\n        logger.lifecycle(\"Hello, ${userName.get()}\")\n    }\n}\n\ntasks.register<EnvCheckTask>(\"envCheck\") {\n    // lazy provider, declared as an input — safe to cross the cache boundary\n    userName.set(providers.environmentVariable(\"USER\").orElse(\"unknown\"))\n}\n\n// What breaks the configuration cache — reading the environment inside the action:\n//     @TaskAction fun run() { println(System.getenv(\"USER\")) }\n//   -> \"invocation of 'System.getenv' is not supported at execution time\""
+        }
+      ],
+      "followUps": [
+        "Why can a plugin read System.getProperty during configuration but not at execution under the configuration cache?",
+        "How does a provider differ from an eager value for cache compatibility?",
+        "What does Gradle report when a task breaks the cache, and how do you read the validation report?"
+      ],
+      "traps": [
+        "Treating the daemon and the configuration cache as the same mechanism — one caches process state, the other serializes the task graph.",
+        "Claiming any task property is fine because it is declared as an input — the declared type still has to be serializable or lazy."
+      ],
+      "refs": [
+        {
+          "title": "Gradle — Using the configuration cache",
+          "url": "https://docs.gradle.org/current/userguide/configuration_cache.html",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Gradle — Gradle daemon",
+          "url": "https://docs.gradle.org/current/userguide/gradle_daemon.html",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "bt-0054",
+      "track": "build-testing",
+      "topic": "AGP internals",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "agp",
+        "variant-api",
+        "artifact-transforms"
+      ],
+      "q": "Walk me through how AGP decides what to build for a variant, and where you would hook in a custom artifact transform.",
+      "shortAnswer": [
+        "AGP models each module as a component that computes variants from the cross-product of build types, flavors, and product dimensions, filtering the ones that don't apply.",
+        "The AndroidComponentsExtension is the hook: finalizeDsl to adjust the DSL, beforeVariants to add or remove variants, and onVariants to attach work to the survivors.",
+        "The sanctioned way to participate is the artifacts API — register a producer with variant.artifacts.use(...).wiredWith(...).toTransform(SingleArtifact.APK) and AGP wires your output into its graph."
+      ],
+      "answer": "AGP models a build as **components** and **variants**. A component is one module's buildable surface — app, library, or test component — and it computes variants from the cross-product of build types, flavors, and product dimensions, filtering variants that don't apply to that module. You never hand-assemble the matrix; AGP derives it from the DSL and exposes it through the `AndroidComponentsExtension`.\n\n#### The three hooks\n- `finalizeDsl` — adjust the DSL before variants are computed.\n- `beforeVariants` — add or remove variants before any work is attached.\n- `onVariants` — the workhorse: attach tasks and artifact producers to the variants that survive.\n\n#### The artifacts model\nInside `onVariants` you get a `Variant` exposing tasks, sources, and the artifacts API. Artifacts are typed outputs — `SingleArtifact.APK`, `SingleArtifact.AAR`, multi-artifacts for classpath and sources. To replace or augment a standard artifact you register a producer task and declare the transformation with `variant.artifacts.use(producer).wiredWith(ProducerTask::output).toTransform(SingleArtifact.APK)`.\n\n`wiredWith` binds your task's output property to the artifact slot, and AGP wires it into the build graph at the correct place — you don't guess dependencies. The modern Kotlin API builds on `@AddToVariant` and object/VM factories, which is what plugins for KMP Android targets and performance instrumentation build on. The point to get across: **AGP owns the graph, and the Variant API is the sanctioned way to participate without forking tasks.**",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "app/build.gradle.kts — a custom artifact transform wired into the APK slot",
+          "src": "import com.android.build.api.variant.SingleArtifact\n\nabstract class MergeSignedHeaderTask : DefaultTask() {\n    @get:InputFile\n    abstract val inputFile: RegularFileProperty\n\n    @get:OutputFile\n    abstract val outputFile: RegularFileProperty\n\n    @TaskAction\n    fun merge() {\n        outputFile.get().asFile.writeText(inputFile.get().asFile.readText())\n    }\n}\n\nandroidComponents {\n    onVariants(selector().all()) { variant ->\n        val producer = tasks.register(\"${variant.name}MergeSignedHeader\", MergeSignedHeaderTask::class.java) {\n            it.inputFile.set(project.layout.projectDirectory.file(\"headers/${variant.name}.json\"))\n        }\n        variant.artifacts\n            .use(producer)\n            .wiredWith(MergeSignedHeaderTask::outputFile)\n            .toTransform(SingleArtifact.APK)\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What is the difference between toTransform, toCreate, and toAppend in the artifacts API?",
+        "Why register a producer for an artifact instead of wiring the task directly into the task graph?",
+        "How does beforeVariants let you filter variants before any task is created?"
+      ],
+      "traps": [
+        "Describing the Variant API as just 'a way to add tasks' and missing the artifacts model — the sanctioned path is artifact producers and consumers, not naked tasks.",
+        "Confusing the legacy applicationVariants task-manipulation API with the modern Kotlin Variant API."
+      ],
+      "refs": [
+        {
+          "title": "Extend the Android Gradle plugin",
+          "url": "https://developer.android.com/build/extend-agp",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "AGP 8.0 API changes: the Artifacts API replaces Transform",
+          "url": "https://android-developers.googleblog.com/2022/10/prepare-your-android-project-for-agp8-changes.html",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "bt-0055",
+      "track": "build-testing",
+      "topic": "Supply chain security",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "supply-chain",
+        "dependency-verification",
+        "checksums"
+      ],
+      "q": "A dependency you ship could be compromised upstream. How do you verify dependencies and harden the supply chain in practice?",
+      "shortAnswer": [
+        "Dependency verification makes Gradle refuse artifacts whose hashes aren't in a committed dependency-verification.xml, and strict mode also verifies the metadata files so a poisoned POM can't redirect you.",
+        "Dependency locking pins the resolved graph in dependency-lock.json so transitive bumps only happen when you decide, and exclusiveContent confines each group to an allowed repository.",
+        "Beyond Gradle: keep the dependency list small and PR-reviewed, flag new dependencies in CI, scan with an SBOM and a vulnerability feed, and treat an unexpected hash change without a version bump as an incident."
+      ],
+      "answer": "The two levers are **verification** and **locking**. Dependency verification makes Gradle refuse artifacts that don't match hashes you published. You generate `dependency-verification.xml` with `--write-verification-metadata sha256` (plus `--dry-run` to cover the whole graph, and signatures if you add a PGP keyring), then set `dependencyVerification=strict` in `gradle.properties`. Gradle then checks not just the jar but the **metadata** — a poisoned POM can't silently redirect you to a different version or different coordinates.\n\n#### Locking and content filtering\nDependency locking pins the resolved graph in `dependency-lock.json`, so a transitive version only bumps when you decide to. `exclusiveContent` restricts which repositories may serve which groups, so a hijacked or malicious mirror can't substitute an artifact for one you didn't expect to come from there.\n\n#### Beyond Gradle\nThe tooling is the easy half. The supply chain hardens when you: keep the dependency list small and reviewed, add a CI gate that flags every new dependency for a human, scan with an SBOM plus a vulnerability feed, pin build-tool and CI-image versions, and require signed commits on merges.\n\nThe practical tip: generate the metadata from a fresh checkout, commit it, and treat any unexpected hash change **without a version bump** as an incident — that exact shape is what a dependency-confusion or hijack attack looks like, and it is precisely what this check catches.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Locking + content filtering; verification metadata lives in gradle/verification-metadata.xml",
+          "src": "// gradle.properties\n// dependencyVerification=strict\n\n// build.gradle.kts\nplugins {\n    `java-library`\n    `maven-publish`\n}\n\ndependencyLocking {\n    lockAllConfigurations()\n}\n\nrepositories {\n    exclusiveContent {\n        forRepository {\n            maven(\"https://maven.internal.example.com/maven2\")\n        }\n        filter {\n            includeGroup(\"com.example.internal\")\n        }\n    }\n    mavenCentral()\n}\n\n// Generate the verification metadata covering the full resolved graph:\n//   ./gradlew --write-verification-metadata sha256 --dry-run"
+        }
+      ],
+      "followUps": [
+        "What does dependency verification check besides the artifact hashes?",
+        "How is dependency locking different from verification, and do you need both?",
+        "What happens in strict mode when a new transitive dependency appears?"
+      ],
+      "traps": [
+        "Treating verification as 'checksums on jars' and missing that metadata files (POMs) are verified too.",
+        "Running --write-verification-metadata against a dirty checkout so the metadata captures a graph you never intended."
+      ],
+      "refs": [
+        {
+          "title": "Gradle — Verifying dependencies",
+          "url": "https://docs.gradle.org/current/userguide/dependency_verification.html",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Gradle — Dependency locking",
+          "url": "https://docs.gradle.org/current/userguide/dependency_locking.html",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "bt-0056",
+      "track": "build-testing",
+      "topic": "Static analysis tooling",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "lint",
+        "uast",
+        "custom-checks"
+      ],
+      "q": "How do you write a custom lint check? What role does UAST play, and when is a lint check the right tool?",
+      "shortAnswer": [
+        "A lint check is a Detector registered in an IssueRegistry: you declare the Issue with a stable id, severity, category, and an Implementation that scopes it to source files, XML, resources, or bytecode.",
+        "UAST, the Unified AST, is the tree lint walks over both Java and Kotlin, so one detector visits method calls and literals identically whichever language the source is in.",
+        "Lint is the right tool for rule-like, project-wide checks — banning an API, enforcing an error-message format — not for computing code metrics, which is detekt's job."
+      ],
+      "answer": "A lint check is a `Detector` registered in an `IssueRegistry`. You declare the `Issue` — stable id, short and full descriptions, category, severity, `defaultEnabled`, and an `Implementation` that scopes the detector to Java/Kotlin source, XML, binary resources, or compiled classes. The registry ships in a jar you add with `lintChecks`, and lint runs your detector alongside the built-ins on every build and IDE session.\n\n#### What UAST is\nUAST — the **Unified AST** — is what makes one detector work on Java and Kotlin at once. The Kotlin compiler's PSI is bridged into the same tree the Java parser produces, so `visitMethodCall`, `visitLiteralExpression`, and the `evaluator` behave identically whichever language you are in. That is the difference from detekt or ktlint, which only see Kotlin.\n\n#### The walk\nYou implement the visitor methods for what you care about — applicable method names, call arguments, resource references — inspect with the UAST evaluator when you need a type or a constant value, then report with a location, a message, and an optional `LintFix` quick fix. Reporting a location and message is a complete, valid check; quick fixes are an enhancement.\n\nLint is the right tool for **rule-like checks that must be enforced project-wide**: banning deprecated APIs, enforcing an error-message format, flagging a pattern in generated code. It is not the tool for computing code metrics, which is what detekt is for.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A minimal source-scoped check that runs on Java and Kotlin via UAST",
+          "src": "package com.example.lint\n\nclass NoHardcodedLogTagDetector : Detector(), SourceCodeScanner {\n    override fun getApplicableMethodNames(): List<String> = listOf(\"d\", \"i\", \"w\", \"e\")\n\n    override fun visitMethod(context: JavaContext, node: UMethod, method: PsiMethod) {\n        if (method.containingClass?.qualifiedName != \"android.util.Log\") return\n        val tag = node.uastArguments.firstOrNull()?.evaluate()?.value as? String ?: return\n        if (tag == \"TAG\") {\n            context.report(\n                ISSUE, node, context.getLocation(node),\n                \"Hardcoded log tag; use a single constant\",\n                LintFix.create().replace().text(\"TAG\").with(\"LOG_TAG\").build()\n            )\n        }\n    }\n\n    companion object {\n        val ISSUE = Issue.create(\n            \"HardcodedLogTag\",\n            \"Hardcoded log tag\",\n            \"Log tags should come from one constant so they are greppable.\",\n            Category.CORRECTNESS, 5, Severity.WARNING,\n            Implementation(NoHardcodedLogTagDetector::class.java, Scope.JAVA_FILE_SCOPE)\n        )\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Why does UAST exist rather than lint running two detectors, one per language?",
+        "When is a lint check the wrong tool compared to detekt or a compiler warning?",
+        "How do you get a type's qualified name inside a visitor without triggering heavy analysis?"
+      ],
+      "traps": [
+        "Describing UAST as 'an Android thing' — it is JetBrains' unified AST over Java and Kotlin, which Android lint consumes.",
+        "Assuming every issue needs a quick fix; reporting with a location and message is a complete check."
+      ],
+      "refs": [
+        {
+          "title": "Improve your code with lint checks",
+          "url": "https://developer.android.com/studio/write/lint",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "bt-0057",
+      "track": "build-testing",
+      "topic": "Test performance",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "test-speed",
+        "parallelization",
+        "ci"
+      ],
+      "q": "Your test suite takes 40 minutes in CI and nobody knows where the time goes. How do you find it and what do you parallelize first?",
+      "shortAnswer": [
+        "Measure first: the Gradle test report and a build scan already give per-class durations, so sort them and look for the fat tail — a few tests usually eat most of the time.",
+        "On Android the usual suspects are JVM-side: Robolectric sandbox init, real delay or Thread.sleep calls, network, per-test DI graph creation, and heavy @Before fixtures.",
+        "Then parallelize unit tests with maxParallelForks and forkEvery, shard instrumented tests across Gradle Managed Devices, and split the slowest module onto its own CI agent — but only after the tests are hermetic."
+      ],
+      "answer": "**Measure before you move anything.** The Gradle test report and a build scan already list per-class durations — sort them and find the fat tail. On Android the usual suspects are JVM-side: Robolectric sandbox initialization, real `delay()` or `Thread.sleep`, network calls, per-test DI graph creation, and heavy fixtures in `@Before`.\n\n#### Then attack in order\n- **Unit tests:** `maxParallelForks` so classes run in parallel forks, `forkEvery` to cap how many tests share a fork, and shared Robolectric resources via `@Config` or the global options so SDK setup happens once. Replace real waits with virtual time.\n- **Instrumented tests:** shard with `numShards` and run on **Gradle Managed Devices** so the emulator boots and installs once, then shards run across parallel devices.\n- **CI level:** the slowest module owns the pipeline — split the build across agents, cache compile outputs remotely so unrelated changes don't recompile, and give the big module its own agent so it doesn't serialize behind everything else.\n\nThe trap: **parallelizing before the tests are hermetic just multiplies flakes.** Contention and shared state turn into intermittent failures at the exact moment you most need green. Make the suite deterministic first — fake time, fake network, isolated state — then scale concurrency. Re-measure after each change; the cost of a test that never runs again is zero, and the report tells you which one that is.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "app/build.gradle.kts — parallelize JVM tests and shard on managed devices",
+          "src": "android {\n    testOptions {\n        unitTests.all {\n            it.maxParallelForks = 4\n            it.forkEvery = 200\n        }\n        managedDevices {\n            devices {\n                maybeCreate<ManagedVirtualDevice>(\"pixel2Api34\").apply {\n                    device = \"Pixel 2\"\n                    apiLevel = 34\n                    systemImageSource = \"aosp\"\n                }\n            }\n        }\n    }\n}\n\n// Run instrumented tests split across devices:\n//   ./gradlew pixel2Api34DebugAndroidTest\n//   (Gradle Managed Devices shard the run across the device group automatically)"
+        }
+      ],
+      "followUps": [
+        "Why does raising maxParallelForks often make a flaky suite flakier, and what do you fix first?",
+        "What is the difference between sharding instrumented tests and running on parallel managed devices?",
+        "How do you budget test time per suite without letting it silently creep?"
+      ],
+      "traps": [
+        "Parallelizing everything before the tests are hermetic — contention and shared state turn into flakes.",
+        "Optimizing around assumptions ('the emulator is slow') instead of the actual per-test timings in the report."
+      ],
+      "refs": [
+        {
+          "title": "Gradle — Improve the performance of Gradle builds (test execution)",
+          "url": "https://docs.gradle.org/current/userguide/performance.html",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Scale your tests with build-managed devices",
+          "url": "https://developer.android.com/studio/test/managed-devices",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "bt-0058",
+      "track": "build-testing",
+      "topic": "Testing time",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "virtual-time",
+        "coroutines-test",
+        "clock"
+      ],
+      "q": "How do you test code that depends on time — and why do wall-clock assertions always flake eventually?",
+      "shortAnswer": [
+        "Don't read the clock from inside the class — inject a clock or a TimeSource, and for coroutines code inject the scheduler or dispatcher so tests can control it.",
+        "Under kotlinx-coroutines-test's StandardTestDispatcher, delay() is virtual time: runTest and testScheduler.advanceTimeBy let you step through a debounce or timeout instantly and deterministically.",
+        "Wall-clock assertions flake because they assert on the environment, not the code — a GC pause or CPU contention in CI makes the timing vary regardless of whether the behavior is correct."
+      ],
+      "answer": "First, don't read the clock from inside the class. Inject a `Clock` or a `TimeSource` so tests can control it — Kotlin's `kotlin.time.Clock` gives you an injectable source of `Instant`. Coroutine code should take the scheduler or the dispatcher rather than call `System.currentTimeMillis`, because the coroutine-testing tooling can then substitute virtual time wholesale.\n\n#### Virtual time\nWith `kotlinx-coroutines-test`, `runTest` runs on a `StandardTestDispatcher`, and `delay()` advances the **virtual** clock — no wall-clock waiting. `testScheduler.advanceTimeBy(...)` and `runCurrent()` let you step precisely: advance 299ms, assert the debounce hasn't fired, advance 1ms, assert it has. Deterministic, instant, and immune to machine load.\n\n#### Why wall-clock assertions flake\nA wall-clock assertion depends on the environment. A GC pause, CPU contention in CI, or a slow disk means the code took longer — not because it's wrong, but because the machine was busy. The check that passed at 480ms fails at 540ms on a loaded runner, and it fails *intermittently*, which is the worst kind of failure to debug. Real delays also make the suite slow: a 3-second delay is 3 real seconds per test.\n\nThe rule: assert on **observable outcomes at virtual-time points**, never on how long something took. If you genuinely must measure a real `TimeSource`, use generous tolerances that survive contention, or measure elapsed work in a fast path with `markNow()` / `elapsedNow()` from `kotlin.time`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Stepping a debounce through virtual time",
+          "src": "class Debouncer(\n    private val scope: CoroutineScope,\n    private val onFire: () -> Unit,\n) {\n    private var job: Job? = null\n\n    fun trigger() {\n        job?.cancel()\n        job = scope.launch {\n            delay(300)          // virtual under TestCoroutineScheduler\n            onFire()\n        }\n    }\n}\n\nclass DebouncerTest {\n    @Test\n    fun `debounce window is virtual time`() = runTest {\n        var fired = false\n        val debouncer = Debouncer(this) { fired = true }\n\n        debouncer.trigger()\n        testScheduler.advanceTimeBy(299)\n        runCurrent()\n        assertFalse(fired)\n\n        testScheduler.advanceTimeBy(1)\n        runCurrent()\n        assertTrue(fired)\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What happens to delay() under runTest versus a real Dispatchers.Main?",
+        "How would you fake kotlin.time.Clock in a non-coroutine class?",
+        "When is an assertion on real elapsed time legitimate, and how do you keep it non-flaky?"
+      ],
+      "traps": [
+        "Fixing flakiness by raising the assertion threshold until it passes locally — the flake returns on a slower runner.",
+        "Calling Thread.sleep inside runTest, which bypasses virtual time and drags the suite back to real time."
+      ],
+      "refs": [
+        {
+          "title": "kotlinx-coroutines-test — module docs",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-test/",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Kotlin docs — Time measurement",
+          "url": "https://kotlinlang.org/docs/time-measurement.html",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "bt-0059",
+      "track": "build-testing",
+      "topic": "Test taxonomy",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "unit-testing",
+        "integration-testing",
+        "e2e"
+      ],
+      "q": "What is the difference between a unit test, an integration test, and an end-to-end test on Android — and where does each belong?",
+      "shortAnswer": [
+        "A unit test exercises one class in isolation on the JVM — a ViewModel, use case, or mapper — with fakes everywhere else; it runs in milliseconds so you can have hundreds.",
+        "An integration test checks units working together against real infrastructure — a repository against in-memory Room and MockWebServer — catching wrong SQL, serialization, and orchestration that isolated units can't see.",
+        "An end-to-end test drives the real app on a device or emulator through the actual UI and system services, so it belongs only on the few journeys that must never break."
+      ],
+      "answer": "A **unit test** exercises one class or function in isolation on the JVM: a ViewModel, a use case, a mapper, with fakes standing in for everything else. It runs in milliseconds, so you can have hundreds and run them on every save. Robolectric stretches this to Android framework classes without a device.\n\nAn **integration test** checks that units work together against real infrastructure: a repository against in-memory Room and MockWebServer, a migration against a database at the right version, a worker against a real WorkManager. It still runs on the JVM where it can. Its value is catching wrong SQL, wrong serialization, and wrong orchestration — bugs the isolated units cannot see.\n\nAn **end-to-end test** drives the app on a device or emulator: Compose or Espresso against the real UI, real system services, real network. It is the only layer that proves the shipped artifact works, but it is slow, flaky-prone, and expensive, so it is reserved for the journeys that must never break.\n\nWhere each belongs: a pyramid sized by **risk**, not by a fixed ratio. The vast majority of tests are unit and integration tests — fast and deterministic — with a thin E2E layer on critical journeys. The balance tells you what a bug that slips through says about your coverage: it should reproduce in exactly the layer you underinvested in.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The same logic at two levels of the pyramid",
+          "src": "// src/test/java/.../CurrencyFormatterTest.kt — pure JVM unit test\nclass CurrencyFormatterTest {\n    @Test\n    fun `formats cents with two decimals`() {\n        assertEquals(\"$1.25\", CurrencyFormatter.format(125))\n    }\n}\n\n// src/androidTest/java/.../CheckoutFlowTest.kt — E2E on the device\n@RunWith(AndroidJUnit4::class)\nclass CheckoutFlowTest {\n    @get:Rule\n    val rule = createComposeRule()\n\n    @Test\n    fun `add to cart and check out`() {\n        rule.setContent { App() }\n        rule.onNodeWithText(\"Add to cart\").performClick()\n        rule.onNodeWithText(\"Checkout\").performClick()\n        rule.onNodeWithText(\"Order confirmed\").assertIsDisplayed()\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Where does a repository test against Room belong on the pyramid, and why not 'unit'?",
+        "How does Robolectric change the boundary between JVM and instrumented tests?",
+        "What pushes a team toward more integration tests than E2E tests?"
+      ],
+      "traps": [
+        "Answering 'unit = JVM, everything else = instrumented' — the real split is isolation and scope, not which source set runs it.",
+        "Saying E2E is 'just the UI layer' — E2E exercises the whole stack through the real app."
+      ],
+      "refs": [
+        {
+          "title": "Test types and testing pyramid",
+          "url": "https://developer.android.com/training/testing/fundamentals",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Build instrumented tests",
+          "url": "https://developer.android.com/training/testing/instrumented-tests",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "bt-0060",
+      "track": "build-testing",
+      "topic": "Testing strategy & coverage",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "testing-strategy",
+        "coverage",
+        "pyramid"
+      ],
+      "q": "You're the tech lead. Design the testing strategy for your team's Android app — what does the pyramid actually look like, what coverage do you enforce, and how do you defend the trade-offs?",
+      "shortAnswer": [
+        "The shape follows the product's risk, not a textbook ratio: a payments flow gets E2E on checkout, while a library gets contract tests instead of any UI automation.",
+        "I enforce diff coverage on changed lines for the unit layer via a Kover or JaCoCo CI gate, plus a critical-journey matrix listing every E2E flow and when it last ran — not a raw percentage.",
+        "I defend it with economics: every test maps to a real risk it prevents, a cost in authoring and suite time, and a flake allowance, so the suite earns its keep or gets cut."
+      ],
+      "answer": "The right shape follows the **product's risk**, not a textbook ratio. A consumer app with payments gets E2E on checkout and onboarding, and a deep unit layer under ViewModels and use cases. A library or SDK gets no E2E — contract tests on the public API and integration tests on storage and networking. So step one is a **risk map**: what breaks would cost users real harm, or engineers real hours, and which layer is cheapest to catch it in?\n\n#### Coverage that matters\nI enforce **diff coverage on changed lines** for the unit layer in CI — new logic must arrive with tests — using a coverage gate like Kover or JaCoCo. And I keep a **critical-journey matrix**: every E2E flow, which release last ran it, who owns it. I would not enforce a raw percentage; it measures effort, not confidence. A high number with all the tests asserting trivia is worse than a mapped, smaller suite.\n\n#### Defending the trade-offs\nI argue from the economics. Every test buys something — it prevents a regression class or de-risks a refactor — and costs something: authoring time, suite time, flake budget. I give each suite a time budget and each test a flake allowance; over budget, we quarantine and fix, never disable silently. I'd rather ship fewer meaningful tests than a large suite nobody trusts, and I can prove that choice with the risk map.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "build.gradle.kts — a coverage gate that fails CI below the unit-layer floor",
+          "src": "plugins {\n    alias(libs.plugins.kover)\n}\n\nkover {\n    verify {\n        rule {\n            minBound(80)\n            target {\n                classes().exclude(\n                    \"**.BuildConfig\",\n                    \"**.Hilt*\",\n                    \"**.*Activity\"\n                )\n            }\n        }\n    }\n}\n\n// CI gate for changed lines — new logic must ship with tests:\n//   ./gradlew :app:koverHtmlReport :app:koverVerify\n\n// The critical-journey matrix lives next to the plan, not in code:\n//   flow: checkout          device: Pixel 7 / API 34   owner: payments   last run: 2026.08.13"
+        }
+      ],
+      "followUps": [
+        "A teammate argues 80% line coverage is the target. How do you respond?",
+        "Your E2E suite is flaky. Do you cut it, quarantine, or rewrite?",
+        "How do you keep the strategy from decaying as the team and product grow?"
+      ],
+      "traps": [
+        "Answering with a fixed percentage pyramid that has no link to the product's actual risk surface.",
+        "Proposing a large E2E suite as the safety net — that is the anti-pattern the pyramid exists to prevent."
+      ],
+      "refs": [
+        {
+          "title": "Test types and testing pyramid",
+          "url": "https://developer.android.com/training/testing/fundamentals",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Test your app",
+          "url": "https://developer.android.com/training/testing",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    }
+  ]
+}

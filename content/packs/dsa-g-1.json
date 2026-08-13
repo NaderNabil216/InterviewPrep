@@ -1,0 +1,300 @@
+{
+  "id": "dsa-g-1",
+  "title": "Problem Solving",
+  "track": "dsa",
+  "items": [
+    {
+      "id": "ds-0020",
+      "track": "dsa",
+      "topic": "Hashing",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Hashing / frequency map",
+      "tags": [
+        "array",
+        "hashmap",
+        "string"
+      ],
+      "q": "Group Anagrams — bucket strings by their character multiset",
+      "prompt": "Given an array of strings, group the anagrams together: `[\"eat\", \"tea\", \"tan\", \"ate\", \"nat\", \"bat\"]` → `[[\"eat\",\"tea\",\"ate\"], [\"tan\",\"nat\"], [\"bat\"]]`.\n\nTwo strings are anagrams when they have the same letters in different orders, so a sorted string or a character count is a canonical key. The interviewer is checking that you pick a cheap canonical form and explain the hashing cost honestly — a 26-int count vs sorting a string is a real trade-off at interview depth.",
+      "hints": [
+        "Anagrams share a canonical form. What transformation turns \"eat\" and \"tea\" into the same key?",
+        "Sorting each string gives a canonical key but costs O(k log k) per word. Is there an O(k) key?",
+        "Use a `CharArray(26)` count and build the key from it — or `String(chars)` — so equal counts hash to equal keys. Map key → list, then return the lists."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Char-count key, O(n·k) time / O(n·k) space",
+          "src": "fun groupAnagrams(words: Array<String>): List<List<String>> {\n    val buckets = HashMap<String, MutableList<String>>()\n    for (w in words) {\n        val count = IntArray(26)\n        for (c in w) count[c - 'a']++\n        val key = count.joinToString(\",\")   // canonical form\n        buckets.getOrPut(key) { mutableListOf() }.add(w)\n    }\n    return buckets.values.toList()\n}"
+        }
+      ],
+      "complexity": "Time O(n·k) for the char-count key (n words of length k), or O(n·k log k) if you sort each word. Space O(n·k) for the output. The count-based key is strictly better than sorting and is what you should reach for first.",
+      "followUps": [
+        "What if words are ASCII but not lowercase — do you still fit in 26 buckets?",
+        "How would you handle unicode (emoji, accented letters)? A `HashMap<Char, Int>` count, or normalize.",
+        "Return the groups in order of first appearance rather than hash order."
+      ],
+      "starter": "fun groupAnagrams(words: Array<String>): List<List<String>> {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0021",
+      "track": "dsa",
+      "topic": "Two pointers",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Two pointers (opposite ends)",
+      "tags": [
+        "array",
+        "two-pointers"
+      ],
+      "q": "Container With Most Water — two pointers from opposite ends",
+      "prompt": "Given `IntArray` heights where each entry is the height of a vertical line at that index, find the two lines that, together with the x-axis, hold the most water. Return the max area.\n\nThis is the canonical opposite-ends two-pointer problem. The insight that moving the shorter pointer is the *only* move worth making is the whole question — derive it out loud rather than guessing.",
+      "hints": [
+        "Brute force is every pair: O(n²). Area = width × min(left, right). What makes a pair irrelevant?",
+        "Start pointers at both ends (max width). The area is bounded by the shorter line — moving the taller one in can only shrink or keep width while the height is still capped by the shorter one.",
+        "Move the pointer with the *smaller* height inward. Every pair you skip was provably worse, so a single pass finds the optimum."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Shrink from both ends, O(n)",
+          "src": "fun maxArea(heights: IntArray): Int {\n    var lo = 0\n    var hi = heights.lastIndex\n    var best = 0\n    while (lo < hi) {\n        val w = hi - lo\n        val h = minOf(heights[lo], heights[hi])\n        best = maxOf(best, w * h)\n        if (heights[lo] < heights[hi]) lo++ else hi--\n    }\n    return best\n}"
+        }
+      ],
+      "complexity": "Time O(n) — each pointer moves at most n times. Space O(1). The brute force is O(n²) and is the wrong answer at this level unless you mention you're skipping it deliberately.",
+      "followUps": [
+        "Why is it safe to skip the pairs when you move the shorter pointer? State the exchange argument.",
+        "What if heights are floats instead of ints?",
+        "Find the pair that maximizes area with the constraint that they must also both exceed some threshold."
+      ],
+      "starter": "fun maxArea(heights: IntArray): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library — arrays",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int-array/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0022",
+      "track": "dsa",
+      "topic": "Sliding window",
+      "level": 1,
+      "type": "dsa",
+      "pattern": "Sliding window (fixed size)",
+      "tags": [
+        "array",
+        "window"
+      ],
+      "q": "Maximum sum of a subarray of size k — the fixed-size window template",
+      "prompt": "Given an `IntArray` and a window size `k`, return the maximum sum of any contiguous subarray of length exactly `k`.\n\nThis is the warm-up that teaches the fixed-window pattern: advance the window by adding the new element and removing the outgoing one, so each step is O(1) instead of re-summing k elements.",
+      "hints": [
+        "Re-summing every window costs O(n·k). What changes between two adjacent windows?",
+        "When the window slides right by one, exactly one element enters and one leaves.",
+        "Compute the first window's sum, then for each step add `arr[i]` and subtract `arr[i - k]`. Track the max."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "O(n) fixed-size window",
+          "src": "fun maxSumSubarray(arr: IntArray, k: Int): Int {\n    require(k in 1..arr.size)\n    var sum = arr.take(k).sum()\n    var best = sum\n    for (i in k until arr.size) {\n        sum += arr[i] - arr[i - k]\n        best = maxOf(best, sum)\n    }\n    return best\n}"
+        }
+      ],
+      "complexity": "Time O(n), space O(1). The naive re-sum is O(n·k) — always state the win when you reach for a window.",
+      "followUps": [
+        "What if k can be larger than the array — how do you handle it?",
+        "Return the starting index of the max window, not just the sum.",
+        "What if the array has negative numbers — does the pattern change?"
+      ],
+      "starter": "fun maxSumSubarray(arr: IntArray, k: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0023",
+      "track": "dsa",
+      "topic": "Sliding window",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Sliding window (variable)",
+      "tags": [
+        "string",
+        "window"
+      ],
+      "q": "Longest substring with at most K distinct characters",
+      "prompt": "Given a string and an integer `k`, return the length of the longest substring that contains at most `k` distinct characters.\n\nWhere the fixed window shrinks on a schedule, this one shrinks on an invariant: the window is valid only while the number of distinct chars is ≤ k. That makes it the template for every \"at most\" window question.",
+      "hints": [
+        "A substring is contiguous — grow the right edge and track how many distinct chars are inside.",
+        "When a third distinct character arrives with k=2, the window is invalid. What must you do to the left edge?",
+        "Shrink `left` until the count of distinct characters drops back to k. A frequency map keyed by char lets you remove in O(1) per step."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Variable window with a frequency map — O(n)",
+          "src": "fun lengthOfLongestSubstringKDistinct(s: String, k: Int): Int {\n    if (k == 0) return 0\n    val freq = HashMap<Char, Int>()\n    var left = 0\n    var best = 0\n    for (right in s.indices) {\n        freq.merge(s[right], 1, Int::plus)\n        while (freq.size > k) {\n            val c = s[left]\n            freq[c] = freq.getValue(c) - 1\n            if (freq[c] == 0) freq.remove(c)\n            left++\n        }\n        best = maxOf(best, right - left + 1)\n    }\n    return best\n}"
+        }
+      ],
+      "complexity": "Time O(n) — each char enters and leaves the window once. Space O(k) for the frequency map.",
+      "followUps": [
+        "Now require the substring to have *exactly* k distinct characters — what changes?",
+        "Longest substring with at most K *repeats* of any char — different invariant.",
+        "What if you must also return the substring itself?"
+      ],
+      "starter": "fun lengthOfLongestSubstringKDistinct(s: String, k: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0024",
+      "track": "dsa",
+      "topic": "Prefix sums",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Prefix sums",
+      "tags": [
+        "array",
+        "prefix-sum"
+      ],
+      "q": "Subarray Sum Equals K — count subarrays summing to a target",
+      "prompt": "Given an `IntArray` (can contain negatives) and a target `k`, return the *number* of contiguous subarrays whose sum equals `k`.\n\nSubarray sum is range sum, and range sum is a difference of prefix sums. The trick that separates juniors here: instead of checking every `(i, j)` pair of prefix sums, count how many earlier prefixes equal `prefix - k` as you sweep once. The presence of negatives means a sliding window does *not* work.",
+      "hints": [
+        "Sum(arr[i..j]) = prefix[j] - prefix[i-1]. The problem becomes: count pairs of prefixes with the right difference.",
+        "A two-pointer window is invalid here because negatives mean sums are not monotonic — abandon that idea early and say why.",
+        "Sweep once, and at each prefix, ask: how many previous prefixes equal `prefix - k`? Keep a `HashMap<Int, Int>` of prefix-sum → count, seeded with `{0: 1}`."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "One pass with a prefix-count map — O(n)",
+          "src": "fun subarraySum(nums: IntArray, k: Int): Int {\n    val seen = HashMap<Int, Int>()   // prefix sum -> how many times it occurred\n    seen[0] = 1                      // empty prefix\n    var prefix = 0\n    var count = 0\n    for (x in nums) {\n        prefix += x\n        count += seen.getOrDefault(prefix - k, 0)\n        seen.merge(prefix, 1, Int::plus)\n    }\n    return count\n}"
+        }
+      ],
+      "complexity": "Time O(n), space O(n). The O(n²) brute force enumerates all ranges — always contrast with it explicitly.",
+      "followUps": [
+        "Why does seeding `{0: 1}` matter? Trace a subarray that starts at index 0.",
+        "Count subarrays whose sum is divisible by k — how does the map key change?",
+        "Find the *longest* subarray with sum k — what do you store in the map then?"
+      ],
+      "starter": "fun subarraySum(nums: IntArray, k: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0025",
+      "track": "dsa",
+      "topic": "Binary search",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Binary search on a sorted array",
+      "tags": [
+        "array",
+        "binary-search"
+      ],
+      "q": "Search in a Rotated Sorted Array",
+      "prompt": "Given a sorted array that has been rotated at an unknown pivot (e.g. `[4,5,6,7,0,1,2]`) and a target, return its index or -1. Values are distinct.\n\n`O(n)` linear search is trivial; the whole point is the binary search. The classic trap: after `mid`, *one* half is always fully sorted — decide which, and whether the target can be in it. Say \"one side is sorted, check whether the target is inside its bounds, else go the other way\" and you own the problem.",
+      "hints": [
+        "Even rotated, the array is two sorted runs. After splitting at `mid`, at least one run is fully sorted.",
+        "Check `arr[lo] <= arr[mid]` to identify the left run as sorted; else the right run is the sorted one.",
+        "If the sorted run contains the target by its bounds, search inside it; otherwise discard it and search the other run."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Find the sorted half each step — O(log n)",
+          "src": "fun searchRotated(nums: IntArray, target: Int): Int {\n    var lo = 0\n    var hi = nums.lastIndex\n    while (lo <= hi) {\n        val mid = lo + (hi - lo) / 2\n        if (nums[mid] == target) return mid\n        if (nums[lo] <= nums[mid]) {\n            // left run is sorted\n            if (target in nums[lo]..nums[mid]) hi = mid - 1 else lo = mid + 1\n        } else {\n            // right run is sorted\n            if (target in nums[mid]..nums[hi]) lo = mid + 1 else hi = mid - 1\n        }\n    }\n    return -1\n}"
+        }
+      ],
+      "complexity": "Time O(log n), space O(1). Mention the duplicate case: with repeats you may have to drop the `<=` optimization to linear-ish in the worst case.",
+      "followUps": [
+        "Find the index of the rotation pivot in O(log n).",
+        "What breaks when the array contains duplicates? Worst case becomes O(n) — why?",
+        "Search for the minimum element in a rotated array."
+      ],
+      "starter": "fun searchRotated(nums: IntArray, target: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library — IntArray",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int-array/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0026",
+      "track": "dsa",
+      "topic": "Binary search",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Binary search on the answer",
+      "tags": [
+        "array",
+        "binary-search"
+      ],
+      "q": "Minimum Capacity to Ship Packages within D days",
+      "prompt": "Given `weights: IntArray` in order and a day limit `D`, find the minimum ship capacity such that the packages can be shipped in the order they appear, splitting them across `D` consecutive days.\n\nThis is the canonical \"binary search on the answer\" problem: the answer (capacity) is monotonic — if C works, C+1 works. You binary-search the capacity and run a greedy feasibility check (`canShip`) at each candidate.",
+      "hints": [
+        "There is no way to guess the capacity directly. But is the predicate \"capacity C is feasible\" monotonic in C?",
+        "Yes — if C works, any larger capacity works. That monotonicity is the signal to binary-search the answer space [max(weights) .. sum(weights)].",
+        "At each candidate C, simulate loading day by day in order; if a day would exceed C, start a new day. Feasible iff days used ≤ D. Binary search the smallest feasible C."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Binary search on the answer — O(n log S)",
+          "src": "fun shipWithinDays(weights: IntArray, days: Int): Int {\n    fun canShip(cap: Int): Boolean {\n        var day = 1\n        var load = 0\n        for (w in weights) {\n            if (load + w > cap) { day++; load = 0 }\n            load += w\n        }\n        return day <= days\n    }\n    var lo = weights.max()\n    var hi = weights.sum()\n    while (lo < hi) {\n        val mid = (lo + hi) / 2\n        if (canShip(mid)) hi = mid else lo = mid + 1\n    }\n    return lo\n}"
+        }
+      ],
+      "complexity": "Time O(n log S) where S = sum(weights) — log S candidates, each checked in O(n). Space O(1). The greedy check inside is the part interviewers probe: it must preserve package order.",
+      "followUps": [
+        "Why must packages ship in order? What would change if they could be reordered?",
+        "Now minimize the maximum *weight carried on a single day* instead of capacity — identical answer space.",
+        "Koko eating bananas is the same pattern — name the shared skeleton."
+      ],
+      "starter": "fun shipWithinDays(weights: IntArray, days: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-13"
+        }
+      ]
+    }
+  ]
+}

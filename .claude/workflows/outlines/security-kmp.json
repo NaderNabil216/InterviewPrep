@@ -1,0 +1,274 @@
+{
+  "track": "security-kmp",
+  "scope": [
+    "the Android security model — UID sandboxing, SELinux",
+    "Android Keystore — hardware-backed keys, StrongBox, key attestation, setUserAuthenticationRequired",
+    "encrypting data at rest and the deprecation of Jetpack Security crypto — what to use now",
+    "biometric authentication with BiometricPrompt, CryptoObject, class 2 vs class 3, fallbacks",
+    "Play Integrity API vs the old SafetyNet — what it does and does not prove",
+    "root and tamper detection realism",
+    "exported components and the intent-redirection vulnerability",
+    "PendingIntent mutability and FLAG_IMMUTABLE",
+    "deep-link and App-Link hijacking",
+    "WebView security — JavaScript interfaces, file access, safe browsing, untrusted content",
+    "certificate pinning and the network security config",
+    "secrets in the APK — why there is no client-side secret",
+    "obfuscation as defense in depth, not security",
+    "clipboard, screenshots, FLAG_SECURE, screen recording",
+    "permissions as a privacy surface, data minimization, the Play Data Safety form",
+    "MASVS/OWASP MASTG as a framework for answering how you would secure this app",
+    "threat modeling a mobile feature",
+    "handling a reported vulnerability",
+    "what KMP shares and what it does not",
+    "expect/actual, and why interfaces plus platform factories are often better",
+    "source-set hierarchy and the default hierarchy template",
+    "Gradle setup for a KMP module",
+    "consuming platform SDKs, cinterop, and Objective-C interop limits",
+    "the Kotlin/Native memory model after the new one landed, and freezing being gone",
+    "concurrency in Native, Dispatchers.Main on iOS",
+    "exposing suspend functions and Flows to Swift — SKIE and the Swift export work",
+    "KMP-ready Jetpack libraries (Room, DataStore, ViewModel, Paging, Lifecycle) and what they buy",
+    "Ktor and kotlinx.serialization as the shared networking stack",
+    "SQLDelight vs Room in KMP",
+    "DI in KMP",
+    "testing shared code, build times and CI for KMP",
+    "Compose Multiplatform for iOS — what is stable, what still differs, when to use it vs SwiftUI",
+    "sharing UI vs sharing logic as a team decision",
+    "KMP vs Flutter vs React Native vs native, argued with real trade-offs",
+    "incrementally adopting KMP in a shipping app, and how you would sell it to an iOS team",
+    "on-device AI — ML Kit GenAI APIs, Gemini Nano and AICore, on-device vs cloud trade-offs",
+    "Credential Manager and passkeys, migrating from Smart Lock and one-tap sign-in",
+    "Health Connect",
+    "Media3/ExoPlayer architecture — adaptive streaming, DRM, background playback and MediaSession",
+    "CameraX use cases, image analysis, Camera2 interop",
+    "Glance app widgets",
+    "Wear OS, TV, Auto and XR — what changes about your architecture",
+    "Play Billing and subscriptions",
+    "in-app updates and in-app review",
+    "App Bundles, Play Feature Delivery and Play Asset Delivery",
+    "Play policies that gate releases",
+    "Firebase and Crashlytics in a modern stack",
+    "the Privacy Sandbox on Android and the advertising-ID changes",
+    "large-screen and foldable quality guidelines",
+    "accessibility as a shipping requirement",
+    "what you would put on a 2026 Android tech-radar and why",
+    "Kotlin/Native concurrency patterns under the new memory model",
+    "data security in transit vs at rest — TLS and where encryption belongs",
+    "SSO/authentication flows on Android — OAuth2 with PKCE, refresh token rotation",
+    "permissions best practices — least privilege and one-time grants",
+    "security testing with OWASP MASTG",
+    "Kotlin Multiplatform library publishing",
+    "the KMP-Swift boundary — Swift calling Kotlin and Kotlin calling Swift",
+    "R8/ProGuard as a security control for KMP and native",
+    "designing a secure-by-default mobile platform for an enterprise",
+    "secure networking on KMP — Ktor TLS vs OkHttp and cross-platform pinning",
+    "secrets policy — what belongs in the app binary",
+    "reviewing a pull request that touches auth and stored data",
+    "secure state handling on KMP — Keychain vs Keystore in a shared codebase"
+  ],
+  "specs": [],
+  "coverage": {
+    "the Android security model — UID sandboxing, SELinux": [
+      "sk-0004"
+    ],
+    "Android Keystore — hardware-backed keys, StrongBox, key attestation, setUserAuthenticationRequired": [
+      "sk-0005"
+    ],
+    "encrypting data at rest and the deprecation of Jetpack Security crypto — what to use now": [
+      "sk-0006"
+    ],
+    "biometric authentication with BiometricPrompt, CryptoObject, class 2 vs class 3, fallbacks": [
+      "sk-0007"
+    ],
+    "Play Integrity API vs the old SafetyNet — what it does and does not prove": [
+      "sk-0008",
+      "sk-0068"
+    ],
+    "root and tamper detection realism": [
+      "sk-0009"
+    ],
+    "exported components and the intent-redirection vulnerability": [
+      "sk-0010"
+    ],
+    "PendingIntent mutability and FLAG_IMMUTABLE": [
+      "sk-0011"
+    ],
+    "deep-link and App-Link hijacking": [
+      "sk-0012"
+    ],
+    "WebView security — JavaScript interfaces, file access, safe browsing, untrusted content": [
+      "sk-0013"
+    ],
+    "certificate pinning and the network security config": [
+      "sk-0014"
+    ],
+    "secrets in the APK — why there is no client-side secret": [
+      "sk-0015",
+      "sk-0066"
+    ],
+    "obfuscation as defense in depth, not security": [
+      "sk-0016",
+      "sk-0062"
+    ],
+    "clipboard, screenshots, FLAG_SECURE, screen recording": [
+      "sk-0017"
+    ],
+    "permissions as a privacy surface, data minimization, the Play Data Safety form": [
+      "sk-0018",
+      "sk-0058"
+    ],
+    "MASVS/OWASP MASTG as a framework for answering how you would secure this app": [
+      "sk-0019",
+      "sk-0059"
+    ],
+    "threat modeling a mobile feature": [
+      "sk-0020",
+      "sk-0064"
+    ],
+    "handling a reported vulnerability": [
+      "sk-0021"
+    ],
+    "what KMP shares and what it does not": [
+      "sk-0022"
+    ],
+    "expect/actual, and why interfaces plus platform factories are often better": [
+      "sk-0023"
+    ],
+    "source-set hierarchy and the default hierarchy template": [
+      "sk-0024"
+    ],
+    "Gradle setup for a KMP module": [
+      "sk-0025"
+    ],
+    "consuming platform SDKs, cinterop, and Objective-C interop limits": [
+      "sk-0026"
+    ],
+    "the Kotlin/Native memory model after the new one landed, and freezing being gone": [
+      "sk-0027"
+    ],
+    "concurrency in Native, Dispatchers.Main on iOS": [
+      "sk-0028",
+      "sk-0055"
+    ],
+    "exposing suspend functions and Flows to Swift — SKIE and the Swift export work": [
+      "sk-0029",
+      "sk-0061"
+    ],
+    "KMP-ready Jetpack libraries (Room, DataStore, ViewModel, Paging, Lifecycle) and what they buy": [
+      "sk-0030"
+    ],
+    "Ktor and kotlinx.serialization as the shared networking stack": [
+      "sk-0031"
+    ],
+    "SQLDelight vs Room in KMP": [
+      "sk-0032"
+    ],
+    "DI in KMP": [
+      "sk-0033"
+    ],
+    "testing shared code, build times and CI for KMP": [
+      "sk-0034"
+    ],
+    "Compose Multiplatform for iOS — what is stable, what still differs, when to use it vs SwiftUI": [
+      "sk-0035"
+    ],
+    "sharing UI vs sharing logic as a team decision": [
+      "sk-0036"
+    ],
+    "KMP vs Flutter vs React Native vs native, argued with real trade-offs": [
+      "sk-0037"
+    ],
+    "incrementally adopting KMP in a shipping app, and how you would sell it to an iOS team": [
+      "sk-0038",
+      "sk-0070"
+    ],
+    "on-device AI — ML Kit GenAI APIs, Gemini Nano and AICore, on-device vs cloud trade-offs": [
+      "sk-0039"
+    ],
+    "Credential Manager and passkeys, migrating from Smart Lock and one-tap sign-in": [
+      "sk-0040",
+      "sk-0057"
+    ],
+    "Health Connect": [
+      "sk-0041"
+    ],
+    "Media3/ExoPlayer architecture — adaptive streaming, DRM, background playback and MediaSession": [
+      "sk-0042"
+    ],
+    "CameraX use cases, image analysis, Camera2 interop": [
+      "sk-0043"
+    ],
+    "Glance app widgets": [
+      "sk-0044"
+    ],
+    "Wear OS, TV, Auto and XR — what changes about your architecture": [
+      "sk-0045"
+    ],
+    "Play Billing and subscriptions": [
+      "sk-0046"
+    ],
+    "in-app updates and in-app review": [
+      "sk-0047"
+    ],
+    "App Bundles, Play Feature Delivery and Play Asset Delivery": [
+      "sk-0048"
+    ],
+    "Play policies that gate releases": [
+      "sk-0049"
+    ],
+    "Firebase and Crashlytics in a modern stack": [
+      "sk-0050"
+    ],
+    "the Privacy Sandbox on Android and the advertising-ID changes": [
+      "sk-0051"
+    ],
+    "large-screen and foldable quality guidelines": [
+      "sk-0052"
+    ],
+    "accessibility as a shipping requirement": [
+      "sk-0053"
+    ],
+    "what you would put on a 2026 Android tech-radar and why": [
+      "sk-0054"
+    ],
+    "Kotlin/Native concurrency patterns under the new memory model": [
+      "sk-0055"
+    ],
+    "data security in transit vs at rest — TLS and where encryption belongs": [
+      "sk-0056"
+    ],
+    "SSO/authentication flows on Android — OAuth2 with PKCE, refresh token rotation": [
+      "sk-0057"
+    ],
+    "permissions best practices — least privilege and one-time grants": [
+      "sk-0058"
+    ],
+    "security testing with OWASP MASTG": [
+      "sk-0059"
+    ],
+    "Kotlin Multiplatform library publishing": [
+      "sk-0060"
+    ],
+    "the KMP-Swift boundary — Swift calling Kotlin and Kotlin calling Swift": [
+      "sk-0061"
+    ],
+    "R8/ProGuard as a security control for KMP and native": [
+      "sk-0062"
+    ],
+    "designing a secure-by-default mobile platform for an enterprise": [
+      "sk-0063"
+    ],
+    "secure networking on KMP — Ktor TLS vs OkHttp and cross-platform pinning": [
+      "sk-0065"
+    ],
+    "secrets policy — what belongs in the app binary": [
+      "sk-0066"
+    ],
+    "reviewing a pull request that touches auth and stored data": [
+      "sk-0067"
+    ],
+    "secure state handling on KMP — Keychain vs Keystore in a shared codebase": [
+      "sk-0069"
+    ]
+  }
+}

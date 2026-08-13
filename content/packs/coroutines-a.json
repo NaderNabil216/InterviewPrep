@@ -1,0 +1,371 @@
+{
+  "id": "coroutines-a",
+  "title": "Coroutines & Flow",
+  "track": "coroutines-flow",
+  "items": [
+    {
+      "id": "co-0001",
+      "track": "coroutines-flow",
+      "topic": "Suspend mechanics",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "suspend",
+        "internals",
+        "cps"
+      ],
+      "q": "What does the compiler actually do to a `suspend` function?",
+      "shortAnswer": [
+        "It rewrites the function using CPS: a hidden `Continuation` parameter is appended to the signature.",
+        "The body becomes a state machine — each suspension point is a labelled state, and locals that survive suspension become fields on that state machine object.",
+        "Suspending does **not** block a thread: the function returns the `COROUTINE_SUSPENDED` marker and the thread is released until `resumeWith` is called."
+      ],
+      "answer": "#### Continuation-Passing Style\n`suspend fun load(id: String): User` compiles to roughly `Object load(String id, Continuation<User> cont)`. That extra parameter is how the coroutine machinery knows where to resume.\n\n#### The state machine\nThe compiler splits the body at every suspension point and generates a class implementing `Continuation`, with:\n- an `int label` field tracking which state to run next,\n- fields for every local variable that must survive a suspension,\n- an `invokeSuspend` method containing a `switch (label)` over the states.\n\nWhen a suspension point is reached, the function stores its state, returns the sentinel `COROUTINE_SUSPENDED`, and **the thread goes back to the pool**. Later, whatever completes the work calls `continuation.resumeWith(result)`, which re-enters `invokeSuspend` at the next label.\n\n#### Why this matters in an interview\n1. **No thread is blocked.** This is the whole point — thousands of concurrent coroutines on a handful of threads. A blocking JDBC or `Thread.sleep` call inside a coroutine defeats it entirely; that's what `Dispatchers.IO` and `withContext` are for.\n2. **`suspend` alone is not concurrency.** Calling two suspend functions in sequence is sequential. `async`/`launch` create concurrency; `suspend` only marks a function as *suspendable*.\n3. **`suspend` is a compile-time contract.** A suspend function can only be called from another suspend function or a coroutine builder — the compiler enforces the presence of a `Continuation`.\n4. Only one object is allocated per coroutine invocation chain, which is why coroutines are far cheaper than threads (~1KB stack-free vs ~1MB thread stack).",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "What you write vs. roughly what the compiler generates",
+          "src": "// You write:\nsuspend fun loadProfile(id: String): Profile {\n    val user = api.getUser(id)        // suspension point 1\n    val prefs = api.getPrefs(id)      // suspension point 2  (sequential!)\n    return Profile(user, prefs)\n}\n\n// Conceptually becomes a state machine:\n//   label 0 -> call api.getUser, save `id`, return COROUTINE_SUSPENDED\n//   label 1 -> receive user, save it, call api.getPrefs, return COROUTINE_SUSPENDED\n//   label 2 -> receive prefs, build Profile, resume caller\n\n// For real concurrency you must opt in:\nsuspend fun loadProfileFast(id: String): Profile = coroutineScope {\n    val user = async { api.getUser(id) }\n    val prefs = async { api.getPrefs(id) }\n    Profile(user.await(), prefs.await())\n}"
+        }
+      ],
+      "followUps": [
+        "Why can't you call a suspend function from a normal function?",
+        "How is `suspendCoroutine` / `suspendCancellableCoroutine` used to wrap a callback API?",
+        "Roughly how much memory does a coroutine cost compared to a thread?"
+      ],
+      "traps": [
+        "Saying 'suspend makes it run on a background thread'. It does not — the dispatcher decides the thread; `suspend` only makes the function pausable.",
+        "Writing two sequential suspend calls and calling it parallel work."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin coroutines guide",
+          "url": "https://kotlinlang.org/docs/coroutines-guide.html",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1"
+    },
+    {
+      "id": "co-0002",
+      "track": "coroutines-flow",
+      "topic": "Structured concurrency",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "structured-concurrency",
+        "job",
+        "scope"
+      ],
+      "q": "What is structured concurrency, and what does `coroutineScope` vs `supervisorScope` change?",
+      "shortAnswer": [
+        "Every coroutine has a parent; a scope does not complete until all its children complete, and cancelling a parent cancels all children.",
+        "`coroutineScope` — one child failing cancels its siblings and rethrows to the caller.",
+        "`supervisorScope` — failures do not propagate sideways; siblings keep running and each child handles its own error."
+      ],
+      "answer": "Structured concurrency means coroutines form a tree, not a set of orphan tasks. Three guarantees follow:\n1. A scope's `suspend` block does not return until every child has finished.\n2. Cancelling the parent cancels the whole subtree.\n3. An uncaught failure in a child propagates up (unless a supervisor stops it).\n\nThis is what makes leaks structurally impossible: when a `viewModelScope` is cleared, every request it started dies with it.\n\n#### coroutineScope vs supervisorScope\n\n| | `coroutineScope` | `supervisorScope` |\n|---|---|---|\n| Child fails | cancels all siblings, rethrows | siblings keep running |\n| Use for | work where partial results are useless | independent tasks (analytics + prefetch + refresh) |\n\nThe same distinction applies at scope-construction time: `CoroutineScope(SupervisorJob() + Dispatchers.Main)` gives you a scope whose direct children are independent. `viewModelScope` and `lifecycleScope` both use a `SupervisorJob` for exactly this reason.\n\n#### The subtlety people miss\n`supervisorScope` only stops propagation **from direct children**. If a child launches its own grandchildren with a regular `Job`, a grandchild failure still cancels that child. And `async` inside a `supervisorScope` still throws at `await()` — the supervisor stops sibling cancellation, not the exception itself.\n\n#### Cancellation is cooperative\nCancellation sets a flag and makes suspension points throw `CancellationException`. Code that never suspends never notices: a tight CPU loop keeps running. Insert `ensureActive()` or `yield()`, or check `isActive`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Choosing the right scope for the semantics you want",
+          "src": "// All-or-nothing: if either call fails, the whole screen load fails.\nsuspend fun loadScreen(): Screen = coroutineScope {\n    val header = async { api.header() }\n    val body   = async { api.body() }\n    Screen(header.await(), body.await())\n}\n\n// Independent: a failing analytics ping must not kill the prefetch.\nsuspend fun warmUp() = supervisorScope {\n    launch { runCatching { analytics.ping() } }\n    launch { runCatching { imagePrefetcher.warm() } }\n}\n\n// Cooperative cancellation in CPU-bound work\nsuspend fun hash(blocks: List<Block>) = withContext(Dispatchers.Default) {\n    blocks.map { block ->\n        ensureActive()          // without this, cancellation is ignored\n        expensiveHash(block)\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Why must `CancellationException` never be swallowed by a generic `catch (e: Exception)`?",
+        "What happens if you use `GlobalScope` in a ViewModel?",
+        "How do you run cleanup that itself suspends, after cancellation?"
+      ],
+      "traps": [
+        "`catch (e: Exception) { }` around a suspending call silently breaks cancellation, because `CancellationException` is an `Exception`. Rethrow it, or catch narrower types.",
+        "Using `GlobalScope` — it has no parent, so nothing cancels it, and it outlives the screen that started it."
+      ],
+      "refs": [
+        {
+          "title": "Coroutines: cancellation and exceptions",
+          "url": "https://kotlinlang.org/docs/cancellation-and-timeouts.html",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Android — coroutines best practices",
+          "url": "https://developer.android.com/kotlin/coroutines/coroutines-best-practices",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1"
+    },
+    {
+      "id": "co-0003",
+      "track": "coroutines-flow",
+      "topic": "Exception handling",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "exceptions",
+        "coroutines"
+      ],
+      "q": "How do exceptions propagate differently between `launch` and `async`?",
+      "shortAnswer": [
+        "`launch` throws immediately into the parent job, which cancels the tree and eventually reaches a `CoroutineExceptionHandler`.",
+        "`async` stores the exception in its `Deferred`; it is rethrown when you call `await()` — but with a non-supervisor parent it *also* cancels the parent right away.",
+        "`CoroutineExceptionHandler` only works on the scope's root coroutine, and never on `async`."
+      ],
+      "answer": "#### launch\nAn uncaught exception in `launch` is treated as an unhandled failure: it cancels the parent job, which cancels all siblings, and then travels to the nearest `CoroutineExceptionHandler` in the context (or the thread's default handler → crash).\n\n#### async\nThe exception is captured into the `Deferred`. Nothing happens until `await()`, which rethrows it. **But** if the `async`'s parent is a regular `Job`, the failure *also* propagates to the parent immediately, independent of `await()`. So `async { error(\"x\") }` inside a regular scope crashes even if you never await. Under a `SupervisorJob`/`supervisorScope`, the failure is held until `await()`.\n\n#### CoroutineExceptionHandler placement\nIt is only consulted for a coroutine that is the **root** of its scope. Putting one in the context of a nested `launch` does nothing — the exception has already been delegated to the parent. Install it on the scope, or on the top-level `launch`.\n\n#### The practical Android pattern\nDon't lean on the handler for domain errors. Model expected failures as data (`Result`, a sealed `UiState`) and reserve the handler for last-resort logging.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Predictable error handling in a ViewModel",
+          "src": "class FeedViewModel(private val repo: FeedRepo) : ViewModel() {\n\n    private val _state = MutableStateFlow<UiState>(UiState.Loading)\n    val state: StateFlow<UiState> = _state.asStateFlow()\n\n    fun refresh() {\n        viewModelScope.launch {\n            _state.value = UiState.Loading\n            _state.value = try {\n                UiState.Content(repo.load())\n            } catch (e: CancellationException) {\n                throw e                       // never swallow cancellation\n            } catch (e: IOException) {\n                UiState.Error(e, retryable = true)\n            }\n        }\n    }\n}\n\n// Handler is only consulted at the ROOT of the scope:\nval scope = CoroutineScope(SupervisorJob() + Dispatchers.Main +\n    CoroutineExceptionHandler { _, e -> logger.e(\"unhandled\", e) })"
+        }
+      ],
+      "followUps": [
+        "Why does `try/catch` around `async { }` not catch the exception, while around `await()` it does?",
+        "What does `coroutineScope { }` do to an exception thrown by a child?",
+        "When would you use `runCatching` and why is it dangerous with coroutines?"
+      ],
+      "traps": [
+        "`runCatching` catches `CancellationException` too, silently breaking structured concurrency. Prefer explicit `catch` clauses, or rethrow `CancellationException`.",
+        "Expecting a `CoroutineExceptionHandler` on a nested `launch` to fire — it won't."
+      ],
+      "refs": [
+        {
+          "title": "Coroutine exceptions handling",
+          "url": "https://kotlinlang.org/docs/exception-handling.html",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1"
+    },
+    {
+      "id": "co-0004",
+      "track": "coroutines-flow",
+      "topic": "Dispatchers",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "dispatchers",
+        "threading"
+      ],
+      "q": "Compare `Dispatchers.Main`, `Default`, `IO`, and `Unconfined`. When do you switch?",
+      "shortAnswer": [
+        "`Main` = UI thread (`Main.immediate` avoids a re-dispatch if already there); `Default` = CPU-bound, pool sized to cores; `IO` = blocking IO, elastic to 64 threads; `Unconfined` = no confinement, test/edge use only.",
+        "`Default` and `IO` share the same underlying thread pool, so switching between them is cheap and does not create threads.",
+        "The rule: a suspend function should be **main-safe** — the caller shouldn't have to know which dispatcher to use."
+      ],
+      "answer": "#### The four\n- **`Main`** — the Android UI thread. `Main.immediate` executes inline when you're already on the main thread, avoiding an unnecessary post to the message queue (matters in Compose and in tight update loops).\n- **`Default`** — CPU-bound work: parsing, sorting, image processing. Parallelism = number of cores (minimum 2).\n- **`IO`** — designed for *blocking* calls: disk, network with a blocking client, SQLite, `File`. Elastic up to 64 threads by default because those threads are mostly parked in a blocking call.\n- **`Unconfined`** — starts in the caller's thread and resumes in whatever thread the continuation completes on. Almost never correct in app code.\n\n`IO` and `Default` share one pool; `withContext(Dispatchers.IO)` from `Default` just changes the parallelism limit, it doesn't spin up a thread. `limitedParallelism(n)` gives you a private slice — useful to cap concurrent network calls.\n\n#### Main safety\nA well-behaved suspend function does its own dispatching so callers can invoke it from anywhere: `suspend fun load() = withContext(ioDispatcher) { … }`. The caller in the ViewModel then just writes `val data = repo.load()` on the main dispatcher. Pushing `withContext` into the caller is a design smell.\n\n#### Injecting dispatchers\nHardcoding `Dispatchers.IO` inside a class makes it untestable. Inject a dispatcher (or a small `DispatcherProvider`) so tests can supply a `TestDispatcher`.\n\n#### Retrofit / Room note\nRetrofit `suspend` functions and Room `suspend`/`Flow` queries are already main-safe — they dispatch internally. Wrapping them in `withContext(Dispatchers.IO)` is redundant and a common thing interviewers probe.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Main-safe repository with an injected dispatcher",
+          "src": "class UserRepository(\n    private val api: UserApi,\n    private val dao: UserDao,\n    private val io: CoroutineDispatcher = Dispatchers.IO   // injected for tests\n) {\n    // Main-safe: callers never need withContext\n    suspend fun refresh(id: String): User = withContext(io) {\n        val dto = api.fetch(id)          // Retrofit suspend — already main-safe\n        dao.upsert(dto.toEntity())       // Room suspend — already main-safe\n        dto.toDomain()\n    }\n\n    // CPU-bound work belongs on Default, not IO\n    suspend fun rank(users: List<User>): List<User> =\n        withContext(Dispatchers.Default) { users.sortedByDescending { it.score } }\n}"
+        }
+      ],
+      "followUps": [
+        "Why is `Dispatchers.IO` capped at 64 threads and `Default` at core count?",
+        "What does `limitedParallelism` solve?",
+        "Why is wrapping a Retrofit suspend call in `withContext(IO)` unnecessary?"
+      ],
+      "traps": [
+        "Using `Dispatchers.IO` for CPU-heavy work — you'll oversubscribe the CPU with up to 64 busy threads.",
+        "Hardcoding dispatchers inside classes, then discovering the code is untestable."
+      ],
+      "refs": [
+        {
+          "title": "Coroutine context and dispatchers",
+          "url": "https://kotlinlang.org/docs/coroutine-context-and-dispatchers.html",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Android — improve app performance with coroutines",
+          "url": "https://developer.android.com/kotlin/coroutines/coroutines-adv",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "co-0005",
+      "track": "coroutines-flow",
+      "topic": "Flow basics",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "flow",
+        "cold-hot"
+      ],
+      "q": "Cold vs hot flows — what's the difference, and where does each belong?",
+      "shortAnswer": [
+        "A cold flow re-runs its producer block for **every** collector; nothing happens until someone collects.",
+        "A hot flow (`StateFlow`, `SharedFlow`) emits regardless of collectors, and all collectors share one upstream.",
+        "Cold for one-shot/per-collector work (a network call, a Room query); hot for shared state and events."
+      ],
+      "answer": "#### Cold\n`flow { … }`, `flowOf`, Room's `Flow` queries, Retrofit-backed flows. The builder block runs once per collector. Two collectors on the same cold flow = two network calls. This is usually what you want in a repository: each screen gets its own stream.\n\n#### Hot\n- **`StateFlow`** — a conflated flow that always has a current value. Distinct-until-changed by design (equal consecutive values are dropped). Perfect for UI state. Because it conflates, a fast producer's intermediate values can be skipped — fine for state, wrong for events.\n- **`SharedFlow`** — configurable `replay`, `extraBufferCapacity`, `onBufferOverflow`. No initial value. Use for one-shot events (navigate, show snackbar) where every emission matters.\n\n#### Turning cold into hot\n`stateIn` / `shareIn` attach a cold flow to a scope and share the upstream across collectors: `val uiState = repo.observeUser().map { it.toUiState() }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState.Loading)`.\n\n**`WhileSubscribed(5_000)` is the interview answer to know.** The upstream stays alive for 5 seconds after the last collector disappears. That survives a configuration change (rotation drops and re-adds the collector in well under 5 s) without keeping a database or socket open forever when the user actually leaves. `SharingStarted.Eagerly` never stops; `Lazily` starts on first collector and never stops.\n\n#### The event problem\nDon't model one-shot events as `StateFlow` — a re-collection after rotation replays the last value and you navigate twice. Use `SharedFlow(replay = 0)`, or better, put events in the state as a list of pending effects that the UI consumes and acknowledges.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "State vs events, done properly",
+          "src": "class SearchViewModel(private val repo: Repo) : ViewModel() {\n\n    private val query = MutableStateFlow(\"\")\n\n    // Shared, lifecycle-aware UI state\n    val results: StateFlow<List<Item>> = query\n        .debounce(300)\n        .filter { it.length >= 2 }\n        .flatMapLatest { repo.search(it) }        // cancels the previous search\n        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())\n\n    // One-shot events: replay = 0 so rotation does not re-deliver\n    private val _events = MutableSharedFlow<Event>(replay = 0, extraBufferCapacity = 1)\n    val events: SharedFlow<Event> = _events.asSharedFlow()\n\n    fun onQueryChange(q: String) { query.value = q }\n}"
+        }
+      ],
+      "followUps": [
+        "Why exactly 5000 ms in `WhileSubscribed`?",
+        "What breaks if you model a 'navigate to detail' event as a `StateFlow`?",
+        "How does `StateFlow`'s conflation differ from applying `.conflate()` to a flow?"
+      ],
+      "traps": [
+        "Using `StateFlow` for events and getting duplicate navigation after rotation.",
+        "Using `SharingStarted.Eagerly` in a ViewModel and keeping a database cursor or websocket alive for the ViewModel's whole life."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin Flow documentation",
+          "url": "https://kotlinlang.org/docs/flow.html",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Android — StateFlow and SharedFlow",
+          "url": "https://developer.android.com/kotlin/flow/stateflow-and-sharedflow",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "co-0006",
+      "track": "coroutines-flow",
+      "topic": "Flow operators",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "flow",
+        "operators"
+      ],
+      "q": "`flatMapLatest` vs `flatMapMerge` vs `flatMapConcat` — and what do `buffer`, `conflate`, and `flowOn` do?",
+      "shortAnswer": [
+        "`flatMapLatest` cancels the previous inner flow on each new value (search-as-you-type); `flatMapMerge` runs inners concurrently; `flatMapConcat` runs them strictly in order.",
+        "`buffer` decouples producer and collector with a channel; `conflate` keeps only the latest value when the collector is slow.",
+        "`flowOn` changes the context of everything **upstream** of it — it never affects downstream operators or the collector."
+      ],
+      "answer": "#### The flatMap family\n| Operator | On a new upstream value | Typical use |\n|---|---|---|\n| `flatMapLatest` | cancel the in-flight inner flow, start a new one | search-as-you-type, switching users |\n| `flatMapMerge` | start a new inner flow, keep the old ones running (concurrency configurable) | fan-out fetches |\n| `flatMapConcat` | queue — wait for the current inner flow to finish | strict ordering, sequential sync |\n\n`mapLatest` and `collectLatest` follow the same cancel-the-previous rule for non-flow bodies.\n\n#### Backpressure operators\n- **`buffer(n)`** — the producer no longer waits for the collector; emissions go into a channel. Turns a sequential producer→collector pipeline into a concurrent one.\n- **`conflate()`** — a `buffer` that keeps only the newest value; the collector always processes the most recent state, skipping intermediates. Same semantics `StateFlow` has built in.\n- **`debounce(t)`** — only emit after `t` of quiet. Perfect for text input.\n- **`sample(t)`** — emit the latest value every `t`. Good for high-frequency sensors or scroll positions.\n- **`distinctUntilChanged()`** — drop consecutive equals.\n\n#### flowOn\nFlow context preservation means a flow cannot change the collector's context from inside — that would break structured concurrency. `flowOn(Dispatchers.IO)` changes the context of the operators **above** it only:\n\n- `flow { readFile() }` — runs on IO\n- `.map { parse(it) }` — runs on IO\n- `.flowOn(Dispatchers.IO)` — switches the segment above this point\n- `.map { render(it) }` — runs wherever the collector is\n- `.collect { … }` — collector's context\n\nMultiple `flowOn` calls each govern their own upstream segment.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A search pipeline that gets every operator choice right",
+          "src": "val results: Flow<List<Item>> = queryFlow\n    .debounce(300)                       // wait for typing to settle\n    .map { it.trim() }\n    .distinctUntilChanged()              // ignore no-op edits\n    .filter { it.length >= 2 }\n    .flatMapLatest { q ->                // cancel the stale request\n        repo.search(q)\n            .catch { emit(emptyList()) } // catch applies to UPSTREAM only\n    }\n    .flowOn(Dispatchers.IO)              // everything above runs on IO"
+        }
+      ],
+      "followUps": [
+        "Why does `catch` only handle upstream exceptions, and how do you handle collector errors?",
+        "What's the difference between `conflate()` and `buffer(Channel.CONFLATED)`?",
+        "Why can't a flow change the collector's dispatcher from inside `emit`?"
+      ],
+      "traps": [
+        "Putting `flowOn` at the top of the chain and expecting it to affect everything — it only affects upstream, so at the top it affects almost nothing.",
+        "Using `flatMapMerge` for search: stale responses arrive out of order and overwrite fresh ones."
+      ],
+      "refs": [
+        {
+          "title": "Flow — asynchronous flow operators",
+          "url": "https://kotlinlang.org/docs/flow.html#composing-multiple-flows",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "co-0007",
+      "track": "coroutines-flow",
+      "topic": "Android integration",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "lifecycle",
+        "flow",
+        "compose"
+      ],
+      "q": "How do you collect a Flow safely with respect to the Android lifecycle?",
+      "shortAnswer": [
+        "In Views: `repeatOnLifecycle(Lifecycle.State.STARTED)` inside `viewLifecycleOwner.lifecycleScope` — it cancels collection on STOP and restarts on START.",
+        "In Compose: `collectAsStateWithLifecycle()`, not plain `collectAsState()`.",
+        "The failure mode without this: the app keeps collecting (and keeps the upstream alive) while backgrounded, wasting battery and sometimes touching destroyed views."
+      ],
+      "answer": "#### Views / Fragments\n`lifecycleScope.launch { flow.collect { } }` is **not** enough — that scope only cancels at `onDestroy`, so you keep collecting while the app is in the background.\n\n`repeatOnLifecycle(STARTED)` suspends until the lifecycle reaches STARTED, runs the block, cancels it at STOPPED, and re-runs it on the next START. Use `viewLifecycleOwner` in a Fragment (not `this`) — the fragment outlives its view across back-stack transactions, and using the wrong owner leaks the view.\n\nNote `repeatOnLifecycle` never returns until the lifecycle is destroyed, so anything you write after it in the same `launch` won't run. Launch each collector separately, or nest multiple collects inside one `repeatOnLifecycle`.\n\n#### Compose\n`collectAsState()` collects for as long as the composition is alive, including while the app is backgrounded. `collectAsStateWithLifecycle()` (from `lifecycle-runtime-compose`) ties collection to the lifecycle, which is the correct default for anything coming from a ViewModel.\n\n#### Pairing with WhileSubscribed\nThe lifecycle-aware collector plus `stateIn(..., WhileSubscribed(5_000), ...)` is the standard combination: collection stops on background, and 5 s later the upstream (database cursor, socket, location updates) stops too. A rotation reconnects well inside the window, so nothing is torn down and rebuilt needlessly.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Both idioms side by side",
+          "src": "// Fragment / Views\nclass FeedFragment : Fragment(R.layout.feed) {\n    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {\n        viewLifecycleOwner.lifecycleScope.launch {\n            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {\n                launch { viewModel.state.collect { render(it) } }\n                launch { viewModel.events.collect { handle(it) } }\n            }\n        }\n    }\n}\n\n// Compose\n@Composable\nfun FeedScreen(viewModel: FeedViewModel = hiltViewModel()) {\n    val state by viewModel.state.collectAsStateWithLifecycle()\n    FeedContent(state)\n}"
+        }
+      ],
+      "followUps": [
+        "Why `viewLifecycleOwner` rather than `this` inside a Fragment?",
+        "What goes wrong if you put code after `repeatOnLifecycle` in the same launch block?",
+        "When is plain `collectAsState()` actually acceptable?"
+      ],
+      "traps": [
+        "Using `lifecycleScope.launchWhenStarted` — deprecated, because it *suspends* the coroutine rather than cancelling it, so the upstream stays hot in the background.",
+        "Collecting a `StateFlow` of events and re-handling the last one after every configuration change."
+      ],
+      "refs": [
+        {
+          "title": "Android — collect flows in a lifecycle-aware manner",
+          "url": "https://developer.android.com/topic/libraries/architecture/coroutines#lifecycle-aware",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1"
+    },
+    {
+      "id": "co-0008",
+      "track": "coroutines-flow",
+      "topic": "Testing",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "testing",
+        "coroutines",
+        "turbine"
+      ],
+      "q": "How do you test coroutines and flows deterministically?",
+      "shortAnswer": [
+        "`runTest { }` gives a `TestScope` with a virtual clock — `delay(10_000)` completes instantly and deterministically.",
+        "Inject dispatchers so production code uses a `StandardTestDispatcher`/`UnconfinedTestDispatcher` in tests; set `Dispatchers.setMain(...)` for `viewModelScope`.",
+        "Use Turbine (`flow.test { awaitItem() }`) for flow assertions instead of collecting into a list with a timeout."
+      ],
+      "answer": "#### The virtual clock\n`runTest` runs on a `TestCoroutineScheduler`. Any `delay` is skipped by advancing virtual time, so a test involving a 30-second timeout runs in microseconds and never flakes.\n- `advanceUntilIdle()` — run everything queued until nothing is left.\n- `advanceTimeBy(ms)` — move the clock a fixed amount.\n- `runCurrent()` — execute tasks scheduled for the current instant only.\n\n#### Choosing a test dispatcher\n- **`StandardTestDispatcher`** (default in `runTest`) — coroutines queue and run only when you advance the clock. Best for asserting intermediate states, e.g. that Loading is emitted before Content.\n- **`UnconfinedTestDispatcher`** — coroutines start eagerly and run to their first real suspension. Convenient when you only care about the end result.\n\n#### ViewModels\n`viewModelScope` is hardwired to `Dispatchers.Main`, so you must replace it: `@Before fun setUp() = Dispatchers.setMain(StandardTestDispatcher())` and `@After fun tearDown() = Dispatchers.resetMain()`. A JUnit rule is the usual way to avoid repeating that.\n\n#### Flows with Turbine\nCollecting a hot flow in a test is awkward: it never completes. Turbine gives structured assertions with built-in timeouts and an unconsumed-event check at the end.\n\n#### Fakes over mocks\nFor repositories and data sources, a hand-written fake backed by a `MutableStateFlow` is more readable and less brittle than mocking suspend functions, and it lets you drive emissions from the test.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A ViewModel test with the main-dispatcher rule and Turbine",
+          "src": "class MainDispatcherRule(\n    private val dispatcher: TestDispatcher = StandardTestDispatcher()\n) : TestWatcher() {\n    override fun starting(d: Description) = Dispatchers.setMain(dispatcher)\n    override fun finished(d: Description) = Dispatchers.resetMain()\n}\n\nclass FeedViewModelTest {\n    @get:Rule val mainRule = MainDispatcherRule()\n\n    private val repo = FakeFeedRepo()   // backed by a MutableStateFlow\n\n    @Test\n    fun `emits loading then content`() = runTest {\n        val vm = FeedViewModel(repo)\n\n        vm.state.test {                          // Turbine\n            assertEquals(UiState.Loading, awaitItem())\n            repo.emit(listOf(item))\n            assertEquals(UiState.Content(listOf(item)), awaitItem())\n            cancelAndIgnoreRemainingEvents()\n        }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "When would you pick `UnconfinedTestDispatcher` over `StandardTestDispatcher`?",
+        "Why does testing `viewModelScope` require `Dispatchers.setMain`?",
+        "How do you test that a coroutine was actually cancelled?"
+      ],
+      "traps": [
+        "Using `Thread.sleep` or real `delay` in tests — instant flakiness.",
+        "Injecting `Dispatchers.IO` directly instead of a parameter, making the class impossible to test deterministically."
+      ],
+      "refs": [
+        {
+          "title": "Testing Kotlin coroutines on Android",
+          "url": "https://developer.android.com/kotlin/coroutines/test",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Turbine",
+          "url": "https://github.com/cashapp/turbine",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.15"
+    }
+  ]
+}

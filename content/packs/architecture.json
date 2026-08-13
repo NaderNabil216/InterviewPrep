@@ -1,0 +1,205 @@
+{
+  "id": "architecture",
+  "title": "Architecture & DI",
+  "track": "architecture",
+  "items": [
+    {
+      "id": "ar-0001",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "udf",
+        "mvvm",
+        "mvi",
+        "layers"
+      ],
+      "q": "Describe the layered architecture you'd use, and compare MVVM with MVI.",
+      "shortAnswer": [
+        "Three layers: **UI** (Compose + state holder), **domain** (optional — use cases, pure Kotlin), **data** (repositories + data sources). Dependencies point inward; the data layer never knows about the UI.",
+        "Both MVVM and MVI use unidirectional data flow. MVI additionally forces **one immutable state object** and **explicit intents**, which removes whole classes of inconsistent-state bugs.",
+        "MVVM with a single `StateFlow<UiState>` is, in practice, MVI-lite — and that's what most modern Android codebases actually ship."
+      ],
+      "answer": "#### The layers\n- **UI layer** — composables plus a state holder (`ViewModel`). Holds no business logic; renders state, forwards events.\n- **Domain layer** (optional) — use cases encapsulating business rules, reusable across ViewModels; overhead for one-line pass-throughs.\n- **Data layer** — repositories own the single source of truth; data sources (network, database, DataStore) sit behind them.\n\n**Rule:** dependencies point inward (UI → domain → data); expose domain models, not DTOs.\n\n#### Unidirectional data flow\nState flows down, events flow up; the screen calls a ViewModel function that updates the single source of truth, which re-emits.\n\n#### MVVM vs MVI\n| | MVVM (common form) | MVI |\n|---|---|---|\n| State | often several `StateFlow`s | exactly one immutable `State` |\n| Input | public ViewModel methods | a sealed `Intent`/`Action` type sent to one `dispatch` |\n| Reducer | ad-hoc updates | explicit `(State, Action) -> State` |\n| Wins | less boilerplate | impossible states become unrepresentable; trivially testable |\n| Costs | multiple flows can drift out of sync | ceremony, and a large sealed hierarchy |\n\n#### What to actually say\n\"I use MVVM with a single immutable `UiState` as one `StateFlow`, events as a sealed type — MVI's guarantee without the ceremony. I'd add a formal reducer only for a screen with complex transitions worth unit-testing.\"\n\n#### Modeling state well\nPrefer a sealed hierarchy or explicit flags over independent booleans; `isLoading = true` **and** `error != null` must be unrepresentable.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Single-state ViewModel with events modeled explicitly",
+          "src": "@Immutable\ndata class FeedUiState(\n    val items: ImmutableList<Item> = persistentListOf(),\n    val isRefreshing: Boolean = false,\n    val error: ErrorMessage? = null,\n)\n\nsealed interface FeedAction {\n    data object Refresh : FeedAction\n    data class Select(val id: String) : FeedAction\n    data class Dismiss(val errorId: Long) : FeedAction\n}\n\n@HiltViewModel\nclass FeedViewModel @Inject constructor(\n    private val observeFeed: ObserveFeedUseCase,\n    private val refreshFeed: RefreshFeedUseCase,\n) : ViewModel() {\n\n    private val _state = MutableStateFlow(FeedUiState())\n    val state: StateFlow<FeedUiState> = _state.asStateFlow()\n\n    init {\n        observeFeed()\n            .onEach { items -> _state.update { it.copy(items = items.toImmutableList()) } }\n            .launchIn(viewModelScope)\n    }\n\n    fun onAction(action: FeedAction) = when (action) {\n        FeedAction.Refresh   -> refresh()\n        is FeedAction.Select -> { /* navigate */ }\n        is FeedAction.Dismiss -> _state.update { it.copy(error = null) }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "When is a domain layer genuinely worth the extra indirection?",
+        "How do you model one-shot events (navigation, snackbars) without the replay bug?",
+        "Why expose `StateFlow` rather than `LiveData` in a new codebase?"
+      ],
+      "traps": [
+        "Reciting layer names without being able to justify the domain layer. Interviewers push on 'why not call the repository directly?'",
+        "Multiple independent `StateFlow`s that can disagree — the exact bug a single state object prevents."
+      ],
+      "refs": [
+        {
+          "title": "Guide to app architecture",
+          "url": "https://developer.android.com/topic/architecture",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Now in Android app",
+          "url": "https://github.com/android/nowinandroid",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0002",
+      "track": "architecture",
+      "topic": "Dependency injection",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "hilt",
+        "dagger",
+        "koin",
+        "di"
+      ],
+      "q": "Explain Hilt's components and scopes. How does it compare to Koin in 2026?",
+      "shortAnswer": [
+        "Hilt generates a component hierarchy mirroring Android lifecycles: `SingletonComponent` → `ActivityRetainedComponent` (`@ViewModelScoped`) → `ActivityComponent` → `FragmentComponent`/`ViewComponent`.",
+        "Scope annotations (`@Singleton`, `@ActivityRetainedScoped`, `@ViewModelScoped`, `@ActivityScoped`) control **instance reuse**; without a scope you get a new instance per injection.",
+        "Hilt = compile-time verified, zero reflection, but KSP-processed and Android-only. Koin = runtime resolution, no codegen, first-class KMP support — which is why KMP projects often pick it."
+      ],
+      "answer": "#### The component hierarchy\n- `SingletonComponent` — `@Singleton` — app lifetime\n- `ActivityRetainedComponent` — `@ActivityRetainedScoped` — survives config change\n- `ViewModelComponent` — `@ViewModelScoped` — one ViewModel\n- `ActivityComponent` — `@ActivityScoped` — one Activity instance\n- `FragmentComponent` — `@FragmentScoped`\n- `ViewComponent` — `@ViewScoped`\n\nA child can inject anything its parents provide, never the reverse.\n\n#### The pieces\n- `@HiltAndroidApp` on `Application`; `@AndroidEntryPoint` on Activity/Fragment/Service; `@HiltViewModel` on ViewModels.\n- `@Module @InstallIn(SingletonComponent::class)` declares bindings; `@Binds` for interface→implementation; `@Provides` for things you don't own (Retrofit, Room, OkHttp).\n- **Qualifiers** (`@Named` or custom) when two bindings share a type — e.g. `@IoDispatcher` vs `@DefaultDispatcher`.\n- **Assisted injection** (`@AssistedInject` + `@AssistedFactory`) when arguments are known only at runtime — e.g. a ViewModel id.\n- `@EntryPoint` for classes Hilt doesn't own (a `ContentProvider`).\n\n#### Hilt vs Koin in 2026\n| | Hilt | Koin |\n|---|---|---|\n| Errors | compile time | runtime (unless using annotations+KSP) |\n| Cost | KSP processing at build time | slight startup/resolve cost |\n| KMP | Android only | full KMP support |\n| Style | annotations | Kotlin DSL, or annotations via KSP |\n\nKoin now has a compile-time path via KSP, narrowing the gap — recommended for larger Koin codebases or module-by-module migrations.\n\n#### What a strong answer sounds like\n\"Hilt for an Android-only app — I want the graph verified at compile time. Koin for KMP, since Hilt can't cross that boundary. I inject dispatchers via qualifiers to stay testable, and I keep modules feature-organized rather than one giant `AppModule`.\"",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Qualifiers, @Binds, and assisted injection",
+          "src": "@Qualifier @Retention(AnnotationRetention.BINARY) annotation class IoDispatcher\n\n@Module\n@InstallIn(SingletonComponent::class)\nobject DispatcherModule {\n    @Provides @IoDispatcher\n    fun io(): CoroutineDispatcher = Dispatchers.IO\n}\n\n@Module\n@InstallIn(SingletonComponent::class)\nabstract class RepoModule {\n    @Binds abstract fun bindUserRepo(impl: UserRepositoryImpl): UserRepository\n}\n\n// Runtime argument that DI cannot know: assisted injection\nclass DetailViewModel @AssistedInject constructor(\n    private val repo: ItemRepository,\n    @Assisted private val itemId: String,\n) : ViewModel() {\n    @AssistedFactory\n    interface Factory { fun create(itemId: String): DetailViewModel }\n}"
+        }
+      ],
+      "followUps": [
+        "What's the difference between `@Binds` and `@Provides`, and why prefer `@Binds`?",
+        "Why does `@ViewModelScoped` exist separately from `@ActivityRetainedScoped`?",
+        "How would you structure DI modules in a 40-module app?"
+      ],
+      "traps": [
+        "Confusing 'scope' with 'lifetime of the object you inject'. An unscoped binding gives a **new instance every time**, which surprises people with caches and singletons.",
+        "One monolithic `AppModule` — it becomes a build bottleneck and a merge-conflict magnet."
+      ],
+      "refs": [
+        {
+          "title": "Dependency injection with Hilt",
+          "url": "https://developer.android.com/training/dependency-injection/hilt-android",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Hilt releases",
+          "url": "https://developer.android.com/jetpack/androidx/releases/hilt",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "ar-0003",
+      "track": "architecture",
+      "topic": "Offline-first",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "offline-first",
+        "sync",
+        "repository"
+      ],
+      "q": "How do you build an offline-first repository with sync and conflict resolution?",
+      "shortAnswer": [
+        "**The database is the single source of truth.** The UI only ever observes the database; the network is a background process that writes into it.",
+        "Writes go into a local **outbox/mutation queue** with a pending flag, so the UI updates optimistically and a worker drains the queue with retries.",
+        "Conflicts need an explicit policy: last-write-wins with server timestamps is the default; version vectors or CRDTs when concurrent edits must merge."
+      ],
+      "answer": "#### The shape\n`UI ──observes──▶ Room (source of truth) ◀── Sync worker ──▶ Network`\n\nThe UI never awaits the network. `repo.observeItems()` returns a `Flow` from Room; refresh is fallible and only updates the database.\n\n#### Reads\n- Room `Flow` → UI, instant from cache; refresh fetches → upserts → the Flow re-emits.\n- Track `lastSyncedAt` staleness to show \"updated 2 h ago\" and drive auto-refresh.\n- Paged data: **Paging 3 + `RemoteMediator`** — Room is the paging source, the mediator writes fetched pages in.\n\n#### Writes\n1. Write locally with a **client-generated id** (UUID) and `pendingSync = true`, emitting immediately for an optimistic result.\n2. Enqueue unique `WorkManager` work to drain the outbox.\n3. Success: swap client id for server id, clear the flag. Failure: mark failed, surface retry.\n4. **Idempotency keys** so a retry after an ambiguous timeout doesn't duplicate.\n\n#### Conflict resolution\n- **Last-write-wins** with a *server* timestamp — simple, silently loses data.\n- **Version / ETag check** — send your version; a moved version gets 409, then auto-merge or prompt.\n- **Field-level merge** — merge non-overlapping edits; needs per-field timestamps.\n- **CRDTs / operational transform** — real concurrent editing (notes, docs). Expensive; justify only if needed.\n\n#### Delta sync\nKeep a server cursor/`updatedSince` token, request only changes, handle tombstones — else deleted rows persist.\n\n#### What interviewers score\nName the database as source of truth, the outbox, idempotency, and a conflict policy **with its trade-off** — vagueness is the most common senior miss.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Optimistic write into an outbox, drained by a worker",
+          "src": "@Entity\ndata class NoteEntity(\n    @PrimaryKey val id: String,          // client-generated UUID until the server assigns one\n    val serverId: String? = null,\n    val text: String,\n    val updatedAt: Long,\n    val pendingSync: Boolean = false,\n    val syncFailed: Boolean = false,\n)\n\nclass NoteRepository(\n    private val dao: NoteDao,\n    private val api: NoteApi,\n    private val workManager: WorkManager,\n) {\n    // Reads always come from the database\n    fun observe(): Flow<List<Note>> = dao.observeAll().map { it.map(NoteEntity::toDomain) }\n\n    // Writes are local-first and optimistic\n    suspend fun save(text: String) {\n        dao.upsert(\n            NoteEntity(\n                id = UUID.randomUUID().toString(),\n                text = text,\n                updatedAt = System.currentTimeMillis(),\n                pendingSync = true,\n            )\n        )\n        workManager.enqueueUniqueWork(\n            \"outbox\", ExistingWorkPolicy.KEEP,\n            OneTimeWorkRequestBuilder<OutboxWorker>()\n                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())\n                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)\n                .build()\n        )\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "How do you handle deletions in a delta-sync protocol?",
+        "Why do you need a client-generated id before the server responds?",
+        "How would you show sync status honestly in the UI without being noisy?"
+      ],
+      "traps": [
+        "Letting the UI await the network. The moment you do, you have an online-first app with a cache, not an offline-first app.",
+        "Ignoring idempotency. Retries after timeouts are the single biggest source of duplicated records in mobile sync."
+      ],
+      "refs": [
+        {
+          "title": "Build an offline-first app",
+          "url": "https://developer.android.com/topic/architecture/data-layer/offline-first",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Paging 3 with RemoteMediator",
+          "url": "https://developer.android.com/topic/libraries/architecture/paging/v3-network-db",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "ar-0004",
+      "track": "architecture",
+      "topic": "Modularization",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "modularization",
+        "gradle",
+        "scale"
+      ],
+      "q": "How would you modularize a large Android app, and what does it actually buy you?",
+      "shortAnswer": [
+        "Split by **feature** first, then by **layer within feature** (`feature:search:ui`, `feature:search:data`), with shared `core:*` modules for design system, network, database, and common models.",
+        "Use **api/impl separation**: modules depend on an `api` module holding interfaces, so changing an implementation doesn't recompile its consumers.",
+        "The real wins are build times (parallelism + fewer invalidated modules), enforced boundaries, and enabling independent team ownership — not architectural purity."
+      ],
+      "answer": "#### A structure that works\n- `app/` — assembly, DI wiring\n- `feature/search/` — ui + viewmodel + its own data\n- `feature/profile/`\n- `core/designsystem/` — theme, components\n- `core/ui/` — composables aware of domain models\n- `core/data/` — repositories\n- `core/network/` — Retrofit/Ktor setup\n- `core/database/` — Room\n- `core/model/` — pure Kotlin domain models\n- `core/common/` — dispatchers, Result, utils\n- `build-logic/` — convention plugins\n\nFeatures never depend on each other; cross-feature navigation lives in the `app` module or a navigation contract.\n\n#### api/impl separation\n`feature:search` depends on `core:data:api` (interfaces only); `core:data:impl` is wired at `app`. Since the `api` ABI rarely changes, an edit recompiles one module, not the world.\n\n#### Convention plugins\nDon't copy-paste build files. Put shared configuration in `build-logic` precompiled plugins: `plugins { id(\"myapp.android.library\"); id(\"myapp.android.library.compose\") }`. Pair with a **version catalog** (`libs.versions.toml`). AGP 9 applies the Kotlin plugin itself; convention plugins no longer add `org.jetbrains.kotlin.android`.\n\n#### What it actually buys\n- **Build speed** — independent modules build in parallel; configuration cache plus build cache skip untouched modules.\n- **Enforced boundaries** — you can't reach into another feature's internals; `internal` becomes meaningful.\n- **Ownership** — teams own modules, CODEOWNERS works, review scope shrinks.\n- **Dynamic delivery** — optional install-time or on-demand feature modules.\n\n#### The costs to acknowledge\nMore Gradle files, slower configuration if done naively, DI wiring complexity, navigation abstraction. A 5-screen app should not be 30 modules.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A convention plugin removing per-module boilerplate",
+          "src": "// build-logic/convention/src/main/kotlin/AndroidLibraryConventionPlugin.kt\nclass AndroidLibraryConventionPlugin : Plugin<Project> {\n    override fun apply(target: Project) = with(target) {\n        pluginManager.apply(\"com.android.library\")\n\n        extensions.configure<LibraryExtension> {\n            compileSdk = 36\n            defaultConfig.minSdk = 24\n            // AGP 9 applies the Kotlin plugin itself — no need to add it here\n        }\n\n        dependencies {\n            add(\"implementation\", libs.findLibrary(\"kotlinx.coroutines.core\").get())\n            add(\"testImplementation\", libs.findLibrary(\"junit\").get())\n        }\n    }\n}\n\n// Any module then reduces to:\n// plugins { id(\"myapp.android.library\") }"
+        }
+      ],
+      "followUps": [
+        "How do you handle navigation between feature modules that can't see each other?",
+        "What's the downside of too many small modules?",
+        "How would you measure whether modularization actually improved build times?"
+      ],
+      "traps": [
+        "Modularizing by layer only (`ui`, `domain`, `data` as three modules). You get all the ceremony and almost none of the build-time benefit, because every change still touches every module.",
+        "Not being able to name a cost. 'It's just better' reads as inexperience."
+      ],
+      "refs": [
+        {
+          "title": "Guide to Android app modularization",
+          "url": "https://developer.android.com/topic/modularization",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "AGP 9.0 release notes",
+          "url": "https://developer.android.com/build/releases/agp-9-0-0-release-notes",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.15"
+    }
+  ]
+}

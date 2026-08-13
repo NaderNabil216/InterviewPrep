@@ -1,0 +1,415 @@
+{
+  "id": "behavioral-g-2",
+  "title": "Behavioral Interviews",
+  "track": "behavioral",
+  "items": [
+    {
+      "id": "bh-0015",
+      "track": "behavioral",
+      "topic": "Technical decisions gone wrong",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "technical",
+        "ownership"
+      ],
+      "q": "Structure a “technical decision you got wrong” answer",
+      "answer": "The interviewer is testing **engineering judgment plus self-awareness** — you picked a technology for the right reason and changed your mind when evidence said so.\n\n**Setup: the decision and the rationale.** “I chose a multi-module Room setup over a single database because the team split by ownership, and I believed isolation would keep schema conflicts away.” A wrong decision made on real reasoning is a story; a whim is a red flag.\n\n**The failure: the evidence, concretely.** “Within two releases, cross-feature queries hit the migration boundary — a shared entity lived in two databases and data was going stale between them.” A mechanism, not a feeling.\n\n**Your reaction: how fast and how loud.** “I flagged the migration risk in the first retro rather than patching around it.” Weeks vs months of quiet suffering is the difference between good and bad judgment.\n\n**The correction.** “We consolidated into one database with schema-gated ownership, and I wrote the migration playbook so it took a weekend instead of a month.”\n\n**Outcome + lesson.** “Stale-data bugs dropped to zero. The lesson I keep now: when a decision’s cost is in integration rather than isolation, bet on integration.” A one-line transferable principle closes the loop and tells the interviewer you will not repeat the mistake on their team.",
+      "shortAnswer": [
+        "Setup with the rationale, the evidence of failure, the honest reaction, the correction, and a transferable lesson.",
+        "The failure must be a mechanism (“shared entity went stale across DBs”), not a vibe.",
+        "Surfacing it fast is the judgment test; end with a one-line principle you now apply."
+      ],
+      "followUps": [
+        "What data would have changed your mind earlier?",
+        "How do you keep from being the person who re-decides every six months?",
+        "Tell me about a decision that was wrong but everyone agreed with at the time."
+      ],
+      "traps": [
+        "The failure is someone else’s implementation of your good idea.",
+        "No mechanism — “users were confused” without concrete evidence.",
+        "A lesson as generic as “I should have researched more.”"
+      ],
+      "refs": [
+        {
+          "title": "Android architecture guide",
+          "url": "https://developer.android.com/topic/architecture",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    },
+    {
+      "id": "bh-0016",
+      "track": "behavioral",
+      "topic": "Pushing back on product",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "product",
+        "pushback"
+      ],
+      "q": "How do you push back on a product requirement?",
+      "answer": "Pushing back on product is a trust question: protect engineering reality without being the person who says no to everything.\n\n**Setup: the requirement and the real cost.** “The PM asked for offline-first sync in one sprint — realistically conflict resolution, a migration, and a QA matrix: a quarter of work.”\n\n**The reframe: their goal, not their ask.** “I asked what offline mode really solved — it turned out users on poor networks were losing form data.” The goal is almost always smaller than the ask.\n\n**The counter: a cheaper path to the same goal.** “I proposed an autosave-draft system that survives network loss and syncs on reconnect — a fraction of the work, and it killed the data-loss complaint.” You reject the implementation, not the goal, and you bring the alternative.\n\n**The negotiation: a menu with honest estimates.** “I gave three options — the draft system (2 weeks), a read-only offline mode (6 weeks), or full sync (a quarter) — with the risk of each.” Offering a menu is how engineers push back without owning the decision.\n\n**Outcome.** “We shipped the draft system, data-loss tickets dropped 80%, and the PM used the same trade-off menu on the next project.” The detail that matters: the relationship survived — the PM came back with better-scoped asks. Pushing back well is what makes product folks trust engineers with the hard requirements.",
+      "shortAnswer": [
+        "Separate the requirement from the goal — ask what it really solves, and it is usually smaller than the ask.",
+        "Bring a cheaper path to the same goal, not a bare rejection.",
+        "Present a menu of options with honest estimates and let the PM choose."
+      ],
+      "followUps": [
+        "What if the PM insists on the full ask anyway?",
+        "How do you push back when you are not the tech lead?",
+        "Tell me about a requirement you did not push back on and later regretted."
+      ],
+      "traps": [
+        "Rejecting without an alternative — that is a no, not pushback.",
+        "Frame: “the PM doesn’t understand engineering” — the interviewer will side with the PM.",
+        "Owning the decision by refusing; pushback hands the choice back."
+      ],
+      "refs": [
+        {
+          "title": "Google — stakeholder management",
+          "url": "https://www.google.com/about/careers/applications/how-we-hire/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    },
+    {
+      "id": "bh-0017",
+      "track": "behavioral",
+      "topic": "On-call incidents",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "incident",
+        "reliability"
+      ],
+      "q": "Structure an incident or production outage story",
+      "answer": "An incident story scores on **calm, communication, and the systemic fix.** The interviewer is a future teammate who wants to know what you are like at 3am.\n\n**Setup: the signal.** “Crash-free sessions dropped from 99.2% to 88% in twenty minutes after a release.” Number and timeline set the stakes.\n\n**The diagnosis: the process (the scored part).** “The first alert was the crash dashboard; I checked the release diff, saw the new background sync, and confirmed a race in the worker from the in-memory stack traces — not the UI.” Name the tooling: dashboards, stack traces, logs, a rollback gate. Hypothesis, evidence, confirm — not guessing and reloading.\n\n**The communication.** “I posted a one-line status to the on-call channel immediately, paged the owner at ten minutes, and gave the PM a 15-minute cadence update with an ETA.” Communication is nearly half the score — the engineer who disappears for an hour while fixing is worse than one who fixes slower and keeps everyone oriented.\n\n**The fix: the rollback.** “We rolled back within forty minutes, verified sessions recovered, and held the change for the fix.” A clean rollback beats a heroic hotfix.\n\n**The retro: systemic prevention.** “The root cause was the worker running without a start gate; the fix gated it behind the connectivity check, plus a canary rollout that watches crash-free sessions before full ship.” The incident produced a system change — and if true, that it caught the next one.",
+      "shortAnswer": [
+        "Signal with numbers, systematic diagnosis with tooling, communication cadence, clean rollback, and a systemic retro fix.",
+        "Name the actual tooling you used — the diagnosis must be a process, not a guess.",
+        "The retro must produce a system change — a gate, a canary, an alert — that prevents the class, not just the instance."
+      ],
+      "followUps": [
+        "Who was on call with you, and what did they do?",
+        "What was the post-mortem, and did anyone get blamed?",
+        "Tell me about an incident where the rollback made it worse."
+      ],
+      "traps": [
+        "The diagnosis is “I knew immediately” with no tooling shown.",
+        "Silence during the incident — no communication cadence.",
+        "The fix is the hotfix; the systemic prevention is absent."
+      ],
+      "refs": [
+        {
+          "title": "SRE — postmortem culture",
+          "url": "https://github.com/etsy/morgue",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    },
+    {
+      "id": "bh-0018",
+      "track": "behavioral",
+      "topic": "Underperforming teammate",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "performance",
+        "leadership"
+      ],
+      "q": "How do you handle an underperforming teammate?",
+      "answer": "This is a **leadership and courage** test: you did not do the work for them, did not complain behind their back, and did not wait for the manager to fix it.\n\n**Setup: the gap, concretely.** “A teammate was taking three times the normal time on tickets, and fixes came back with the same bugs.” Behavior, not character.\n\n**Check the environment before the person.** “I asked whether onboarding, task size, or context was the problem before assuming capability — it turned out they had no Android background and were reading the architecture from git history.” Looking for a systemic cause first is the senior frame.\n\n**Direct, private feedback.** “I showed them the specific pattern — tickets blocked on a missing step — and offered to pair.” One behavior, concrete, with an offer.\n\n**Pairing with a boundary (the scored part).** “We paired two hours a week, but I set the boundary that they owned the implementation; my job was to unblock, not to write the code.” A senior who quietly writes the code has merely moved the problem.\n\n**Escalation, if needed.** “After a month I raised the pattern with the manager with the evidence, and we agreed on a checkpoints plan.” In person, with data, not gossip.\n\n**Outcome.** Either they recovered (“within two months they shipped without review overrides”) or the process was honest (“the plan made the fit clear and they moved to a better-fit team”). Both are acceptable; hiding the problem is not.",
+      "shortAnswer": [
+        "Check the environment before the person, give direct private feedback, pair with a boundary (they own it), escalate with evidence if needed.",
+        "The boundary is the senior signal — you unblock, you never do the work for them.",
+        "Both outcomes are acceptable — recovery or honest reassignment — hiding the problem is not."
+      ],
+      "followUps": [
+        "What if the underperformance was dragging the team’s deadline?",
+        "How do you give this feedback to a peer, not a report?",
+        "Tell me about a time the person recovered and a time they did not."
+      ],
+      "traps": [
+        "You quietly did their work — that is hiding the problem, not helping.",
+        "Skipped the direct conversation and went straight to the manager.",
+        "“They just weren’t good enough” with no environmental check and no coaching attempt."
+      ],
+      "refs": [
+        {
+          "title": "Google — coaching for managers",
+          "url": "https://www.google.com/about/careers/applications/how-we-hire/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    },
+    {
+      "id": "bh-0019",
+      "track": "behavioral",
+      "topic": "Ambiguity",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "ambiguity",
+        "initiative"
+      ],
+      "q": "How do you navigate ambiguity with no clear owner?",
+      "answer": "Ambiguity questions score **whether you create structure instead of waiting for it.**\n\n**Setup: the void.** “A new feature spanned three teams and the spec said nothing about error handling, offline behavior, or who owns the shared API — and there was no assigned lead.”\n\n**Your move: impose structure, small and early.** In order:\n1. **You wrote the document** — “I drafted a one-page decision doc with the open questions and my recommended answers, rather than waiting for the PM.”\n2. **You found the decision-maker** — “I escalated the API-ownership question to the two tech leads with options and a deadline, so the decision landed instead of drifting.”\n3. **You built the scaffold** — “I stubbed the shared module with the agreed interfaces so each team could start in parallel.”\n\n**The key sentence — your decision rule.** “I act when the cost of waiting is a lost week; I wait when the decision genuinely changes direction.” Senior interviewers listen for this line specifically; it separates initiative from recklessness.\n\n**The friction.** The moment ambiguity hurt (“the first version assumed the wrong offline model and we re-did it”) and what you learned about imposing structure faster.\n\n**Outcome.** “The three teams shipped in parallel, the shared API had one owner, and the feature landed a sprint early.” Close with the lesson — the cost of ambiguity is paid in waiting; name the decision, the owner, and the deadline the moment you smell the void.",
+      "shortAnswer": [
+        "Impose structure early: write the decision doc, surface the open questions, name the owner and the deadline, build the scaffold.",
+        "Act when waiting costs a week; wait when the decision changes direction — say this rule out loud.",
+        "Ambiguity is paid in waiting; name the decision, owner, and deadline early."
+      ],
+      "followUps": [
+        "What if the other teams preferred to wait for the spec?",
+        "How do you decide how much to build before checking in?",
+        "Tell me about a time your early structure was wrong."
+      ],
+      "traps": [
+        "The story is really “I complained there was no owner” — that is the absence of initiative.",
+        "Waiting for the PM or spec as the whole approach.",
+        "No decision rule — you either jump too fast or never jump."
+      ],
+      "refs": [
+        {
+          "title": "Google — interview tips",
+          "url": "https://www.google.com/about/careers/applications/how-we-hire/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    },
+    {
+      "id": "bh-0020",
+      "track": "behavioral",
+      "topic": "Prioritization",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "prioritization",
+        "deadlines"
+      ],
+      "q": "Structure a “prioritizing under a hard deadline” answer",
+      "answer": "This question scores **your decision rule, not your effort.** Working harder is not the answer; the interviewer wants to see you cut scope on a defensible basis and told people.\n\n**Setup: the deadline and the demand.** “A launch date was fixed by a partner agreement, and the team had about 60% of the promised work done.” The deadline is real and external — that is what makes it prioritization rather than estimation.\n\n**Your rule: how you decided.** Name the framework: “I ranked each feature by launch-blocking vs launch-nice, then cut the nice ones, keeping anything that touched the core flow, security, or the demo path.” A named rule (impact vs effort, launch-critical vs polish) is the whole point — you can answer “why did you cut this?” with a consistent principle.\n\n**The communication: who you told, and when.** “In week three of five I showed the PM the gap and we agreed on the cut list together, so the launch story was coherent rather than silently missing pieces.” Cutting scope in the room with the PM, early, beats quietly shipping less.\n\n**The execution.** “I froze new work, protected the two critical developers from interruption, and shipped the cut list on schedule.”\n\n**Outcome.** “We launched on the agreed date with the core flow intact; two cut features shipped the next release.” The meta-lesson: the skill is agreeing earlier on what *less* means — a team that agrees on the cut list early ships more than one that fights at the deadline.",
+      "shortAnswer": [
+        "Name the decision rule (launch-critical vs nice, impact vs effort), cut on it, and tell the stakeholder before the deadline.",
+        "Cutting scope with the PM, in the room, early, beats quietly shipping less.",
+        "Protect the critical path: freeze new work, shield the key people."
+      ],
+      "followUps": [
+        "What did you cut and how did the stakeholders react?",
+        "How do you decide between two equally-critical features?",
+        "Tell me about a deadline you missed despite prioritizing."
+      ],
+      "traps": [
+        "The answer is “we worked weekends” — effort without a decision rule.",
+        "Cutting scope silently and telling no one.",
+        "“Everything was critical” — that is not prioritization, that is surrender."
+      ],
+      "refs": [
+        {
+          "title": "Google — how to prioritize",
+          "url": "https://www.google.com/about/careers/applications/how-we-hire/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    },
+    {
+      "id": "bh-0021",
+      "track": "behavioral",
+      "topic": "Saying no",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "boundaries",
+        "senior"
+      ],
+      "q": "How do you say no at a senior level?",
+      "answer": "Saying no at a senior level is **protecting capacity on a defensible basis** — you say no to the *work*, not to the *person*, and you make the trade visible.\n\n**Setup: the request and the real conflict.** “A stakeholder asked the team to take on a third integration in the same release, on top of committed security work.” Real capacity, not preference.\n\n**The accounting: the cost made explicit.** “I walked them through the commitment — the security work was fixed by a compliance date, the existing integration was contracted — and showed that adding the third meant slipping security or cutting testing.” A no backed by visible accounting is the senior move.\n\n**The alternative: what you are actually choosing.** “I offered the options: we take the third integration if security slips, we do it next release, or they fund an additional head.” The trade-off is handed back as a menu — your “no” becomes their choice among real options. This is the line interviewers listen for.\n\n**The principle.** “What I protect is the work we already promised; the new thing is genuinely good, it just isn’t this week.” Every “yes” is a “no” to something already committed — and a leader who cannot say no silently decommits the existing work.\n\n**Outcome.** “We shipped security on time, the integration landed next release fully tested, and the stakeholder now routes requests through the same capacity conversation.” The strongest no leaves the requester respecting the system that said it.",
+      "shortAnswer": [
+        "Say no to the work, not the person: make the accounting visible, offer the trade-off as a menu, protect what is already committed.",
+        "A no backed by visible capacity accounting beats an abstract “we’re busy.”",
+        "Every yes is a no to something committed — leaders who can’t say no decommit silently."
+      ],
+      "followUps": [
+        "What if the requester escalates above you?",
+        "How do you say no to your manager?",
+        "Tell me about a no you regret saying."
+      ],
+      "traps": [
+        "“We’re too busy” with no accounting behind it.",
+        "A no that makes the requester the enemy.",
+        "Saying yes and quietly under-delivering the committed work instead."
+      ],
+      "refs": [
+        {
+          "title": "Google — leading teams",
+          "url": "https://www.google.com/about/careers/applications/how-we-hire/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    },
+    {
+      "id": "bh-0022",
+      "track": "behavioral",
+      "topic": "Company culture fit",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "google",
+        "amazon",
+        "meta"
+      ],
+      "q": "How do Google, Meta and Amazon behavioural interviews differ?",
+      "answer": "The three big interview cultures ask the same stories with different scoring lenses.\n\n**Google** scores **cognition and how you think** — leadership, ambiguity, structure. Questions are open (“tell me about a time you disagreed”) and the rubric rewards scale, collaboration, and a clear line from decision to reasoning.\n\n**Meta** scores **impact and execution** — “what did you ship, and how fast?” The same story should lead with the shipped outcome and iteration speed; expect the follow-up “and how did you know it was your work that moved it?”\n\n**Amazon** is the most rigid: **Leadership Principles** (Customer Obsession, Ownership, Dive Deep, Deliver Results, Are Right a Lot) and **STAR followed to the letter** — the interviewer interrupts if you drift, and every story needs a quantified result. Ownership answers must show boundaryless scope; Are-Right-a-Lot answers must show you changed your mind with evidence.\n\n**Practical advice:** one bank of six-to-eight stories serves all three if you re-cut the *lens* — lead with scale and thinking at Google, speed and impact at Meta, principle and rigor at Amazon. Do not memorize company scripts; all three are watching whether the story survives re-cutting.",
+      "shortAnswer": [
+        "Google: cognition + how you think; Meta: shipped impact + speed; Amazon: Leadership Principles with strict STAR.",
+        "One story bank re-cut per company: scale/thinking at Google, impact/execution at Meta, principle/rigor at Amazon.",
+        "All three pressure the number and the attribution — prepare the “why it was your work” answer."
+      ],
+      "followUps": [
+        "Which of the Amazon Leadership Principles would you say defines you?",
+        "How would you tell the same story differently for a Meta loop?",
+        "What do you do if a company’s culture fit feels wrong for you?"
+      ],
+      "traps": [
+        "Using a Google-style cognition answer at Amazon and failing the STAR structure.",
+        "Memorized company-specific scripts that collapse under a re-cut.",
+        "A vague “I’m a people person” for a question that wants a quantified leadership story."
+      ],
+      "refs": [
+        {
+          "title": "Google — how we hire",
+          "url": "https://www.google.com/about/careers/applications/how-we-hire/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    },
+    {
+      "id": "bh-0023",
+      "track": "behavioral",
+      "topic": "Staff vs senior answers",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "staff",
+        "senior"
+      ],
+      "q": "What separates a staff-level behavioral answer from a senior-level one?",
+      "answer": "Senior answers prove you can **deliver on a hard problem**. Staff answers prove you can **change how the org works**.\n\n**Scope of the outcome.** Senior: “I fixed the crash in the payments flow.” Staff: “I changed the release process so the class of crashes cannot ship again — the canary gate, the rollback playbook, the alert threshold.” Senior fixes the instance; staff fixes the system that produces it.\n\n**Leverage vs effort.** Staff stories are about leverage: mentoring a cohort, setting a standard the whole org follows, unblocking other teams by making the decision they were stuck on. “I wrote the decision doc that ended the two-month debate” is a staff sentence.\n\n**Org impact in the metrics.** Senior: “startup time 4.2s to 2.6s p90.” Staff: “the pattern I established got adopted by four teams and took a day off the average feature’s release.” The staff metric is multiplied by the number of adopting teams.\n\n**Ambiguity and conflict at a higher altitude.** Senior handles a vague feature; staff handles a vague *org question* — no owner across teams, a drifting standard. The stories move from “I created clarity for the project” to “I created clarity for the organization.”\n\n**The influence answers.** A senior story convinces one team; a staff story changes a decision made *above* them — influencing directors, setting direction without a title. If your best stories top out at “my team,” the loop reads senior; if they touch “other teams, other orgs, the company standard,” it reads staff.",
+      "shortAnswer": [
+        "Senior fixes the instance; staff fixes the system that produces the instance.",
+        "Staff stories show leverage and artifacts that outlive you — standards, playbooks, adopted patterns.",
+        "Staff metrics are multiplied: “adopted by four teams” beats “fixed one flow.”"
+      ],
+      "followUps": [
+        "Which of your stories would you re-cut for a staff interview, and what changes?",
+        "How do you know your standard was adopted vs just tolerated?",
+        "What staff-level behavior are you weakest at?"
+      ],
+      "traps": [
+        "A staff story that is really a senior story with a bigger word.",
+        "No leverage — the outcome dies when you stop driving it.",
+        "Org metrics missing — the impact never multiplies beyond your team."
+      ],
+      "refs": [
+        {
+          "title": "Staff engineer — a guide (Will Larson)",
+          "url": "https://github.com/staffeng",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    },
+    {
+      "id": "bh-0024",
+      "track": "behavioral",
+      "topic": "Design round questions",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "design",
+        "communication"
+      ],
+      "q": "How do you ask clarifying questions in a design round?",
+      "answer": "Clarifying questions in a design round are scored as **engineering judgment**, not politeness. They are testing whether you can find the constraints that change the design.\n\n**Ask about the constraints that change the answer.** “What’s the user count and read/write ratio?” changes the architecture; “what color is the button?” does not. A good question is one whose answer you would design differently around.\n\n**Batch the questions.** Three to five sharp questions up front, grouped by area (scale, data, reliability, clients), then design. Interrupting between paragraphs reads as anxiety. “Before I start, three things: expected DAU and peak, read-heavy or write-heavy, and the target latency” — that opening alone reads senior.\n\n**State why you are asking.** “I’m asking about the user count because it decides whether we need a cache tier at all.” Tying the question to its design consequence shows you are running a decision tree, not fishing.\n\n**Offer the default when the interviewer is vague.** “If there’s no number, let me assume 10M DAU, a 50/50 read-write split, and a 300ms p95 — and I’ll flag where it matters.” A candidate who states an assumption and flags it wins more than one who stalls.\n\n**Time-box the questions.** Questions early, design mostly, one final sanity check at the end. Questions that never stop are a sign of a candidate avoiding the design.",
+      "shortAnswer": [
+        "Ask the questions whose answers change the design — scale, data shape, reliability — and batch them up front.",
+        "State why you are asking (“DAU decides whether we need a cache tier”); that turns questions into a decision tree.",
+        "Time-box: questions early, design mostly, one sanity check at the end."
+      ],
+      "followUps": [
+        "What if the interviewer refuses to give numbers?",
+        "How many questions is too many in a design round?",
+        "Tell me about a design round where you asked the wrong question."
+      ],
+      "traps": [
+        "Asking details that don’t change the design (color, font, endpoint names).",
+        "Questioning forever to avoid designing.",
+        "No assumptions offered when the interviewer is vague — the design stalls."
+      ],
+      "refs": [
+        {
+          "title": "Google — design interviews",
+          "url": "https://www.google.com/about/careers/applications/how-we-hire/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    },
+    {
+      "id": "bh-0025",
+      "track": "behavioral",
+      "topic": "Compensation negotiation",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "compensation",
+        "negotiation"
+      ],
+      "q": "How do you discuss compensation and negotiate an offer?",
+      "answer": "Negotiating compensation is a low-stakes, high-value skill, and interviewers often ask it to check you can handle a real business conversation.\n\n**Know the numbers before you talk.** Research the band for the level and location (“Android Staff in this metro is roughly 350–450k total”) and know your current total comp. The most common mistake is negotiating from a feeling instead of a number.\n\n**Never give a number first if you can avoid it.** “I’d like to understand the band for this role first” works — most companies state a range once asked. If forced, give a range whose bottom is your real floor, anchored to data: “based on comparable offers, I’m expecting 360–400k total.”\n\n**Negotiate the whole package, not the salary.** Base, RSUs, sign-on, and vesting all move differently. “The base is fine, but the RSU cliff at one year is the issue — can we front-load the grant or add a sign-on?” Recruiters have sign-on budget that base budget rarely matches.\n\n**Use competing offers as leverage with honesty.** “I have another offer at 390k — is that something you can get closer to?” is fine; inventing offers burns the trust you built over four rounds. Never bluff.\n\n**Be easy to say yes to.** End with a small, prioritized set of asks and clear acceptance: “the offer is good — the two things that would close it are X and Y.” And remember title, level, and the team matter more over two years than a 10% comp difference in one.",
+      "shortAnswer": [
+        "Research the band and your current comp before talking; negotiate the whole package (base, RSUs, sign-on, vesting), not just salary.",
+        "Avoid giving a number first; if forced, anchor a range with the floor as your real number.",
+        "Use competing offers as leverage honestly — never bluff or invent."
+      ],
+      "followUps": [
+        "How do you value RSUs against base when the stock is volatile?",
+        "What would you do if the recruiter said the number is fixed?",
+        "How do you negotiate when you have no competing offer?"
+      ],
+      "traps": [
+        "Giving a number first, anchoring low out of fear.",
+        "Negotiating only the base and leaving RSUs/sign-on on the table.",
+        "Bluffing with a fake offer — it collapses and poisons the trust."
+      ],
+      "refs": [
+        {
+          "title": "levels.fyi — salary data",
+          "url": "https://github.com/levels-fyi",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.13"
+    }
+  ]
+}

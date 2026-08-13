@@ -1,0 +1,9 @@
+# OS cruft
+.DS_Store
+
+# Local-only Claude Code settings (machine-specific permission overrides)
+.claude/settings.local.json
+
+# Unused Spec Kit scaffold nested in this directory — unrelated to the app,
+# see CLAUDE.md "Notes". Kept on disk, just not tracked here.
+/InterviewPrep/

@@ -1,0 +1,43 @@
+{
+  "id": "performance-g-5",
+  "title": "Performance & App Health",
+  "track": "performance",
+  "items": [
+    {
+      "id": "pe-0040",
+      "track": "performance",
+      "topic": "App size",
+      "level": 4,
+      "type": "qa",
+      "tags": ["install-conversion", "asset-packs", "dynamic-delivery"],
+      "q": "Everyone says smaller apps convert better. What actually moves install conversion?",
+      "shortAnswer": [
+        "Size moves conversion mainly in high-margin, low-storage, and metered markets — but store listing, ratings, and perceived quality move installs at least as much.",
+        "The cheapest lever is the AAB split (30-50% smaller downloads); asset packs and dynamic features only pay off when you're shedding genuinely optional, large assets.",
+        "Measure conversion with Play Console experiments — if a size change doesn't move the funnel, don't spend engineering time on the next 10 MB."
+      ],
+      "answer": "#### What the data actually says\nDownload size correlates with conversion in emerging, low-storage, and metered-data markets — the user watches the progress bar, and a large download plus a slow cold start is a drop-off. In mature markets a 10 MB shave moves little; ratings, screenshots, and description decide the click. The rational position: **optimize size where the funnel shows it matters**, not because \"smaller is better\" is a slogan.\n#### The lever ordering\n1. **AAB with full splits** — the largest guaranteed saving (30–50% smaller installs) at near-zero engineering cost.\n2. **R8 plus resource shrinking** — removes what you don't ship at all.\n3. **Asset packs** — move big, optional assets (video, level data, offline maps) out of the install: install-time, fast-follow shortly after install, or on-demand delivery.\n4. **Dynamic feature modules** — rarely used features installed on demand, at the cost of delivery complexity: a module per feature, versioning, and module states to manage.\n#### The trap\nTeams optimize size with no conversion signal. The professional version runs the funnel as an experiment — ship a smaller variant, measure installs and first-run behavior, and only invest in asset packs when the delta justifies the complexity they add. Also count the non-install cost: a 500 MB app with an aggressive on-demand scheme can convert worse than a 60 MB one that just works.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Declaring an on-demand asset pack",
+          "src": "// app/build.gradle.kts — declare which delivery mode an asset pack uses.\nandroid {\n    assetPacks += listOf(\"game_assets\")   // module: game-assets-pack, on-demand\n}\n\ndependencies {\n    implementation(\"com.google.android.play:asset-delivery:2.2.0\")\n}\n\n// On-demand fetch at runtime, gated on the user actually reaching the flow.\nval manager = AssetPackManagerFactory.getInstance(context)\nmanager.fetch(listOf(\"game_assets\"))"
+        }
+      ],
+      "followUps": [
+        "When is size NOT the lever?",
+        "What's the difference between on-demand and fast-follow delivery?",
+        "How do you measure conversion honestly instead of vibes?"
+      ],
+      "traps": [
+        "Shaving size without a conversion experiment.",
+        "Adding on-demand delivery complexity to 'save' assets users mostly want installed anyway."
+      ],
+      "refs": [
+        { "title": "Asset delivery with Play Asset Delivery", "url": "https://developer.android.com/guide/playcore/asset-delivery", "checked": "2026-08-13" },
+        { "title": "Deliver dynamic feature modules on demand", "url": "https://developer.android.com/guide/app-bundle/dynamic-delivery", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    }
+  ]
+}

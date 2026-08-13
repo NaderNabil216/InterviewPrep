@@ -1,0 +1,64 @@
+{
+  "track": "system-design",
+  "scope": [
+    "feature-flag and A/B experimentation system on the client (L1)",
+    "crash-reporting and observability SDK (L1)",
+    "image-loading library (Coil-class) — API surface, cache tiers, lifecycle (L2)",
+    "networking library (Retrofit-class) — call mapping, interceptors, adapters (L2)",
+    "Uber-style live location tracking and sharing (L3)",
+    "offline-first news reader with conflict resolution and freshness (L3)",
+    "push notifications at scale with FCM (L3)",
+    "modularizing a large app for 200 engineers — build times, ownership, API boundaries (L3)",
+    "offline maps and turn-by-turn navigation (L3)",
+    "Google Photos-style background photo backup (L4)",
+    "Dropbox-style file sync — deltas, tombstones, conflict detection (L4)",
+    "video streaming client — adaptive bitrate, prefetch, DRM, resume (L4)",
+    "checkout and payment flow — idempotency, retries, fraud constraints (L4)",
+    "real-time collaborative editor on mobile — CRDT vs OT, presence, offline (L4)"
+  ],
+  "specs": [],
+  "coverage": {
+    "feature-flag and A/B experimentation system on the client (L1)": [
+      "sd-0005"
+    ],
+    "crash-reporting and observability SDK (L1)": [
+      "sd-0006"
+    ],
+    "image-loading library (Coil-class) — API surface, cache tiers, lifecycle (L2)": [
+      "sd-0007"
+    ],
+    "networking library (Retrofit-class) — call mapping, interceptors, adapters (L2)": [
+      "sd-0008"
+    ],
+    "Uber-style live location tracking and sharing (L3)": [
+      "sd-0009"
+    ],
+    "offline-first news reader with conflict resolution and freshness (L3)": [
+      "sd-0010"
+    ],
+    "push notifications at scale with FCM (L3)": [
+      "sd-0011"
+    ],
+    "modularizing a large app for 200 engineers — build times, ownership, API boundaries (L3)": [
+      "sd-0012"
+    ],
+    "offline maps and turn-by-turn navigation (L3)": [
+      "sd-0013"
+    ],
+    "Google Photos-style background photo backup (L4)": [
+      "sd-0014"
+    ],
+    "Dropbox-style file sync — deltas, tombstones, conflict detection (L4)": [
+      "sd-0015"
+    ],
+    "video streaming client — adaptive bitrate, prefetch, DRM, resume (L4)": [
+      "sd-0016"
+    ],
+    "checkout and payment flow — idempotency, retries, fraud constraints (L4)": [
+      "sd-0017"
+    ],
+    "real-time collaborative editor on mobile — CRDT vs OT, presence, offline (L4)": [
+      "sd-0018"
+    ]
+  }
+}

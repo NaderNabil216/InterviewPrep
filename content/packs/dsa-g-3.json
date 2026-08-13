@@ -1,0 +1,298 @@
+{
+  "id": "dsa-g-3",
+  "title": "Problem Solving",
+  "track": "dsa",
+  "items": [
+    {
+      "id": "ds-0034",
+      "track": "dsa",
+      "topic": "Heaps",
+      "level": 4,
+      "type": "dsa",
+      "pattern": "Two heaps",
+      "tags": [
+        "heap",
+        "design"
+      ],
+      "q": "Find Median from a Data Stream — the two-heaps pattern",
+      "prompt": "Design a class that supports `addNum(num: Int)` and `findMedian(): Double` on a stream of numbers, with each operation O(log n) or better.\n\nThe two-heaps trick is a classic level-4 pattern: a max-heap holding the smaller half and a min-heap holding the larger half. The median is the top of one heap (odd) or the average of both tops (even). Balance invariant: the sizes may differ by at most one, and every element in the left heap ≤ every element in the right heap.",
+      "hints": [
+        "The median splits the data into two halves. If you could keep the smaller half and larger half each in a structure giving their boundary elements...",
+        "A max-heap gives the *largest* of the smaller half; a min-heap gives the *smallest* of the larger half. Two heaps it is.",
+        "Insert with a two-step: push into the left heap, pop its max into the right heap, then rebalance so `left.size >= right.size` and sizes differ by ≤ 1. Kotlin's `PriorityQueue` is a min-heap — use `reverseOrder()` for the max-heap."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Two heaps — O(log n) add, O(1) median",
+          "src": "class MedianFinder {\n    private val lo = java.util.PriorityQueue<Int>(reverseOrder())  // smaller half, max-heap\n    private val hi = java.util.PriorityQueue<Int>()                 // larger half, min-heap\n\n    fun addNum(num: Int) {\n        lo.add(num)\n        hi.add(lo.poll())            // largest of lo moves to hi\n        if (hi.size > lo.size) lo.add(hi.poll())  // keep lo >= hi, diff <= 1\n    }\n\n    fun findMedian(): Double =\n        if (lo.size > hi.size) lo.peek().toDouble()\n        else (lo.peek() + hi.peek()) / 2.0\n}"
+        }
+      ],
+      "complexity": "addNum is O(log n), findMedian is O(1). Space O(n). The sorted-array approach is O(n) per insert — the heaps exist precisely to buy log time.",
+      "followUps": [
+        "Why push into `lo` first then move one to `hi`? Trace an ascending and a descending stream.",
+        "Now support a sliding-window median (k most recent numbers) — which heap op gets harder?",
+        "Find the k-th percentile, not just the median — generalize the heap split."
+      ],
+      "starter": "class MedianFinder {\n    fun addNum(num: Int) {\n        // your solution\n    }\n    fun findMedian(): Double {\n        // your solution\n    }\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "PriorityQueue (Java)",
+          "url": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0035",
+      "track": "dsa",
+      "topic": "Linked lists",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Heap / linked lists",
+      "tags": [
+        "linked-list",
+        "heap"
+      ],
+      "q": "Merge K Sorted Linked Lists",
+      "prompt": "Given a `List<ListNode?>` of k sorted singly-linked lists, merge them into one sorted list and return its head.\n\nThe naive \"append all then sort\" is O(n log n). The interview answer is either a priority queue over the k heads (O(n log k)) or pairwise/divide-and-conquer merging. You should be able to do the heap version fluently and name the divide-and-conquer one.",
+      "hints": [
+        "At any moment the next smallest element is one of the k current heads. Which data structure returns the minimum of k candidates?",
+        "A min-heap seeded with all k heads. Pop the min, append to output, push that node's `next` back in.",
+        "Kotlin `PriorityQueue<ListNode>` needs a comparator on `value`; handle `null` heads at seeding time."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Priority queue over k heads — O(n log k)",
+          "src": "class ListNode(var value: Int) { var next: ListNode? = null }\n\nfun mergeKLists(lists: Array<ListNode?>): ListNode? {\n    val heap = java.util.PriorityQueue<ListNode>(compareBy { it.value })\n    lists.forEach { if (it != null) heap.add(it) }\n    val dummy = ListNode(0)\n    var tail = dummy\n    while (heap.isNotEmpty()) {\n        val node = heap.poll()\n        tail.next = node\n        tail = node\n        node.next?.let { heap.add(it) }\n    }\n    return dummy.next\n}"
+        }
+      ],
+      "complexity": "Time O(n log k) with the heap (n total nodes), O(n log n) for append-all-and-sort. Space O(k) for the heap (O(n) for sorting). The divide-and-conquer merge is O(n log k) with O(1) extra space.",
+      "followUps": [
+        "Where would you put a dummy head, and why is it useful in Kotlin?",
+        "Implement the divide-and-conquer variant and compare space.",
+        "What if the k lists are not sorted? (Sort each first — the problem disappears into sort-all.)"
+      ],
+      "starter": "fun mergeKLists(lists: Array<ListNode?>): ListNode? {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "PriorityQueue (Java)",
+          "url": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0036",
+      "track": "dsa",
+      "topic": "Linked lists",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Linked list / hash map",
+      "tags": [
+        "linked-list",
+        "hashmap"
+      ],
+      "q": "Copy List with Random Pointer",
+      "prompt": "A linked list node has `value`, `next`, and a `random` pointer that may point to any node in the list or null. Deep-copy the list: every copied node's `next` and `random` must point to copied nodes.\n\nThis is the classic \"hash map first, wire pointers second\" problem. Two passes: build a value copy of every node keyed by identity, then wire `next` and `random` through the map. The O(1)-space interleaving trick is the level-4 extra.",
+      "hints": [
+        "You can't wire `random` on the first pass because its target may not exist yet. What do you create first?",
+        "Build all copies first in a `HashMap<Node, Node>` from original to copy — this is the O(n) space answer and it's fine to lead with it.",
+        "Second pass: `copy.next = map[orig.next]`, `copy.random = map[orig.random]`. Then mention the interleave technique (copy glued next to original) to get O(1) space."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Map-based two-pass — O(n) time & space",
+          "src": "class Node(val value: Int) {\n    var next: Node? = null\n    var random: Node? = null\n}\n\nfun copyRandomList(head: Node?): Node? {\n    val map = HashMap<Node, Node>()\n    var cur = head\n    while (cur != null) { map[cur] = Node(cur.value); cur = cur.next }\n    cur = head\n    while (cur != null) {\n        val c = map.getValue(cur)\n        c.next = cur.next?.let { map[it] }\n        c.random = cur.random?.let { map[it] }\n        cur = cur.next\n    }\n    return head?.let { map[it] }\n}"
+        }
+      ],
+      "complexity": "Time O(n), space O(n) for the map. The interleaved (copy glued between original nodes) version is O(n) time and O(1) extra space — mention it as the optimization, since that's what separates a level-4 answer.",
+      "followUps": [
+        "Walk through the interleaving technique and its cleanup pass.",
+        "What if nodes could be shared (a DAG, not a list) — does the map approach still work?",
+        "Do the deep copy in one pass using lazy map wiring."
+      ],
+      "starter": "fun copyRandomList(head: Node?): Node? {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0037",
+      "track": "dsa",
+      "topic": "Binary trees",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "BST / recursion",
+      "tags": [
+        "tree",
+        "bst"
+      ],
+      "q": "Validate a Binary Search Tree",
+      "prompt": "Given the root of a binary tree, return whether it is a valid BST: for every node, all values in its left subtree are strictly less, all values in its right subtree are strictly greater.\n\nThe classic trap is checking only immediate children. A node 15 with a right child 14 in a left subtree of a 20 violates the BST even though 14 < 15 and 14 < 20. The correct approach threads a (min, max) allowed range down the recursion.",
+      "hints": [
+        "Checking `left < node < right` at each node is *not* enough — what global constraint is missing?",
+        "Each node has an allowed range inherited from its ancestors: (lower bound, upper bound).",
+        "Recurse with `valid(node, lo, hi)`: for the left child tighten `hi = node.value`, for the right tighten `lo = node.value`. Start with null bounds or use `Long` sentinels for values in Int range."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Range-threading recursion — O(n)",
+          "src": "fun isValidBST(root: TreeNode?): Boolean {\n    fun check(n: TreeNode?, lo: Long, hi: Long): Boolean {\n        if (n == null) return true\n        if (n.value <= lo || n.value >= hi) return false\n        return check(n.left, lo, n.value.toLong()) &&\n               check(n.right, n.value.toLong(), hi)\n    }\n    return check(root, Long.MIN_VALUE, Long.MAX_VALUE)\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "In-order traversal must be strictly increasing",
+          "src": "fun isValidBSTInOrder(root: TreeNode?): Boolean {\n    var prev: Long? = null\n    var ok = true\n    fun walk(n: TreeNode?) {\n        if (n == null || !ok) return\n        walk(n.left)\n        if (prev != null && n.value <= prev!!) { ok = false; return }\n        prev = n.value.toLong()\n        walk(n.right)\n    }\n    walk(root)\n    return ok\n}"
+        }
+      ],
+      "complexity": "Time O(n), space O(height) for recursion (worst case O(n) for a skewed tree). The in-order variant is O(n) time and O(height) stack too.",
+      "followUps": [
+        "Why do `Long` sentinels beat `null` bounds here? What breaks with `Int` values at the edges?",
+        "What if equal values are allowed on one side only — adjust the comparison.",
+        "Recover the BST from a pre-order traversal."
+      ],
+      "starter": "fun isValidBST(root: TreeNode?): Boolean {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library — Long",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0038",
+      "track": "dsa",
+      "topic": "Binary trees",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Tree / recursion",
+      "tags": [
+        "tree",
+        "lca"
+      ],
+      "q": "Lowest Common Ancestor of a Binary Tree",
+      "prompt": "Given a binary tree and two node references `p` and `q` (both guaranteed present), return their lowest common ancestor: the deepest node that has both as descendants (itself included).\n\nClassic recursive divide: each node asks \"does my left or right subtree contain a target?\" A node is the LCA exactly when one target is in each side, or it *is* a target and the other is somewhere below it.",
+      "hints": [
+        "Define the recursion by what it *returns*, not what it mutates: return the found target, or the LCA if one side found each.",
+        "If a node is `p` or `q`, it can only be the answer if the other is in its subtree — so return it upward.",
+        "For each node: if both children return non-null, this node is the LCA. If one returns non-null, pass it up. If neither, null."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Recursive — O(n)",
+          "src": "fun lowestCommonAncestor(root: TreeNode?, p: TreeNode, q: TreeNode): TreeNode? {\n    if (root == null || root == p || root == q) return root\n    val left = lowestCommonAncestor(root.left, p, q)\n    val right = lowestCommonAncestor(root.right, p, q)\n    return when {\n        left != null && right != null -> root   // split across children\n        left != null -> left\n        else -> right\n    }\n}"
+        }
+      ],
+      "complexity": "Time O(n) — visits each node once. Space O(height) recursion (O(n) worst case). Note this assumes both nodes are present; if that's not guaranteed you need the two-pass \"count matches\" variant.",
+      "followUps": [
+        "What changes if `p` or `q` might be absent? (Count found nodes first, then LCA.)",
+        "Now `p` is guaranteed to be an ancestor of `q` — how much simpler does it get?",
+        "LCA in a *binary search tree* — why is the range check enough?"
+      ],
+      "starter": "fun lowestCommonAncestor(root: TreeNode?, p: TreeNode, q: TreeNode): TreeNode? {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0039",
+      "track": "dsa",
+      "topic": "Binary trees",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Tree / recursion",
+      "tags": [
+        "tree"
+      ],
+      "q": "Diameter of a Binary Tree",
+      "prompt": "Given a binary tree, return its diameter: the length of the longest path between any two nodes (in edges).\n\nThe classic \"height with a side effect\" pattern: the diameter through a node is `leftHeight + rightHeight`, and the global answer is the max over all nodes. You compute height recursively and update the max on the way up.",
+      "hints": [
+        "The longest path passes through some node and goes down into both its subtrees. How long is the path through a given node?",
+        "Path length through a node = height(left) + height(right). The answer is the max of that over all nodes.",
+        "Write `height(n)` returning max depth, but update a running `best = max(best, l + r)` inside it. Single O(n) pass."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Height recursion with a side effect — O(n)",
+          "src": "fun diameterOfBinaryTree(root: TreeNode?): Int {\n    var best = 0\n    fun height(n: TreeNode?): Int {\n        if (n == null) return 0\n        val l = height(n.left)\n        val r = height(n.right)\n        best = maxOf(best, l + r)\n        return 1 + maxOf(l, r)\n    }\n    height(root)\n    return best\n}"
+        }
+      ],
+      "complexity": "Time O(n) — each node visited once. Space O(height) recursion. The two-pass (compute all heights then re-scan) is a common but worse answer; a single pass with a captured max is the point.",
+      "followUps": [
+        "Return the actual path (nodes) of the diameter, not just the length.",
+        "Diameter counting *nodes* vs *edges* — off-by-one discussion.",
+        "Longest path in a *weighted* tree."
+      ],
+      "starter": "fun diameterOfBinaryTree(root: TreeNode?): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0040",
+      "track": "dsa",
+      "topic": "Binary trees",
+      "level": 4,
+      "type": "dsa",
+      "pattern": "Tree / serialization",
+      "tags": [
+        "tree",
+        "serialization"
+      ],
+      "q": "Serialize and Deserialize a Binary Tree",
+      "prompt": "Design `serialize(root): String` and `deserialize(data): TreeNode?` for a binary tree. Any unambiguous format is acceptable; standard is pre-order with null markers (`\"1,2,null,null,3,4,null,null,5,null,null\"`).\n\nThe interview value is the encoding discipline: pre-order plus null markers makes the string uniquely reconstructible, and the deserializer consumes the token stream in the same order. This is the file-format design question of tree interviews.",
+      "hints": [
+        "In-order alone is ambiguous for a tree — you need something that fixes the structure. What does pre-order + explicit nulls give you?",
+        "Pre-order: node, then left subtree (fully, including its nulls), then right. A single pass writes it; a single pass reads it.",
+        "Deserialize with an index into the split tokens: read a token, if `\"null\"` return null, else build the node and recurse left then right. An `ArrayDeque` of tokens makes the recursion trivial."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Pre-order with null markers",
+          "src": "fun serialize(root: TreeNode?): String {\n    val sb = StringBuilder()\n    fun dfs(n: TreeNode?) {\n        if (n == null) { sb.append(\"null,\"); return }\n        sb.append(n.value).append(',')\n        dfs(n.left)\n        dfs(n.right)\n    }\n    dfs(root)\n    return sb.toString()\n}\n\nfun deserialize(data: String): TreeNode? {\n    val q = ArrayDeque(data.split(',').filter { it.isNotEmpty() })\n    fun build(): TreeNode? {\n        val t = q.removeFirst()\n        if (t == \"null\") return null\n        val node = TreeNode(t.toInt())\n        node.left = build()\n        node.right = build()\n        return node\n    }\n    return build()\n}"
+        }
+      ],
+      "complexity": "Time O(n) both ways. Space O(n) for the string and recursion stack. Level-order serialization also works and is what production caches tend to use — mention the trade-off.",
+      "followUps": [
+        "Serialize to a more compact form (omit trailing nulls / use a length prefix).",
+        "Serialize a *BST* — can you drop the nulls entirely?",
+        "Why not use in-order + another traversal? What ambiguity remains?"
+      ],
+      "starter": "fun serialize(root: TreeNode?): String {\n    // your solution\n}\nfun deserialize(data: String): TreeNode? {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin ArrayDeque",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
+          "checked": "2026-08-13"
+        }
+      ]
+    }
+  ]
+}

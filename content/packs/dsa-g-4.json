@@ -1,0 +1,294 @@
+{
+  "id": "dsa-g-4",
+  "title": "Problem Solving",
+  "track": "dsa",
+  "items": [
+    {
+      "id": "ds-0041",
+      "track": "dsa",
+      "topic": "Tries",
+      "level": 4,
+      "type": "dsa",
+      "pattern": "Trie / backtracking",
+      "tags": [
+        "trie",
+        "backtracking"
+      ],
+      "q": "Word Search II — trie-pruned grid search",
+      "prompt": "Given a `board: Array<CharArray>` and a `List<String>` of words, return all words that can be built from adjacent (up/down/left/right) cells, each cell used at most once per word.\n\nNaive: run the single-word DFS (Word Search I) for each word — O(words × board × 4^len). The trick is to build a trie of all words first and walk the grid once, pruning branches the moment the current prefix stops being a trie prefix. That's the difference between an interview answer that scales and one that doesn't.",
+      "hints": [
+        "Running DFS per word is correct but slow. What structure can answer 'is this prefix worth pursuing?' in O(1)?",
+        "A trie of the word list. DFS over the grid, extending the current trie node as you move cells.",
+        "Pass the trie node down the recursion; if a child letter is absent, prune. Mark cells visited with a temp char to avoid per-path visited sets; collect full words when you reach an end-of-word node."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Trie-pruned grid DFS",
+          "src": "class TrieNode {\n    val next = HashMap<Char, TrieNode>()\n    var word: String? = null\n}\n\nfun findWords(board: Array<CharArray>, words: List<String>): List<String> {\n    val root = TrieNode()\n    for (w in words) {\n        var n = root\n        for (c in w) n = n.next.getOrPut(c) { TrieNode() }\n        n.word = w\n    }\n    val res = mutableListOf<String>()\n    val dirs = listOf(0 to 1, 0 to -1, 1 to 0, -1 to 0)\n    fun dfs(r: Int, c: Int, node: TrieNode) {\n        val ch = board[r][c]\n        val child = node.next[ch] ?: return\n        child.word?.let { res += it; child.word = null }  // dedupe\n        board[r][c] = '#'\n        for ((dr, dc) in dirs) {\n            val nr = r + dr; val nc = c + dc\n            if (nr in board.indices && nc in board[0].indices && board[nr][nc] != '#') {\n                dfs(nr, nc, child)\n            }\n        }\n        board[r][c] = ch\n    }\n    for (r in board.indices) for (c in board[0].indices) dfs(r, c, root)\n    return res\n}"
+        }
+      ],
+      "complexity": "Time O(rows·cols·4·L) in practice — each grid cell starts a DFS that gets pruned by the trie; worst case is better than the per-word O(W·4^L). Space O(total word chars) for the trie plus recursion depth.",
+      "followUps": [
+        "Why set `child.word = null` after collecting? (Duplicate words from different paths.)",
+        "What if words overlap heavily — how does the trie amortize the cost?",
+        "Backtracking with a visited set vs in-place '#' mutation — trade-offs?"
+      ],
+      "starter": "fun findWords(board: Array<CharArray>, words: List<String>): List<String> {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0042",
+      "track": "dsa",
+      "topic": "Graphs",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Graph / BFS-DFS with visited map",
+      "tags": [
+        "graph",
+        "bfs"
+      ],
+      "q": "Clone a Graph",
+      "prompt": "Given a reference to a node in an undirected graph (each node has a value and a list of neighbors), deep-copy the entire graph and return a copy of the starting node.\n\nCycles make naive recursion loop forever — you need a visited map from original node to its copy. This is the canonical \"graph deep copy\" and the same map discipline as ds-0036 (copy list with random pointer).",
+      "hints": [
+        "Copying the root then recursing on neighbors loops forever on cycles. What breaks the cycle?",
+        "A `HashMap<Node, Node>` from original to copy, checked before recursing: if we've made it, return the copy.",
+        "Use DFS or BFS; the map is the identity. First touch of a node: create its copy, put it in the map, then process neighbors through `map.getOrPut`."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "DFS with a visited map — O(V + E)",
+          "src": "class GNode(val value: Int) { val neighbors = mutableListOf<GNode>() }\n\nfun cloneGraph(node: GNode?): GNode? {\n    if (node == null) return null\n    val seen = HashMap<GNode, GNode>()\n    fun clone(n: GNode): GNode {\n        seen[n]?.let { return it }\n        val copy = GNode(n.value)\n        seen[n] = copy\n        for (nb in n.neighbors) copy.neighbors += clone(nb)\n        return copy\n    }\n    return clone(node)\n}"
+        }
+      ],
+      "complexity": "Time O(V + E), space O(V) for the map plus recursion depth. State that the map is the entire trick — without it, undirected edges recurse forever.",
+      "followUps": [
+        "What happens without the visited map on a two-node cycle?",
+        "BFS version — where does the map check go?",
+        "Clone a *directed* graph — does anything change?"
+      ],
+      "starter": "fun cloneGraph(node: GNode?): GNode? {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0043",
+      "track": "dsa",
+      "topic": "Graphs",
+      "level": 4,
+      "type": "dsa",
+      "pattern": "Graph / BFS shortest path",
+      "tags": [
+        "graph",
+        "bfs"
+      ],
+      "q": "Word Ladder — shortest transformation sequence",
+      "prompt": "Given `beginWord`, `endWord`, and a `wordList`, return the length of the shortest transformation sequence from `begin` to `end`, where each step changes exactly one letter and every intermediate word must be in the list. Return 0 if impossible.\n\nThe insight: this is unweighted shortest path on a graph of words — BFS. The optimization (bidirectional BFS) is the level-4 differentiator; mention it even if you code the one-directional version first.",
+      "hints": [
+        "Model each word as a node, edges between words differing by one letter. Shortest path in an unweighted graph = BFS.",
+        "Enumerate neighbors cheaply: for each position, replace the letter with every 'a'..'z' and look up in a set — O(26·L) per word instead of O(words).",
+        "Level count: BFS in layers, distance + 1 per layer. Then say: bidirectional BFS from both ends cuts the frontier dramatically."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "BFS over wildcard neighbors — O(n·26·L)",
+          "src": "fun ladderLength(begin: String, end: String, wordList: List<String>): Int {\n    val words = wordList.toHashSet()\n    if (end !in words) return 0\n    val q = ArrayDeque<String>()\n    q.add(begin)\n    var dist = 1\n    while (q.isNotEmpty()) {\n        repeat(q.size) {\n            val w = q.removeFirst()\n            if (w == end) return dist\n            val chars = w.toCharArray()\n            for (i in chars.indices) {\n                val orig = chars[i]\n                for (c in 'a'..'z') {\n                    chars[i] = c\n                    val nxt = String(chars)\n                    if (words.remove(nxt)) q.addLast(nxt)  // remove = visited\n                }\n                chars[i] = orig\n            }\n        }\n        dist++\n    }\n    return 0\n}"
+        }
+      ],
+      "complexity": "Time O(n · 26 · L) for the one-directional BFS (n words, L length), space O(n). Bidirectional BFS is the same worst case but typically far fewer expansions — the expected interview follow-up.",
+      "followUps": [
+        "Return the actual transformation path, not just the length.",
+        "Bidirectional BFS — when does it really win?",
+        "What if 'begin' is also in the list — does removal-as-visited break anything?"
+      ],
+      "starter": "fun ladderLength(begin: String, end: String, wordList: List<String>): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin ArrayDeque",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0044",
+      "track": "dsa",
+      "topic": "Graphs",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Graph / Dijkstra",
+      "tags": [
+        "graph",
+        "dijkstra"
+      ],
+      "q": "Network Delay Time — single-source shortest path",
+      "prompt": "You have `n` nodes and `times: List<IntArray>` of `[u, v, w]` directed edges with transmission delays. Starting from node `k`, return the time it takes for *all* nodes to receive the signal, or -1 if any node is unreachable.\n\nClassic Dijkstra. Two things to say out loud: the graph is weighted (so BFS is wrong), and \"time for all nodes\" is the maximum of the shortest paths — i.e. run Dijkstra and take the max distance.",
+      "hints": [
+        "Weights are non-negative and we need shortest paths from one source to all nodes — which algorithm?",
+        "Dijkstra with a min-heap keyed by distance. Relax edges: if `dist[u] + w < dist[v]`, update and push.",
+        "Answer = max over all `dist[]` values that got set; if any node still has infinity, return -1."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Dijkstra with a min-heap — O(E log V)",
+          "src": "fun networkDelayTime(times: List<IntArray>, n: Int, k: Int): Int {\n    val adj = HashMap<Int, MutableList<Pair<Int, Int>>>()\n    for ((u, v, w) in times) adj.getOrPut(u) { mutableListOf() } += v to w\n    val dist = IntArray(n + 1) { Int.MAX_VALUE }\n    dist[k] = 0\n    val pq = java.util.PriorityQueue<Pair<Int, Int>>(compareBy { it.second })  // (node, dist)\n    pq.add(k to 0)\n    while (pq.isNotEmpty()) {\n        val (u, d) = pq.poll()\n        if (d > dist[u]) continue   // stale entry\n        for ((v, w) in adj[u] ?: emptyList()) {\n            if (dist[u] + w < dist[v]) {\n                dist[v] = dist[u] + w\n                pq.add(v to dist[v])\n            }\n        }\n    }\n    val max = dist.drop(1).max()\n    return if (max == Int.MAX_VALUE) -1 else max\n}"
+        }
+      ],
+      "complexity": "Time O(E log V), space O(V + E). Mention the stale-entry skip (`if d > dist[u] continue`) — interviewers love to see it explained rather than written by rote.",
+      "followUps": [
+        "Why can't BFS handle weighted edges?",
+        "What if some edges have negative weights? (Dijkstra breaks — Bellman-Ford.)",
+        "Return the path from k to a target node, not just the time."
+      ],
+      "starter": "fun networkDelayTime(times: List<IntArray>, n: Int, k: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "PriorityQueue (Java)",
+          "url": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0045",
+      "track": "dsa",
+      "topic": "Graphs",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Graph / topological sort",
+      "tags": [
+        "graph",
+        "topological"
+      ],
+      "q": "Course Schedule II — return a valid order",
+      "prompt": "There are `n` courses labeled 0..n-1 and prerequisites `[[a,b]]` meaning course `b` must be taken before `a`. Return a valid ordering of all courses, or an empty list if it's impossible.\n\nCourse Schedule I (ds-0011) just asks *can* you finish; this one asks for the actual topological order. Kahn's algorithm (in-degree + queue) or DFS with colors. You should be able to write Kahn's and explain cycle detection in the same breath.",
+      "hints": [
+        "Topological order = an ordering where every edge points forward. When the graph is a DAG, Kahn's works.",
+        "Compute in-degrees, enqueue all in-degree-0 nodes. Pop one, append to result, decrement its neighbors' in-degrees, enqueue any that hit 0.",
+        "If the result has fewer than n nodes, there was a cycle — return an empty list. That's the impossibility check."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Kahn's algorithm — O(V + E)",
+          "src": "fun findOrder(numCourses: Int, prerequisites: Array<IntArray>): IntArray {\n    val adj = Array(numCourses) { mutableListOf<Int>() }\n    val indeg = IntArray(numCourses)\n    for ((a, b) in prerequisites) { adj[b] += a; indeg[a]++ }\n    val q = ArrayDeque<Int>()\n    indeg.indices.filter { indeg[it] == 0 }.forEach { q.addLast(it) }\n    val order = mutableListOf<Int>()\n    while (q.isNotEmpty()) {\n        val u = q.removeFirst()\n        order += u\n        for (v in adj[u]) if (--indeg[v] == 0) q.addLast(v)\n    }\n    return if (order.size == numCourses) order.toIntArray() else intArrayOf()\n}"
+        }
+      ],
+      "complexity": "Time O(V + E), space O(V + E) for adjacency plus O(V) for the queue and result. Kahn's is the answer to prefer on the board — it makes the cycle check automatic.",
+      "followUps": [
+        "How does the result size detect a cycle? Trace a 2-node cycle.",
+        "Return the lexicographically smallest valid order (use a min-heap instead of a queue).",
+        "DFS-with-colors variant — where does a back edge signal the cycle?"
+      ],
+      "starter": "fun findOrder(numCourses: Int, prerequisites: Array<IntArray>): IntArray {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin ArrayDeque",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0046",
+      "track": "dsa",
+      "topic": "Graphs",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Graph / union-find",
+      "tags": [
+        "graph",
+        "union-find"
+      ],
+      "q": "Redundant Connection — find the edge that closes a cycle",
+      "prompt": "A tree of `n` nodes has exactly one extra edge added, producing a graph with exactly one cycle. Given the edge list `edges: Array<IntArray>` in order, return the edge that appears last in the input and could be removed to restore a tree.\n\nUnion-Find with path compression is the intended answer: add edges one at a time; the first edge whose two endpoints are *already connected* is the answer. Learn this alongside ds-0012 (number of islands) — they share the same data structure.",
+      "hints": [
+        "Adding edges one by one, a cycle forms the moment you connect two nodes already in the same set.",
+        "Union-Find: `find(x)` with path compression, `union(a, b)`. Iterate edges; if `find(a) == find(b)`, that edge is redundant.",
+        "Use a `parent: IntArray` initialized to `it`, and union by rank or size to keep the tree shallow."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Union-Find with path compression — near O(n)",
+          "src": "fun findRedundantConnection(edges: Array<IntArray>): IntArray {\n    val parent = IntArray(edges.size + 1) { it }\n    fun find(x: Int): Int {\n        var r = x\n        while (parent[r] != r) r = parent[r]\n        var cur = x\n        while (parent[cur] != r) { val nxt = parent[cur]; parent[cur] = r; cur = nxt }\n        return r\n    }\n    for ((a, b) in edges) {\n        val ra = find(a); val rb = find(b)\n        if (ra == rb) return intArrayOf(a, b)\n        parent[ra] = rb\n    }\n    return intArrayOf()\n}"
+        }
+      ],
+      "complexity": "Time O(n · α(n)) with path compression (inverse-Ackermann, effectively constant), space O(n). The DFS-with-visit-set alternative is O(n²) because it re-traverses per edge.",
+      "followUps": [
+        "Why 'last edge in input order' — what does the ordering guarantee?",
+        "Return the edge that would break the graph into two components instead (same set check).",
+        "Path compression alone vs union by rank — what does each buy?"
+      ],
+      "starter": "fun findRedundantConnection(edges: Array<IntArray>): IntArray {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library — IntArray",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int-array/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0047",
+      "track": "dsa",
+      "topic": "Backtracking",
+      "level": 4,
+      "type": "dsa",
+      "pattern": "Backtracking / constraints",
+      "tags": [
+        "backtracking",
+        "matrix"
+      ],
+      "q": "N-Queens — place queens without attacks",
+      "prompt": "Place `n` queens on an n×n board so no two attack each other (same row, column, or diagonal). Return all distinct solutions as boards of '.' and 'Q'.\n\nThe canonical constraint-backtracking problem. The level-4 crux is tracking the three attack lines (column, main diagonal, anti-diagonal) with arrays so the check is O(1), and pruning as soon as a placement is illegal — never filling a full board to test it.",
+      "hints": [
+        "Place one queen per row, and only try safe columns. This already prevents same-row and same-column attacks.",
+        "A queen attacks along diagonals too. Two cells `(r,c)` and `(r2,c2)` share a diagonal iff `r-c` (main) or `r+c` (anti) are equal — track both with sets.",
+        "Recursion: at row r, try each safe column, mark the three lines, recurse, then unmark (backtrack). Collect when r == n."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Backtracking with attack-line sets — O(n!)",
+          "src": "fun solveNQueens(n: Int): List<List<String>> {\n    val cols = BooleanArray(n)\n    val diag = HashSet<Int>()\n    val anti = HashSet<Int>()\n    val board = Array(n) { CharArray(n) { '.' } }\n    val res = mutableListOf<List<String>>()\n    fun place(r: Int) {\n        if (r == n) { res += board.map { it.joinToString(\"\") }; return }\n        for (c in 0 until n) {\n            val d = r - c; val a = r + c\n            if (cols[c] || d in diag || a in anti) continue\n            board[r][c] = 'Q'; cols[c] = true; diag += d; anti += a\n            place(r + 1)\n            board[r][c] = '.'; cols[c] = false; diag.remove(d); anti.remove(a)\n        }\n    }\n    place(0)\n    return res\n}"
+        }
+      ],
+      "complexity": "Time O(n!) worst case (n queens, pruning helps), space O(n) for the recursion plus the output. The O(1) attack checks — three lines instead of scanning the board — are the point of the exercise.",
+      "followUps": [
+        "Why `r-c` and `r+c` for the diagonals? Convince with an example.",
+        "Return the count of solutions only (N-Queens II) — same engine.",
+        "How does the pruning change if queens are all in the same row to start (n-rooks)?"
+      ],
+      "starter": "fun solveNQueens(n: Int): List<List<String>> {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-13"
+        }
+      ]
+    }
+  ]
+}

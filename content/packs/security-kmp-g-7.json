@@ -1,0 +1,346 @@
+{
+  "id": "security-kmp-g-7",
+  "title": "Security, KMP & Modern Android",
+  "track": "security-kmp",
+  "items": [
+    {
+      "id": "sk-0064",
+      "track": "security-kmp",
+      "topic": "Threat modeling",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "threat-modeling",
+        "stride",
+        "security"
+      ],
+      "q": "Walk me through threat modeling a mobile feature. Pick a feature and show the analysis end to end.",
+      "shortAnswer": [
+        "Threat modeling is: enumerate assets and entry points, identify threats, assess likelihood and impact, then pick mitigations — and it must produce an action, not a document.",
+        "STRIDE (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) is the standard lens for *what* can go wrong; a data-flow diagram is the map you apply it to.",
+        "For an offline photo backup feature the highest-value threats are a token leak leading to account takeover, unencrypted data at rest if the device is stolen, and an unbounded upload queue that keeps retrying into a metered network."
+      ],
+      "answer": "#### Pick the feature and name assets\nTake offline photo backup. Assets: the auth token, the photos themselves, the upload queue state, and the user's cloud account. Entry points: the app's upload endpoint, the local camera-roll scanner, the sync trigger (network events, WorkManager), and any deep link into settings.\n\n#### Draw the data flow\nCamera roll → scanner → encryption → queue (Room) → uploader (WorkManager) → cloud, with the token attached at the network layer. Apply STRIDE per edge:\n\n- **Spoofing** — a malicious app on the same device sending forged intent extras to trigger a fake 'upload complete'? Not really a spoofing surface; the real one is a leaked token letting an attacker present as the user.\n- **Tampering** — photo bytes modified in the local cache before upload; mitigated with TLS and, if integrity matters, checksums.\n- **Repudiation** — no way to prove a photo was uploaded by whom; mitigations are server-side, not client-side.\n- **Information disclosure** — the big one: photos at rest on disk unencrypted, or the token logged in Crashlytics. Mitigate with Keystore-backed encryption at rest and never logging credentials.\n- **Denial of service** — the queue hammering a metered/cellular network without checks; mitigations are WorkManager network constraints and backoff.\n- **Elevation of privilege** — a bug in the exported upload receiver letting another app trigger privileged uploads.\n\n#### Score and act\nRate each by likelihood × impact, fix the top three, and note the accepted residual risks. The deliverable is the top-three list and the controls, not the diagram itself.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The controls the model produced, in one place",
+          "src": "// 1. Information disclosure — encrypt at rest (Keystore-backed key)\nval secretKey = SecretKeyFactory.getInstance(\"AES\")...\n// 2. Token hygiene — never log, never in plaintext prefs\nLog.d(TAG, \"upload started\")            // no token, no photo id\n// 3. DoS — constrain the queue to unmetered or user-approved networks\nval constraints = Constraints.Builder()\n    .setRequiredNetworkType(NetworkType.UNMETERED)\n    .build()"
+        }
+      ],
+      "followUps": [
+        "Where does likelihood × impact ranking actually change what you ship?",
+        "Which of these threats would you accept, and how do you make that decision defensible?",
+        "How does a data-flow diagram change when the app is offline-first?"
+      ],
+      "traps": [
+        "Producing a generic STRIDE list instead of grounding it in this feature's concrete data flow and assets.",
+        "Ending with the threat list and never saying which controls you'd actually ship and which risks you'd accept."
+      ],
+      "refs": [
+        {
+          "title": "Mobile Application Security Verification Standard",
+          "url": "https://mas.owasp.org/",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Safeguarding against security threats",
+          "url": "https://developer.android.com/privacy-and-security/security-threats",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0065",
+      "track": "security-kmp",
+      "topic": "Secure networking",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "kmp",
+        "ktor",
+        "tls",
+        "pinning"
+      ],
+      "q": "How does secure networking differ across Android and iOS in a KMP app? Where does TLS and certificate pinning actually live?",
+      "shortAnswer": [
+        "TLS is provided by the platform either way, but the client stacks differ: OkHttp on Android and the platform's NSURLSession-backed engine in Ktor on iOS — so TLS trust and pinning behave differently per platform.",
+        "Certificate pinning in KMP lives at the client-stack level, not in shared Kotlin: on Android configure OkHttp's CertificatePinner, on iOS provide a pinned evaluation through Ktor's engine or the network security config.",
+        "The shared code owns the contract (which hosts are pinned) and each platform owns the enforcement, which is why you must test both platforms separately."
+      ],
+      "answer": "#### What KMP shares\nKtor gives you a single API for HTTP across platforms, but the actual TLS handshake and trust store are platform-native: on Android the default engine wraps **OkHttp**; on iOS it wraps `NSURLSession`. That means anything TLS-adjacent — certificate validation, pinning, client certs — is not portable code, it's per-platform configuration.\n\n#### Pinning on Android\nOkHttp's `CertificatePinner` pins by host to a set of public-key SPKI hashes. The network security config can also pin via `res/xml/network_security_config.xml`, which has the advantage of being declarative and having debug-override support. Prefer pinning the **public key** rather than the whole cert so rotation doesn't break clients.\n\n#### Pinning on iOS\nKtor on Darwin delegates to `NSURLSession`, which has no equivalent of OkHttp's `CertificatePinner`. You implement a `URLAuthenticationChallenge` handler via `NSURLSessionDelegate` (or the Ktor engine's `sslContext`/session delegate) and compare the presented certificate against pinned SPKI hashes. Because iOS ships its own trust evaluation, the behavior genuinely differs — a pin that works on Android is not automatically enforced on iOS.\n\n#### The shared contract\nKeep a single source of truth for pinned host + hash sets in commonMain, and have each platform's networking layer read it. That way the *policy* is shared and auditable, while enforcement stays where the platform demands it.\n\n#### When pinning is wrong\nPinning adds real operational risk (a pin mishap bricks the client until an app update). For most apps, relying on platform TLS plus certificate transparency is correct; pin only for high-value endpoints and design in a pin-rotation path.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "OkHttp pinning on Android, policy shared from commonMain",
+          "src": "// commonMain — the policy\nobject PinnedHosts {\n    const val API_HOST = \"api.example.com\"\n    const val SPKI_SHA256 = \"sha256/47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\"\n}\n\n// androidMain — enforcement via OkHttp\nval client = OkHttpClient.Builder()\n    .certificatePinner(\n        CertificatePinner.Builder()\n            .add(PinnedHosts.API_HOST, PinnedHosts.SPKI_SHA256)\n            .build()\n    )\n    .build()"
+        }
+      ],
+      "followUps": [
+        "Why pin the public key hash rather than the whole certificate?",
+        "How would you rotate a pinned certificate without breaking existing installs?",
+        "What does the network security config give you that OkHttp pinning does not?"
+      ],
+      "traps": [
+        "Claiming 'we pin in shared Kotlin' — enforcement is necessarily platform-specific in practice.",
+        "Not having a rotation plan; pinning without one is a self-inflicted outage."
+      ],
+      "refs": [
+        {
+          "title": "Network security configuration",
+          "url": "https://developer.android.com/privacy-and-security/security-config",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Ktor Client — engines",
+          "url": "https://ktor.io/docs/client-engines.html",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0066",
+      "track": "security-kmp",
+      "topic": "Secrets",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "secrets",
+        "config",
+        "security"
+      ],
+      "q": "What should and shouldn't go in your app binary? Walk me through a secrets policy.",
+      "shortAnswer": [
+        "Nothing secret belongs in the APK: anything compiled into the app can be extracted by anyone who downloads it, so treat every client-side value as public.",
+        "What belongs in the binary is non-secret configuration — API hosts, feature-flag defaults, non-secret app ids — while real secrets (tokens, signing keys, API keys that gate server-side access) must live server-side and be issued at runtime.",
+        "The practical policy: if its disclosure causes real harm, it must be server-held; if disclosure is merely ugly, obfuscation and R8 shrinking reduce the casual-reader exposure but are defense in depth, not protection."
+      ],
+      "answer": "#### The core rule\nAnything in the APK is extractable. `dex` files, resources, and even obfuscated Kotlin can be pulled with `apktool` or a decompiler. So the first question is never 'how do I hide it' but 'does this need to be secret at all'.\n\n#### What goes in the binary\n- Non-secret configuration: API base URLs, public hostnames, product flags, analytics app ids, `.well-known`-style public identifiers.\n- Build-config values that are not credentials (`BuildConfig.APPLICATION_ID`, version codes).\n- Public keys used to *verify* signatures (a public key is public by design).\n\n#### What never goes in\n- Signing/upload keys (Play App Signing holds them; you keep the upload key out of the repo).\n- A service account key or a 'shared secret' that the server uses to trust the client.\n- A client ID + secret pair (OAuth2). On mobile, use PKCE — the client secret is a fiction.\n- Firebase config values that are actually keys. Use the recommended keyless setup or a backend-proxied flow.\n\n#### Where the runtime secret lives\nIssued after auth and stored in Keystore/Keychain-protected storage (encrypted prefs or the dedicated credential managers). It is *created at runtime by the server*, never compiled in.\n\n#### The honest mitigations\nR8 shrinking and ProGuard obfuscation raise the bar for casual extraction, and string obfuscation can complicate automated scraping — but they are speed bumps. The only real control for a genuinely secret value is keeping it off the device.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The difference between config and secret",
+          "src": "// FINE — non-secret configuration, safe in BuildConfig/resources\nconst val API_BASE_URL = \"https://api.example.com/\"\n\n// WRONG — a real secret compiled into the app\nconst val SERVICE_ACCOUNT_KEY = \"...\"\n\n// RIGHT — the server issues a session token at runtime\nval token = authApi.login(username, password)\nval secureStore = EncryptedStore(context)   // Keystore-backed\nsecureStore.save(\"session_token\", token)"
+        }
+      ],
+      "followUps": [
+        "What does 'keyless' Firebase configuration actually do server-side?",
+        "Why is a client-side API key useless if the server trusts the client?",
+        "How does Play App Signing change where your signing key lives?"
+      ],
+      "traps": [
+        "Saying 'we obfuscate it' as if that makes a secret safe — obfuscation is defense in depth.",
+        "Storing a client-secret-style key and believing OAuth is secure because of it, when PKCE is the correct pattern."
+      ],
+      "refs": [
+        {
+          "title": "Firebase configuration — keyless setup",
+          "url": "https://firebase.google.com/docs/projects/api-keys",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Safeguarding against security threats",
+          "url": "https://developer.android.com/privacy-and-security/security-threats",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0067",
+      "track": "security-kmp",
+      "topic": "Code review",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "code-review",
+        "audit",
+        "auth",
+        "security"
+      ],
+      "q": "You're reviewing a pull request that touches auth and stored data. What do you look for, and in what order?",
+      "shortAnswer": [
+        "Start with the data flow: how credentials arrive, where they're stored, and who can read them — a review is a threat model focused on the diff.",
+        "Then check the storage primitive itself (Keystore-backed vs plaintext, key alias handling, exportability), then token/credential handling (logging, lifecycle, refresh, revocation).",
+        "Finally check the surrounding surface: exported components, PendingIntent mutability, deep-link handling, and that error paths don't leak or bypass the security decision."
+      ],
+      "answer": "#### Order the review like an attack\n1. **Diff against the threat model.** What asset does this code handle, and what new attack surface does it add? If the PR touches auth or stored data and can't say, that's the first problem.\n\n2. **Storage primitive.** Is the credential in Keystore/Keychain-backed storage, or plaintext prefs/SQLite? Is the key alias constant and non-exportable (`setIsStrongBoxBacked`, `setUserAuthenticationRequired`)? Did they write their own crypto? Any homemade AES is an automatic fail.\n\n3. **Credential lifecycle.** Is the token logged anywhere (including analytics or Crashlytics breadcrumbs)? Does refresh rotation invalidate the old token? Does logout wipe storage AND invalidate server-side? Is the token attached to the right network client and stripped from logs?\n\n4. **Exported surface.** New `exported=true` components, intent redirection (implicit intents to internal components — blocked since Android 14), `PendingIntent` mutability (`FLAG_IMMUTABLE` unless a dynamic fill is truly needed), deep links that accept attacker-controlled input.\n\n5. **Error and authz paths.** Do error handlers leak internal detail? Does every sensitive screen re-check auth on arrival, or trust navigation state that a deep link could have forged? Is authorization enforced server-side rather than hidden in the UI?\n\n6. **Tests.** Is there a test that proves a denied path stays denied? Fuzz/parameter validation on any user-supplied input that reaches storage or the network.\n\n#### What you actually write\nComment on the concrete failure mode with the fix, and gate on the storage + lifecycle + exported-surface findings. The rest is discussion.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The storage pattern that passes review",
+          "src": "val keyAlias = \"auth_token_key\"\nval keyGen = KeyGenerator.getInstance(\"AES\", \"AndroidKeyStore\")\nkeyGen.init(\n    KeyGenParameterSpec.Builder(keyAlias, PURPOSE_ENCRYPT or PURPOSE_DECRYPT)\n        .setBlockModes(\"GCM\")\n        .setEncryptionPaddings(\"NoPadding\")\n        .setUserAuthenticationRequired(false)  // decide deliberately\n        .build()\n)\nval cipher = Cipher.getInstance(\"AES/GCM/NoPadding\")\ncipher.init(Cipher.ENCRYPT_MODE, keyGen.generateKey())\n// never log cipher.init(iv) or the token"
+        }
+      ],
+      "followUps": [
+        "What makes a homemade crypto implementation an automatic reject?",
+        "How would you prove authorization is enforced server-side in review?",
+        "What do you do when the PR author pushes back that 'it works fine'?"
+      ],
+      "traps": [
+        "Reviewing line-by-line instead of along the data flow — you'll miss the systemic issues.",
+        "Approving because 'tests pass' when there's no test for the denied path."
+      ],
+      "refs": [
+        {
+          "title": "Safeguarding against security threats",
+          "url": "https://developer.android.com/privacy-and-security/security-threats",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Android Keystore",
+          "url": "https://developer.android.com/privacy-and-security/keystore",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0068",
+      "track": "security-kmp",
+      "topic": "Play Integrity",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "play-integrity",
+        "safetynet",
+        "attestation"
+      ],
+      "q": "Walk me through migrating from SafetyNet to the Play Integrity API. What does it actually prove, and how do you verify server-side?",
+      "shortAnswer": [
+        "Play Integrity is the replacement for SafetyNet Attestation: it returns signed integrity verdicts covering app authenticity, device integrity, and account licensing, and SafetyNet is being turned down.",
+        "The critical discipline is server-side verification — the client's integrity token must be sent to your backend and validated there using the Google API, never trusted on-device.",
+        "Each request type gives a verdict (MEETS_DEVICE_INTEGRITY etc.); you should request the types you need, cache appropriately, and treat a failed verdict as 'don't trust', not 'hard block'."
+      ],
+      "answer": "#### Why migrate\nSafetyNet Attestation is deprecated and being shut down; Play Integrity API is its replacement, with device, app, and account signals plus support for testing via test labels.\n\n#### What it proves\nThe API returns a signed token containing **request details** (your package name, request hash, timestamp), **device integrity** (MEETS_DEVICE_INTEGRITY / MEETS_STRONG_INTEGRITY / MEETS_BASIC_INTEGRITY, or failure), **app integrity** (your app signature matched), and **account details** (licensing). It does NOT prove the user is not rooted — verdicts are probabilistic signals, and strong integrity isn't available on all devices.\n\n#### The correct flow\n1. Client requests a verdict for a request (API call with a nonce bound to it).\n2. Client sends the integrity token to your **server**.\n3. Server calls the Play Integrity API with the token and your service-account credentials, decodes the verdict, and checks: package name matches, request hash matches, and the required integrity levels hold.\n4. Server makes the authorization decision. Never trust a client-side parse.\n\n#### Practical guidance\n- Request the minimum types you need (often DEVICE + APP).\n- Cache verdicts briefly to avoid rate limits, but re-check for sensitive actions.\n- Treat verdicts as 'the caller is who they say they are' — not a defense against a determined attacker. Combine with backend abuse detection.\n- Use `Environment.LOCAL_TESTING` / test verdicts in dev.\n\n#### Comparison to SafetyNet\nSafetyNet returned a JWS you verified server-side the same way; Play Integrity adds request details and account signals, so migrating is mostly swapping the client call and endpoint.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Server-side verification shape (pseudo-backend check)",
+          "src": "// The server never trusts the client's token directly:\n// POST /api/verifyIntegrity  { nonce, integrityToken }\n// 1. Call Play Integrity API with service-account creds\n// verdict = integrityService.v1().decodeIntegrityToken(token)\n// 2. Assert the request details\nassert(verdict.requestDetails.packageName == \"com.example.app\")\nassert(verdict.requestDetails.requestHash == sha256(nonce))\n// 3. Assert integrity types you require\nassert(\"MEETS_DEVICE_INTEGRITY\" in verdict.deviceIntegrity.tokenVerificationErrorList"
+        }
+      ],
+      "followUps": [
+        "Why is verifying on the client a false sense of security?",
+        "What is the request hash/nonce for, and what happens if you skip it?",
+        "How do test verdicts change your CI story?"
+      ],
+      "traps": [
+        "Presenting the client verdict as proof of 'not rooted' — it's a signal, and strong integrity isn't universal.",
+        "Verifying the token only on-device; the token is meaningless if the attacker controls the client."
+      ],
+      "refs": [
+        {
+          "title": "Play Integrity API",
+          "url": "https://developer.android.com/google/play/integrity",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "SafetyNet deprecation",
+          "url": "https://developer.android.com/privacy-and-security/safetynet/deprecation",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0069",
+      "track": "security-kmp",
+      "topic": "Secure state",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "kmp",
+        "keychain",
+        "keystore",
+        "tokens"
+      ],
+      "q": "In a shared KMP codebase, where do tokens and keys actually live on Android vs iOS?",
+      "shortAnswer": [
+        "On Android, credentials go in Keystore-backed storage (an encrypted preference store like EncryptedSharedPreferences' replacement or explicit Keystore-wrapped data); on iOS the equivalent is the Keychain.",
+        "The KMP pattern is an expect/actual (or interface + platform factory) exposing a secure-storage API: commonMain defines it, androidMain backs it with the Keystore, iosMain backs it with Keychain (via KeychainServices/Security framework interop).",
+        "The security properties differ per platform — Keychain items survive app uninstall by default and are system-backed, while Android Keystore keys are per-app and disappear with the app — so 'where tokens live' is genuinely platform-specific."
+      ],
+      "answer": "#### The platform reality\nThere is no cross-platform secure store. Android's model is a hardware/software **Keystore** for keys plus encrypted storage for blobs; iOS's is the **Keychain** — a system-managed, hardware-backed store with its own item-access policy.\n\n#### Android\nKeep the key in the Android Keystore (non-extractable), use it to encrypt the token with `AES/GCM/NoPadding`, and persist the ciphertext (a file or DataStore). That way the raw token never sits on disk. Keystore keys are scoped to your app and removed on uninstall (unless `setKeystoreAlias`/backup options — default is app-scoped).\n\n#### iOS\nPut the token directly in the Keychain via `SecItemAdd`/`SecItemCopyMatching` through cinterop, or a wrapper. Keychain items survive app uninstall (a known gotcha — a reinstall can read stale tokens), are protected by the device's hardware, and can be scoped to `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.\n\n#### The KMP contract\nDefine a `SecureTokenStore` in commonMain with `suspend fun save(token)`, `suspend fun load(): String?`, and `suspend fun clear()`. Provide an Android impl in androidMain using the Keystore, and an iOS impl in iosMain using Keychain cinterop. Register the right one via your DI/factory in each platform's entry point.\n\n#### Differences to name in an interview\n- Uninstall behavior differs (Keychain persists, Keystore keys are app-scoped).\n- Keychain is a system service; Keystore is per-app (though a shared Keystore exists with attestation).\n- `kSecAttrAccessible` gives iOS data-protection classes; Android uses `setUserAuthenticationRequired` + StrongBox for the same intent.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The shared contract with per-platform storage",
+          "src": "// commonMain\nexpect class SecureTokenStore() {\n    suspend fun save(token: String)\n    suspend fun load(): String?\n    suspend fun clear()\n}\n\n// androidMain: AES/GCM via AndroidKeyStore, ciphertext in DataStore\n// iosMain: SecItemAdd / SecItemCopyMatching via Keychain cinterop"
+        }
+      ],
+      "followUps": [
+        "What happens to tokens on iOS after an app uninstall, and why is that dangerous?",
+        "How do you make sure a stolen device doesn't reveal the token?",
+        "When would you share a Keystore key across your own apps?"
+      ],
+      "traps": [
+        "Saying 'we store tokens in a shared store in KMP' as if that exists — secure storage is per-platform by design.",
+        "Ignoring the iOS reinstall-stale-token behavior."
+      ],
+      "refs": [
+        {
+          "title": "Android Keystore",
+          "url": "https://developer.android.com/privacy-and-security/keystore",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Keychain Services",
+          "url": "https://developer.apple.com/documentation/security/keychain_services",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0070",
+      "track": "security-kmp",
+      "topic": "KMP strategy",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "kmp",
+        "strategy",
+        "org-design"
+      ],
+      "q": "You're leading KMP adoption at a 50-engineer org. What ships first, how do you measure it, and when do you stop?",
+      "shortAnswer": [
+        "Start with a shared logic layer — pure domain, networking, serialization, and DI — wrapped behind interfaces, not a UI rewrite; that is where KMP's value is highest and risk lowest.",
+        "Measure adoption by shipped value, not by lines shared: shared-code ratio on the highest-traffic features, build health (CI time, flakiness), and regressions in per-platform quality.",
+        "Stop expanding when the cost of abstraction exceeds the savings — when platform teams are fighting the shared layer more than writing code, or when one platform's constraints dominate — and have an explicit exit/rollback decision pre-agreed."
+      ],
+      "answer": "#### Start small and honest\nKMP is a gradual-adoption technology, not a rewrite. The first target is the **data/domain layer** that's identical on both platforms: models, repositories, networking (Ktor), serialization, validation, and local storage (Room/DataStore/SQLDelight on both). Wrap it behind interfaces with platform factories (`expect/actual` or DI-selected implementations) so Android and iOS teams can consume it without ceremony.\n\n#### Sequencing\n1. A greenfield, low-coupling feature module — prove the toolchain (Gradle, source-sets, KMP library publishing) on one real feature.\n2. Extract shared networking + models for the top 2–3 features by usage.\n3. Only then consider shared UI (Compose Multiplatform), and only where the platform UX differs least.\n\n#### What you measure\n- **Shipped value**: shared-code lines on user-facing features (raw lines are vanity; % of the top-usage feature stack shared is real).\n- **Build health**: CI time, KMP target count, flakiness, and how long a change to shared code takes to land on both platforms.\n- **Quality deltas**: platform-specific bugs per feature, crash-free sessions on iOS vs before.\n- **Team friction**: time-to-share — how often platform engineers wait on the shared layer.\n\n#### When to stop\nStop when shared abstraction is costing more than it returns: platform teams re-implementing shared interfaces, one platform dictating API shapes the other has to contort around, or toolchain overhead eating the savings. Pre-agree the rollback: any shared module must be deletable (interface-sealed) within a sprint. KMP is a tool, not a strategy — the goal is shipping both platforms better, and you measure exactly that.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The seam that makes KMP adoptable and rollback-able",
+          "src": "// commonMain — shared logic behind an interface\ninterface FeedRepository {\n    suspend fun feed(page: Int): Result<Feed>\n}\n\n// androidMain / iosMain — platform implementations\n// androidMain: Room + Ktor\n// iosMain: SQLDelight + Ktor  (or a stub during phase 1)\n\n// DI selects the platform impl at each app's entry point\n// class AndroidApp : Application() {\n//     override fun onCreate() { startKoin { module { factory<FeedRepository> { AndroidFeedRepository() } } } }\n// }"
+        }
+      ],
+      "followUps": [
+        "What makes a shared module 'deletable' and why does that matter?",
+        "How do you sell KMP to an iOS team that sees it as a takeover?",
+        "What are the honest build-time costs of adding an iOS target?"
+      ],
+      "traps": [
+        "Pitching KMP as 'share all the UI' first — that's the highest-risk, lowest-confidence move.",
+        "Measuring adoption in shared lines rather than in shipped product value."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin Multiplatform",
+          "url": "https://kotlinlang.org/docs/multiplatform.html",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Share more logic between platforms",
+          "url": "https://developer.android.com/kotlin-multiplatform",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    }
+  ]
+}

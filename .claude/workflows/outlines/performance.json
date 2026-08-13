@@ -1,0 +1,111 @@
+{
+  "track": "performance",
+  "scope": [
+    "startup — cold vs warm vs hot, phases from process fork to first frame, TTID vs TTFD, reportFullyDrawn",
+    "App Startup library, what to never do in Application.onCreate, content-provider init cost, splash-screen API",
+    "Baseline Profiles and Startup Profiles — what they actually do, generating, verifying, CI integration",
+    "R8 — full mode, shrinking, obfuscation, keep rules that are too broad, resource shrinking, mapping files",
+    "debugging a release-only crash",
+    "jank — 16.6ms/8.3ms budget, frame lifecycle, dropped vs frozen frames, JankStats, UI-thread vs RenderThread jank",
+    "Perfetto and systrace — capturing, reading a trace, finding the long slice, custom trace sections",
+    "Macrobenchmark and Microbenchmark — writing one, CompilationMode, avoiding measurement mistakes, CI",
+    "Compose-specific performance — recomposition counts, unstable parameters, expensive composition",
+    "layout performance in Views (overdraw, nested weights) for legacy code",
+    "memory — profiling with Memory Profiler, heap dumps, bitmap cost and sampling, leak shapes",
+    "native memory, OOM vs LMK kill",
+    "ANR and freezing as a performance problem",
+    "battery — wakelocks, jobs, network batching, Battery Historian, excessive-wakeup metric",
+    "network performance — payload size, compression, connection reuse, prefetch vs waste",
+    "app size — APK vs AAB, dynamic feature and on-demand delivery, configuration splits, asset packs",
+    "what actually moves install conversion",
+    "disk I/O on the main thread and StrictMode",
+    "Android Vitals — bad-behaviour thresholds and how they gate discovery",
+    "setting a performance budget, regression detection, running a performance workstream",
+    "profiling in production with tracing and sampling"
+  ],
+  "specs": [],
+  "coverage": {
+    "startup — cold vs warm vs hot, phases from process fork to first frame, TTID vs TTFD, reportFullyDrawn": [
+      "pe-0001",
+      "pe-0004",
+      "pe-0009"
+    ],
+    "App Startup library, what to never do in Application.onCreate, content-provider init cost, splash-screen API": [
+      "pe-0010",
+      "pe-0011"
+    ],
+    "Baseline Profiles and Startup Profiles — what they actually do, generating, verifying, CI integration": [
+      "pe-0021",
+      "pe-0022"
+    ],
+    "R8 — full mode, shrinking, obfuscation, keep rules that are too broad, resource shrinking, mapping files": [
+      "pe-0003",
+      "pe-0023"
+    ],
+    "debugging a release-only crash": [
+      "pe-0024"
+    ],
+    "jank — 16.6ms/8.3ms budget, frame lifecycle, dropped vs frozen frames, JankStats, UI-thread vs RenderThread jank": [
+      "pe-0002",
+      "pe-0012",
+      "pe-0025",
+      "pe-0026"
+    ],
+    "Perfetto and systrace — capturing, reading a trace, finding the long slice, custom trace sections": [
+      "pe-0013",
+      "pe-0027"
+    ],
+    "Macrobenchmark and Microbenchmark — writing one, CompilationMode, avoiding measurement mistakes, CI": [
+      "pe-0014",
+      "pe-0028",
+      "pe-0029"
+    ],
+    "Compose-specific performance — recomposition counts, unstable parameters, expensive composition": [
+      "pe-0015",
+      "pe-0030",
+      "pe-0031"
+    ],
+    "layout performance in Views (overdraw, nested weights) for legacy code": [
+      "pe-0016"
+    ],
+    "memory — profiling with Memory Profiler, heap dumps, bitmap cost and sampling, leak shapes": [
+      "pe-0006",
+      "pe-0017",
+      "pe-0032"
+    ],
+    "native memory, OOM vs LMK kill": [
+      "pe-0036",
+      "pe-0037"
+    ],
+    "ANR and freezing as a performance problem": [
+      "pe-0005",
+      "pe-0033"
+    ],
+    "battery — wakelocks, jobs, network batching, Battery Historian, excessive-wakeup metric": [
+      "pe-0007",
+      "pe-0035"
+    ],
+    "network performance — payload size, compression, connection reuse, prefetch vs waste": [
+      "pe-0019",
+      "pe-0034"
+    ],
+    "app size — APK vs AAB, dynamic feature and on-demand delivery, configuration splits, asset packs": [
+      "pe-0008"
+    ],
+    "what actually moves install conversion": [
+      "pe-0040"
+    ],
+    "disk I/O on the main thread and StrictMode": [
+      "pe-0018"
+    ],
+    "Android Vitals — bad-behaviour thresholds and how they gate discovery": [
+      "pe-0020"
+    ],
+    "setting a performance budget, regression detection, running a performance workstream": [
+      "pe-0038"
+    ],
+    "profiling in production with tracing and sampling": [
+      "pe-0039"
+    ]
+  }
+}

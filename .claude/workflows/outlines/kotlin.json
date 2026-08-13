@@ -1,0 +1,577 @@
+{
+  "specs": [
+    {
+      "topic": "Null safety",
+      "level": 1,
+      "type": "qa",
+      "q": "`is`, `as`, `as?` — how do type checks and casts work, and what is a smart cast?",
+      "angle": "After `if (x is String)` the compiler inserts the checkcast for you so `x.length` compiles; `as` throws ClassCastException while `as? T ?: fallback` is the safe idiom; and `as List<String>` only warns (unchecked cast) because erasure defers the failure to the first element read."
+    },
+    {
+      "topic": "Null safety",
+      "level": 2,
+      "type": "qa",
+      "q": "When does the compiler refuse to smart-cast, and how do you work around it?",
+      "angle": "The rule is provable stability: a `var` property, an `open val` or a `val` with a custom getter, a property from another module, a delegated property, and a `var` captured-and-mutated by a lambda all block it — quote the real diagnostic ('smart cast to X is impossible because ... is a mutable property that could have been changed by this time') and fix with a local `val`, `?.let`, or a contract."
+    },
+    {
+      "topic": "Null safety",
+      "level": 4,
+      "type": "qa",
+      "q": "Which null checks does the Kotlin compiler actually emit, and where is there none?",
+      "angle": "Name the generated calls: `Intrinsics.checkNotNullParameter` on parameters of public/protected functions, `checkNotNullExpressionValue` on platform-type results, `checkNotNull` for `!!`, `throwUninitializedPropertyAccessException` for `lateinit` — and note there are none for a generic `T` (upper bound `Any?`), and that `-Xno-param-assertions`/`-Xno-call-assertions` strip them, so a declared non-null Kotlin property can genuinely hold null when populated by Gson/reflection or called from Java."
+    },
+    {
+      "topic": "Null safety",
+      "level": 3,
+      "type": "qa",
+      "q": "A Java dependency has no nullability annotations. How do you stop platform types leaking through your codebase?",
+      "angle": "A platform type `String!` gets no compiler check at all, so the NPE surfaces far from the boundary; the fix is to declare explicit `String?`/`String` types at the seam (a thin Kotlin facade), rely on JSpecify `@NullMarked`/`@Nullable` (and `-Xjsr305=strict` for legacy JSR-305 annotations) to turn platform types into real types, and remember that generics leak too — `List<String!>!` needs the same treatment."
+    },
+    {
+      "topic": "Classes & data modeling",
+      "level": 2,
+      "type": "qa",
+      "q": "What does an `object` declaration compile to, and when is a singleton the wrong answer?",
+      "angle": "A static `INSTANCE` field initialized in `<clinit>`, so the JVM class-loading contract gives you thread-safe lazy init — but on whatever thread touches it first; `data object` adds a stable `toString`/`equals`/`hashCode` that plain `object` lacks (why sealed UI states use it), object expressions are anonymous classes capturing their enclosing scope, and an object holding Context or mutable state is untestable global state that outlives configuration changes but not process death."
+    },
+    {
+      "topic": "Classes & data modeling",
+      "level": 2,
+      "type": "qa",
+      "q": "How does a `companion object` differ from Java `static`?",
+      "angle": "It is a real nested class with an `INSTANCE` field, so Java sees `Foo.Companion.bar()` unless you add `@JvmStatic`, and only `const val`/`@JvmField` members are truly static; the payoffs Java has no equivalent for are companions implementing interfaces (typed factories), being named, and being extensible (`fun Foo.Companion.create()`)."
+    },
+    {
+      "topic": "Classes & data modeling",
+      "level": 3,
+      "type": "qa",
+      "q": "Where are sealed subtypes allowed to live, and what does sealing buy you across a module boundary?",
+      "angle": "Subtypes must be in the same module (any package since 1.5) and the JVM records them via `permits`; the real point is that adding a variant is a compile error for your own exhaustive `when` but a silent runtime break for a library consumer who wrote `else` — so a public sealed hierarchy is an API contract, and kotlinx.serialization polymorphism needs every subtype `@Serializable` and registered."
+    },
+    {
+      "topic": "Classes & data modeling",
+      "level": 4,
+      "type": "qa",
+      "q": "You expose a `data class` from a library module. What breaks for consumers when you change it?",
+      "angle": "`copy()` and `componentN()` are part of the ABI: adding a constructor parameter (even with a default) changes copy's signature and breaks binary compatibility, reordering properties silently swaps meaning at every destructuring site, and a private constructor still leaked a public `copy()` until ConsistentCopyVisibility (`@ConsistentCopyVisibility`/`@ExposedCopyVisibility`) — argue for a plain class with explicit members on public surfaces."
+    },
+    {
+      "topic": "Classes & data modeling",
+      "level": 4,
+      "type": "qa",
+      "q": "Domain IDs: `typealias UserId = String`, `value class UserId`, or `data class UserId`? Argue all three.",
+      "angle": "Typealias gives zero enforcement (any String still passes), data class costs an allocation per ID, value class is free until it boxes (nullable, generic argument, in a collection, used as an interface) and mangles JVM method names — then price the integration tax: Room/Retrofit/Moshi converters, Parcelize and serializer wiring, and what Java callers see."
+    },
+    {
+      "topic": "Classes & data modeling",
+      "level": 3,
+      "type": "qa",
+      "q": "How does an `enum class` compile, and what does `entries` fix that `values()` did not?",
+      "angle": "`values()` clones the backing array on every call (a fresh allocation in hot loops) while `entries` (stable since 1.9) returns a cached immutable `EnumEntries`; a `when` over an enum compiles to a tableswitch via a synthetic `$WhenMappings` class, constants with bodies each generate an anonymous subclass (class/dex count), and persisting `ordinal` to disk or the wire breaks the day someone reorders constants."
+    },
+    {
+      "topic": "Classes & data modeling",
+      "level": 2,
+      "type": "qa",
+      "q": "How does destructuring work, and why is it risky on a data class?",
+      "angle": "`val (a, b) = x` calls `component1()`/`component2()` positionally, so swapping two same-typed properties in the data class keeps compiling and silently swaps meaning at every call site; cover lambda destructuring (`map.forEach { (k, v) -> }`), `_` to skip, opting a non-data class in with `operator fun componentN`, and state the current status of name-based destructuring in the 2.3/2.4 line accurately rather than claiming it is stable."
+    },
+    {
+      "topic": "Properties & initialization",
+      "level": 1,
+      "type": "qa",
+      "q": "`val` vs `var` vs `const val` — and why is `val` not immutability?",
+      "angle": "`val` fixes the reference, not the object: `val list = mutableListOf<Int>()` is fully mutable and a `val` with a custom getter can return a different value on every read; `const val` is a compile-time constant (primitive/String, top level or in an object/companion) that is inlined into every call site."
+    },
+    {
+      "topic": "Properties & initialization",
+      "level": 2,
+      "type": "qa",
+      "q": "`lateinit` vs `by lazy` vs a nullable property — how do you choose?",
+      "angle": "`lateinit` is `var`-only, non-null, no primitives, no custom accessors, backed by a null field whose generated check throws UninitializedPropertyAccessException (not NPE) and is testable with `::prop.isInitialized`; `by lazy` allocates a Lazy holder and caches forever — wrong for anything lifecycle-scoped; a nullable property is the honest model when 'absent' is a real state."
+    },
+    {
+      "topic": "Properties & initialization",
+      "level": 3,
+      "type": "qa",
+      "q": "In what order do constructors, property initializers and `init` blocks run — and why is calling an `open` member from a constructor a bug?",
+      "angle": "Primary constructor → property initializers and `init` blocks interleaved in declaration order → secondary constructor body after its delegation; the puzzle to show is a base-class `init` calling an `open` member, which runs the subclass override before the subclass's own initializers, so a property declared non-null is observed as `null` at runtime."
+    },
+    {
+      "topic": "Properties & initialization",
+      "level": 3,
+      "type": "qa",
+      "q": "What are explicit backing fields, and what are the rules?",
+      "angle": "`val state: StateFlow<UiState> field = MutableStateFlow(Loading)` — one property, mutable type inside the declaring scope, read-only type outside — retiring the `_state`/`state` + `asStateFlow()` pair; the field type must be a subtype of the property type, the narrowing only applies outside the class, and it does not make the exposed object immutable. Verify the stabilization wording against the 2.3 release notes before asserting it."
+    },
+    {
+      "topic": "Visibility & API surface",
+      "level": 3,
+      "type": "qa",
+      "q": "What does `internal` compile to, and who can actually call it?",
+      "angle": "Module-scoped in the compiler only: the bytecode member is public with a mangled name (`foo$my_module`), so Java code compiled alongside it — or any reflective caller — can invoke it; unit tests see internals because the test source set is an associated/friend module (which does not extend across Gradle modules), `protected` has no package visibility unlike Java, and `@JvmSynthetic` is how you hide a member from Java entirely."
+    },
+    {
+      "topic": "Visibility & API surface",
+      "level": 4,
+      "type": "qa",
+      "q": "Which Kotlin-specific changes silently break binary compatibility for a library's consumers?",
+      "angle": "`inline` function bodies and `const val` values are copied into consumer bytecode, so a bug fix does nothing until they recompile and any helper the inline body touches must be `@PublishedApi`; default arguments compile to a synthetic `$default` method carrying an int bitmask, so adding or reordering a parameter changes the signature; add sealed subtypes or data-class constructor parameters and callers break. Name binary-compatibility-validator `.api` dumps and `explicitApi()` as the guardrails."
+    },
+    {
+      "topic": "Delegation",
+      "level": 2,
+      "type": "qa",
+      "q": "Write a custom property delegate — and what does the stdlib already give you?",
+      "angle": "The contract is `operator getValue(thisRef, property: KProperty<*>)`/`setValue` or the `ReadWriteProperty`/`ReadOnlyProperty` interfaces; `Delegates.observable`/`vetoable`/`notNull` cover change callbacks and validation, `by map` backs properties with a Map, and `provideDelegate`/`PropertyDelegateProvider` lets you validate or register per property at construction — which is how SavedStateHandle/preference delegates key off `property.name`. Note the per-property field plus KProperty reference cost."
+    },
+    {
+      "topic": "Delegation",
+      "level": 3,
+      "type": "qa",
+      "q": "`class A(b: B) : B by b` — what does the compiler generate, and what is the self-call problem?",
+      "angle": "A forwarding method per interface member, over a delegate captured once at construction; if you override one member, the delegate's own internal calls still hit its own implementation rather than your override — the classic broken decorator (e.g. a caching repository whose `getAll()` never routes through your overridden `get()`) — and members added to the interface later are forwarded silently with no compile error."
+    },
+    {
+      "topic": "Functions",
+      "level": 4,
+      "type": "qa",
+      "q": "What does a lambda or a function reference actually cost at runtime in Kotlin 2.x?",
+      "angle": "Non-inlined lambdas compile to invokedynamic/LambdaMetafactory by default since Kotlin 2.0 (`-Xlambdas=class` reverts), which cuts JVM class count — but D8 desugars indy back into classes for Android, so say the dex win is limited; then the costs that remain: capturing lambdas allocate per creation, a captured `var` is boxed into `Ref.IntRef`/`ObjectRef` on the heap, a lambda capturing `this` retains the enclosing Activity/ViewModel (the listener-leak mechanism), and bound references (`instance::method`) allocate while `::topLevelFun` need not."
+    },
+    {
+      "topic": "Functions",
+      "level": 3,
+      "type": "qa",
+      "q": "SAM conversion, `fun interface`, or a plain function type — when do you use which?",
+      "angle": "SAM conversion applies to Java single-abstract-method interfaces and, since 1.4, to Kotlin `fun interface` — a normal Kotlin interface can never be built from a lambda; `fun interface` buys a named type with default methods and room to grow, `(T) -> R` buys composability with no wrapper; and the trap is identity — converting the same lambda twice produces different instances, so `removeListener { … }` never unregisters anything."
+    },
+    {
+      "topic": "Functions",
+      "level": 2,
+      "type": "qa",
+      "q": "How do default and named arguments compile, and what breaks when you override a function that has them?",
+      "angle": "The compiler emits a synthetic `foo$default` taking an int bitmask (one extra Int per 32 parameters) alongside the real method; defaults are re-evaluated on every call (a `mutableListOf()` default is a fresh list each time), an override may not redeclare defaults so a virtual call always takes the base declaration's values, and Java callers get nothing without `@JvmOverloads` — the Android custom-View constructor case."
+    },
+    {
+      "topic": "Functions",
+      "level": 3,
+      "type": "qa",
+      "q": "Which operators can you overload, and why is `+=` on a list a performance trap?",
+      "angle": "Fixed name mapping (plus/minus/times/div/rem/inc/get/set/invoke/contains/rangeTo/compareTo/iterator/componentN); for `+=` the compiler prefers `plusAssign` (in-place, `val` receiver) over `plus`+reassign (`var` receiver) and errors when both apply — so `var items: List<T>` with `items += x` in a loop copies the entire list each iteration (O(n²)) where `val items = mutableListOf<T>()` mutates in place."
+    },
+    {
+      "topic": "Functions",
+      "level": 2,
+      "type": "qa",
+      "q": "What are the rules for `infix` and `tailrec`, and when does each actually matter?",
+      "angle": "`infix` needs a single non-vararg, non-default parameter on a member or extension, and its precedence sits below arithmetic but above comparison — `1 shl 2 + 3` is `1 shl 5`, the classic bit-twiddling bug; `tailrec` rewrites self-recursion into a loop only when the recursive call is the last operation and is not inside try/catch/finally, otherwise you get a warning and a StackOverflowError on deep input (Android thread stacks are on the order of 1 MB / a few thousand frames)."
+    },
+    {
+      "topic": "Functions",
+      "level": 4,
+      "type": "qa",
+      "q": "What is a `contract`, and what does `callsInPlace` let the compiler prove?",
+      "angle": "`contract { returns(true) implies (x is String) }` is how `isNullOrEmpty()`, `require()` and `check()` enable smart casts across a function boundary, and `callsInPlace(block, InvocationKind.EXACTLY_ONCE)` is why you may assign a `val` inside a `run {}`/`with {}` lambda; the punchline is that the compiler does not verify contracts — a wrong one makes smart casts unsound — and the API is still opt-in (`@ExperimentalContracts`) with hard restrictions (top-level or non-open function, contract must be the first statement)."
+    },
+    {
+      "topic": "Generics",
+      "level": 3,
+      "type": "qa",
+      "q": "What survives type erasure on the JVM, and how do libraries recover the type anyway?",
+      "angle": "Type arguments are erased so `is List<String>` is illegal and `as List<String>` is an unchecked cast that fails later at the first element read — but the generic signature is retained in the class file's Signature attribute and Kotlin metadata, which is exactly what the anonymous-subclass trick (`object : TypeToken<List<User>>() {}` in Moshi/Gson/Retrofit) and `typeOf<T>()`/`serializer(typeOf<T>())` exploit; contrast arrays, which are reified and covariant on the JVM (ArrayStoreException)."
+    },
+    {
+      "topic": "Generics",
+      "level": 3,
+      "type": "qa",
+      "q": "What can't `reified` do, and what are the standard workarounds?",
+      "angle": "It exists only inside `inline` functions, so it cannot appear in a virtual/override member, cannot be forwarded to a non-inline generic, and cannot construct `T` (no `T()` — pass a factory lambda or a `KClass` and pay reflection); a public inline reified function inlines into consumers so its body is ABI and may only touch public API or `@PublishedApi` declarations; and `T::class` loses nested type arguments where `typeOf<T>()` keeps them."
+    },
+    {
+      "topic": "Generics",
+      "level": 3,
+      "type": "qa",
+      "q": "What is the implicit upper bound of `<T>`, and when do you need `where` or `T & Any`?",
+      "angle": "`fun <T> f(x: T)` has upper bound `Any?`, so `f(null)` compiles — the trap behind 'non-null' generic helpers that silently accept null; `<T : Any>` fixes it, multiple bounds require `where T : Comparable<T>, T : Serializable`, recursive bounds (`T : Builder<T>`) emulate the self type Kotlin lacks, and definitely non-nullable `T & Any` (1.7+) is what you write when overriding a Java generic method whose parameter is `@NotNull`."
+    },
+    {
+      "topic": "Generics",
+      "level": 4,
+      "type": "qa",
+      "q": "You are designing a generic API — how do you decide variance, and what is `@UnsafeVariance` doing in `List<out E>.contains`?",
+      "angle": "Producers get `out` (Flow, StateFlow, List), consumers get `in` (Comparator, Continuation); then explain the deliberate hole — `contains(element: @UnsafeVariance E)` suppresses the position check because the operation is read-only in practice — plus why `Nothing` lets a covariant type have singleton variants, why MutableStateFlow/MutableList must stay invariant, and when use-site projection beats declaration-site."
+    },
+    {
+      "topic": "Collections",
+      "level": 1,
+      "type": "qa",
+      "q": "`listOf` vs `mutableListOf` vs `arrayOf` vs `IntArray` — what do you pick and why?",
+      "angle": "`List` is a read-only interface (backed by ArrayList or a shared singleton for `emptyList()`), `Array<Int>` boxes every element into `Integer` while `IntArray` is a real `int[]`, arrays are fixed-size and compare by identity (`contentEquals`), and `buildList {}` avoids the mutable-then-`toList()` dance."
+    },
+    {
+      "topic": "Collections",
+      "level": 3,
+      "type": "qa",
+      "q": "`List` is read-only, not immutable. What actually goes wrong, and what are the alternatives?",
+      "angle": "`val ids: List<Int> = mutableListOf(...)` stays mutable through whoever holds the mutable reference, and a Java caller or `(list as MutableList).add(...)` can write through the read-only type — so returning the backing field leaks writability; `toList()` copies defensively, kotlinx.collections.immutable `persistentListOf`/`ImmutableList` give real immutability with structural sharing (and are what Compose stability inference wants), and returning `Sequence`/`Iterable` hides the store entirely."
+    },
+    {
+      "topic": "Collections",
+      "level": 3,
+      "type": "qa",
+      "q": "How do `map`, `filter` and `flatMap` allocate, and when should you drop to a loop?",
+      "angle": "Each eager operator builds a new ArrayList sized by `collectionSizeOrDefault(10)`, so a four-step chain over 10k items allocates four lists and walks 40k elements; `mapTo`/`filterTo`/`flatMapTo` write into a collection you own, `mapNotNull` fuses map+filter, `count { }` beats `filter { }.size`, `any/all/none/first` short-circuit, and `for (i in list.indices)` skips the Iterator allocation `forEach` on a generic Iterable still makes. Include the `sumOf` Int/Long/Double overload-ambiguity error."
+    },
+    {
+      "topic": "Collections",
+      "level": 3,
+      "type": "qa",
+      "q": "`groupBy` vs `groupingBy`, and `associate` vs `associateBy` vs `associateWith` — what are the real differences?",
+      "angle": "`groupBy` materializes a `Map<K, MutableList<V>>` (a list per key) while `groupingBy {}.eachCount()/fold()/aggregate()` computes without intermediate lists; `associate` allocates a Pair per element where `associateBy`/`associateWith` do not; every one of them silently keeps the LAST value on a duplicate key — the quiet data-loss bug when the key is not unique — and stdlib map builders return LinkedHashMap, so code accidentally depends on insertion order."
+    },
+    {
+      "topic": "Collections",
+      "level": 2,
+      "type": "qa",
+      "q": "`fold` vs `reduce` vs `runningFold`/`scan` — and how do you fold without going quadratic?",
+      "angle": "`reduce` throws UnsupportedOperationException on an empty collection while `fold` returns the seed (hence `reduceOrNull`); `runningFold`/`runningReduce` keep every intermediate state (running totals, state replay); and the trap is `fold(emptyList()) { acc, x -> acc + x }`, which copies the accumulator on every step for O(n²) — use a mutable accumulator or the right operator."
+    },
+    {
+      "topic": "Collections",
+      "level": 2,
+      "type": "qa",
+      "q": "Explain `chunked`, `windowed`, `zip`, `zipWithNext` and `partition` precisely.",
+      "angle": "`windowed(size, step, partialWindows)` slides and by DEFAULT drops the trailing partial window — silent data loss when people batch with it — while `chunked(n)` is `windowed(n, n, partialWindows = true)`; `zip` truncates to the shorter input and allocates a Pair per element, `zipWithNext` gives adjacent deltas, `partition` returns a Pair of two eagerly built lists. Ground it: moving averages, and chunking IDs under SQLite's 999-variable limit."
+    },
+    {
+      "topic": "Collections",
+      "level": 4,
+      "type": "qa",
+      "q": "Sequences: when do they stop being lazy, and when are they the wrong tool?",
+      "angle": "Stateful intermediate operations (`sorted`, `distinct`, `chunked`) buffer the whole sequence, destroying both the memory win and early termination; a sequence from `sequence {}`/`generateSequence` is single-pass (`constrainOnce` → IllegalStateException on a second iteration) while `asSequence()` over a List is re-iterable; `sequence {}` builds a restricted-suspension coroutine state machine with real per-element overhead; and for a few hundred elements the per-element lambda indirection makes sequences measurably slower than eager operators."
+    },
+    {
+      "topic": "Equality & ordering",
+      "level": 1,
+      "type": "qa",
+      "q": "`==`, `===` and `equals` in Kotlin — what does each actually do?",
+      "angle": "`==` compiles to a null-safe `equals` (`a?.equals(b) ?: (b === null)`) so it is structural even on nullable receivers, `===` is reference identity (and is not meaningful for primitives or value classes), and arrays inherit identity equals — you need `contentEquals`/`contentDeepEquals`, which is why a data class with an `Array` property misbehaves."
+    },
+    {
+      "topic": "Equality & ordering",
+      "level": 2,
+      "type": "qa",
+      "q": "What is the equals/hashCode contract, and how does a data class break it?",
+      "angle": "Equal objects must have equal hashCodes and a key's hashCode must not change while it is in a hash container — mutate a property used in hashCode after inserting into a HashSet and `contains` returns false for an element that is still physically in the set; then the Kotlin specifics: generated `equals` compares `javaClass` (symmetric, but a subclass never equals its parent), body-declared properties are excluded, and an `Array` property must be hand-rolled with contentEquals/contentHashCode."
+    },
+    {
+      "topic": "Equality & ordering",
+      "level": 3,
+      "type": "qa",
+      "q": "The `Comparable`/`Comparator` contracts — what goes wrong in sorted collections?",
+      "angle": "TreeSet/TreeMap/`sortedSetOf` consult compareTo ONLY, so two items comparing 0 are treated as duplicates even when equals disagrees (BigDecimal `1.0` vs `1.00`); `a.x - b.x` overflows — use `compareValues`/`compareBy`; build with `compareBy { }.thenByDescending { }` and `nullsLast()`; `sortedBy` copies and is stable (TimSort) while `sortBy` mutates in place, the selector is invoked on every comparison (O(n log n) calls — precompute expensive keys), and `Double.NaN` sorts greater than everything under compareTo while `NaN == NaN` is false."
+    },
+    {
+      "topic": "Error handling",
+      "level": 2,
+      "type": "qa",
+      "q": "Kotlin has no checked exceptions — what does that mean for Java and Swift callers, and what is `@Throws` for?",
+      "angle": "Nothing forces a catch, and a Kotlin function that throws IOException is invisible to a Java caller's compile-time check unless `@Throws(IOException::class)` writes the `throws` clause into the bytecode; on Kotlin/Native `@Throws` is what turns an exception into an `NSError**` out-parameter for Swift — an unlisted exception terminates the app instead — and overriding a Java method never inherits its checked-exception obligation."
+    },
+    {
+      "topic": "Java interop",
+      "level": 3,
+      "type": "qa",
+      "q": "You expose a Kotlin module to a Java team. What has to be annotated, and why?",
+      "angle": "Top-level declarations land in `FooKt` (rename with `@file:JvmName`), default arguments do not exist for Java without `@JvmOverloads`, companion members need `@JvmStatic` or Java writes `Foo.Companion.bar()`, properties surface as `getX`/`setX` unless `@JvmField`, `internal` appears mangled, extension functions become statics with the receiver as first parameter, and a `suspend fun` shows up as a method taking a trailing `Continuation` and returning `Object`/COROUTINE_SUSPENDED."
+    },
+    {
+      "topic": "Java interop",
+      "level": 4,
+      "type": "qa",
+      "q": "Design rules for a Kotlin library whose main consumers write Java — what do you keep out of the public surface?",
+      "angle": "A Kotlin `List<out T>` parameter becomes `List<? extends T>` in Java signatures and breaks Java callers and Dagger multibindings — `@JvmSuppressWildcards`/`@JvmWildcard` are the levers; value classes mangle method names, and `Result`, inline+reified, default arguments and sealed exhaustiveness are unusable or hostile from Java; argue whether a Java-friendly facade plus `@JvmOverloads` bridges is worth the ABI you then have to keep."
+    },
+    {
+      "topic": "Annotations",
+      "level": 3,
+      "type": "qa",
+      "q": "What are annotation use-site targets, and which bug do they fix?",
+      "angle": "`@Json val name: String` on a constructor property defaults to the `param` target (precedence param > property > field), so a reflective library that reads FIELDS finds nothing and your JSON key silently falls back to the property name; `@field:`, `@get:`, `@set:`, `@setparam:`, `@delegate:`, `@receiver:` choose explicitly — this is the Moshi/Gson/Room/Dagger-qualifier class of bug, plus grouped form `@field:[A B]`."
+    },
+    {
+      "topic": "Annotations",
+      "level": 3,
+      "type": "qa",
+      "q": "How do you gate an unstable API in Kotlin, and how do you decide to adopt a preview language feature in a shipping app?",
+      "angle": "`@RequiresOptIn` defines the marker, `@OptIn(X::class)` accepts locally, propagating the marker pushes the decision to callers, `-opt-in=` accepts module-wide; then the judgment: a preview language feature needs a compiler flag, can change syntax between releases and leaks into your ABI, while a stabilized one (nested typealiases, explicit backing fields in 2.3) is safe. Include `@Target`/`@Retention` — SOURCE retention keeps KSP-only annotations out of the binary."
+    },
+    {
+      "topic": "Language features",
+      "level": 1,
+      "type": "qa",
+      "q": "`Any`, `Unit`, `Nothing` — how does Kotlin's type hierarchy differ from Java's?",
+      "angle": "`Any` is the top type but carries only equals/hashCode/toString (no wait/notify), and `Any?` sits above it; `Unit` is a real singleton returned by 'void' functions, which is why `(T) -> Unit` works as a generic function type; `Nothing` is the uninhabited bottom type and a subtype of everything — that is what makes `throw`/`return`/`TODO()` usable as expressions (`?: error(\"missing\")`) and `UiState<Nothing>` assignable anywhere, and why `val x = listOf()` fails to infer."
+    },
+    {
+      "topic": "Language features",
+      "level": 2,
+      "type": "qa",
+      "q": "What is a `typealias` good for, what can it never do, and what changed with nested typealiases?",
+      "angle": "A compile-time alias with zero enforcement (`typealias UserId = String` still accepts any String — contrast a value class), unable to add members or constraints, and it expands in error messages; the real uses are shortening function/generic types (`typealias ClickHandler = (Item) -> Unit`), disambiguating clashing imports, and `actual typealias` mapping a KMP expect class onto a platform type — plus Kotlin 2.3 stabilizing typealiases declared inside a class so they can be scoped."
+    },
+    {
+      "topic": "Language features",
+      "level": 3,
+      "type": "qa",
+      "q": "`when`: guard conditions, exhaustiveness rules, and how it compiles.",
+      "angle": "A guard (`is Loading if state.retries > 3 ->`) removes the nested `if` inside a branch but does NOT count toward exhaustiveness, so the compiler still demands an `else`; a non-exhaustive `when` statement over a sealed/enum subject is now an error rather than a warning, 2.3 added data-flow-based exhaustiveness, and enum/Int/String subjects compile to table/lookupswitch while sealed subjects compile to an instanceof chain. Check the current stability wording for guard conditions before stating it."
+    },
+    {
+      "topic": "Language features",
+      "level": 4,
+      "type": "qa",
+      "q": "What are context parameters, why were context receivers dropped, and when would you actually use them?",
+      "angle": "`context(logger: Logger, tx: Transaction)` declares NAMED ambient parameters resolved from the call-site scope; the redesign happened because unnamed context receivers were ambiguous, shadowed `this` and were undiscoverable. Good fits are genuinely cross-cutting scopes (logging, analytics, a transaction, an encoder); bad fits are real dependencies that belong in a constructor — and be precise about the current opt-in/stability state rather than claiming it is stable."
+    },
+    {
+      "topic": "Language features",
+      "level": 4,
+      "type": "qa",
+      "q": "You are migrating a large Android codebase to the K2 compiler. What actually breaks, and how do you sequence it?",
+      "angle": "The FIR frontend changes diagnostics and inference, so code relying on old smart-cast/platform-type behaviour now warns or errors; kapt only runs in a K1-compatibility stub mode so annotation processors are the long pole (move to KSP2), every compiler plugin needs a K2-capable version (the Compose compiler ships with Kotlin from 2.0), and `-language-version`/`-api-version` are the staged escape hatch — sequence module by module with warnings-as-errors off first and measure the build-time win."
+    },
+    {
+      "topic": "Language features",
+      "level": 2,
+      "type": "qa",
+      "q": "What is the unused-return-value checker, and would you turn it on?",
+      "angle": "Kotlin 2.3 shipped an opt-in checker that flags discarded results of functions with no other effect — `list.filter { }` on its own line, `string.trim()`, an ignored `Result` — the bug class Java needed ErrorProne's `@CheckReturnValue` for; library authors opt types in with `@MustUseReturnValue` and carve out exceptions with `@IgnorableReturnValue`; on a large codebase you enable it per module in warning mode first because fluent/builder APIs generate noise."
+    },
+    {
+      "topic": "Standard library",
+      "level": 1,
+      "type": "qa",
+      "q": "Ranges and progressions: `..`, `..<`, `downTo`, `step`, `in` — what do they cost?",
+      "angle": "`for (i in 0..<n)` compiles to a plain int loop with no allocation and no boxing (same for `downTo`/`step`), but `(0..n).map { }` materializes a list; `..<` (rangeUntil) is the stable replacement for `until`; ranges double as membership checks (`c in 'a'..'z'`, `i in list.indices`), and `IntRange` becomes a real object once you store it — plus when to use `indices`, `withIndex()` or `forEachIndexed`."
+    },
+    {
+      "topic": "Standard library",
+      "level": 2,
+      "type": "qa",
+      "q": "Why should an API take `kotlin.time.Duration` instead of `Long` milliseconds?",
+      "angle": "Duration is a value class packing magnitude and unit into one Long — no allocation and no 'was that seconds or millis' bug (`30.seconds`, `timeout.inWholeMilliseconds`), with ZERO/INFINITE, arithmetic, ISO-8601 parsing and `toComponents`; for elapsed time use `TimeSource.Monotonic.markNow()`/`elapsedNow()` or `measureTime`/`measureTimedValue` instead of `System.currentTimeMillis` (the wall clock can jump backwards; `SystemClock.elapsedRealtime` is the Android equivalent)."
+    },
+    {
+      "topic": "Standard library",
+      "level": 2,
+      "type": "qa",
+      "q": "When do unsigned types (`UInt`, `ULong`, `UByte`) earn their place?",
+      "angle": "They are value classes over the signed primitives, so arithmetic wraps and there is no JVM-level unsigned support: method names get mangled, Java callers see the signed underlying type, `UIntArray`/`UByteArray` avoid boxing but `List<UInt>` does not; the honest use cases are binary protocol/file-format parsing, hashing and C interop in KMP — otherwise `Int` with masking (`b.toInt() and 0xFF`) is clearer."
+    },
+    {
+      "topic": "Standard library",
+      "level": 2,
+      "type": "qa",
+      "q": "String handling: templates, `buildString`, raw strings — what is the performance and correctness story?",
+      "angle": "`\"$a$b\"` compiles to invokedynamic via StringConcatFactory on JVM 9+ targets rather than a StringBuilder chain, but `s += x` in a loop is still O(n²) — use `buildString { }` with a capacity hint or `joinToString`; `trimIndent`/`trimMargin` execute at runtime on every evaluation, so hoist them out of hot paths; `split(\".\")` takes literal delimiters (the Regex overload is separate, unlike Java), `==` is `equals` so interning never matters, and `Char.code`/`digitToInt` replaced the removed `toInt()` conversions."
+    },
+    {
+      "topic": "Standard library",
+      "level": 3,
+      "type": "qa",
+      "q": "Which stdlib calls are quiet bugs waiting to happen?",
+      "angle": "Demand specifics: `emptyList<Double>().average()` is NaN while `sum()` is 0.0; `first()`/`last()`/`single()` throw NoSuchElementException where the OrNull variants do not, and `single()` also throws on two elements; `toInt()` throws NumberFormatException versus `toIntOrNull()`; `MutableList<Int>.remove(1)` removes the VALUE while `removeAt(1)` removes the index; integer division truncates toward zero and `%` keeps the dividend's sign; `map.getValue(k)` throws while `map[k]` returns null; `getOrPut` may run its lambda twice under concurrency; `use { }` closes and attaches a close failure as a suppressed exception."
+    },
+    {
+      "topic": "Standard library",
+      "level": 3,
+      "type": "qa",
+      "q": "What does reflection cost in Kotlin on Android, and how do you avoid it?",
+      "angle": "`::class` (KClass) and `javaClass` are cheap wrappers, but `memberProperties`, `primaryConstructor`, `callBy` and annotation reads pull in the separate multi-megabyte `kotlin-reflect` artifact and run orders of magnitude slower than a direct call — and R8 renames or strips exactly what reflection looks up, so you need keep rules; the Android answer is compile-time codegen (KSP: Moshi codegen, Room, Hilt; the kotlinx.serialization plugin), sealed + `when` dispatch instead of type lookups, and `typeOf<T>()` when you only need a KType."
+    },
+    {
+      "topic": "Multiplatform",
+      "level": 3,
+      "type": "qa",
+      "q": "What is the multiplatform-safe subset of Kotlin, and how do you keep `commonMain` honest?",
+      "angle": "No `java.*` at all — no `String.format`, SimpleDateFormat, Charset, ThreadLocal, `synchronized` or java.util collections; use kotlin.time/kotlinx-datetime, `@Volatile` and kotlin.concurrent.atomics, kotlinx-io; `expect`/`actual` covers functions, properties and classes with `actual typealias` mapping onto a platform type (state the current status of expect/actual classes accurately); JVM annotations are no-ops elsewhere and reflection is largely absent on Native/JS — so prefer an `interface` plus DI over `expect` for anything you want to fake in tests."
+    }
+  ],
+  "coverageNotes": "Existing 13 items (kt-0001..kt-0013) already own: null-safety basics/platform types, data class codegen, value class boxing, inline/noinline/crossinline/reified, declaration- vs use-site variance, List-vs-Sequence basics, scope-function choice, `by`/lazy modes/class-delegation intro, sealed vs enum choice, extension resolution, the Kotlin 2.x feature survey, error modeling (Result vs sealed vs exceptions, runCatching-vs-cancellation), and DSLs with @DslMarker. None of the 57 repeats those; the deliberate adjacencies and their differentiators are: (a) explicit backing fields, context parameters, the unused-return-value checker and K2 each get a dedicated item because kt-0011 only surveys them — the new items must go to mechanics/restrictions/migration breakage, not re-list features; (b) the sealed item covers subtype placement, cross-module ABI and serialization rather than \"when to use sealed vs enum\"; (c) the value-class item is an argue-both-sides API-design comparison (typealias/data/value) rather than kt-0003's boxing rules; (d) the two delegation items are custom delegates and the class-delegation self-call problem, both flagged only as follow-ups in kt-0008; (e) the lambda-cost item is about NON-inlined lambda compilation (invokedynamic, capture, Ref boxing), disjoint from kt-0004's inline modifiers; (f) the sequences item is stateful operators/constrainOnce/sequence{} cost, going past kt-0006's eager-vs-lazy framing. Scope coverage map: null-safety internals 1-4; data/value/sealed/object/companion 5-10; destructuring 11; property init order, lateinit-vs-lazy-vs-nullable, init blocks 12-14; explicit backing fields 15; visibility incl. internal across modules 16-17; delegation 18-19; higher-order functions, function references, closures/captured-variable cost 20; lambdas vs SAM vs fun interfaces 21; default args 22; operator overloading 23; infix and tailrec 24; contracts 25; erasure/reified workarounds/generic bounds/variance 26-29; collections vs sequences and operator internals (map/flatMap/fold/groupBy/associate/partition/chunked/windowed) 30-36; mutability and read-only views 31; equality/hashCode, equals/compareTo contracts, comparison and sorting 37-39; checked exceptions and @Throws 40 (Result/sealed/runCatching remain with kt-0012); Java interop incl. default args from Java and SAM 41-42 (platform types and nullability annotations at 3-4, SAM at 21); annotations, use-site targets, JVM interop annotations, @OptIn/stability 43-44; Nothing 45; typealias incl. nested 46; when guard conditions and exhaustiveness 47; context parameters 48; K2 49; unused-return-value checker 50; kotlin.time Duration 52; unsigned types 53; strings/buildString 54; stdlib gotchas 55; reflection cost 56; multiplatform-safe subset 57. Level mix: 6 L1 (10.5%), 17 L2 (29.8%), 23 L3 (40.4%), 11 L4 (19.3%). Three specs (explicit backing fields, when guard conditions, context parameters) explicitly instruct the author to verify the current stability wording against kotlinlang.org release notes rather than asserting stable; the same caution applies to name-based destructuring in the destructuring item. Two topic names are new but load-bearing: \"Properties & initialization\", \"Visibility & API surface\", \"Equality & ordering\", \"Java interop\", \"Annotations\", \"Standard library\", \"Multiplatform\"; everything else reuses existing track topics (Null safety, Classes & data modeling, Delegation, Functions, Generics, Collections, Error handling, Language features).",
+  "scope": [
+    "null-safety internals and platform types",
+    "data / value class / sealed / object / companion modeling",
+    "destructuring",
+    "property initialization order, lateinit vs lazy vs nullable, init blocks",
+    "explicit backing fields",
+    "visibility incl. internal across modules",
+    "delegation (custom delegates, class delegation)",
+    "higher-order functions, function references, closures and captured-variable cost",
+    "lambdas vs SAM conversion vs fun interfaces",
+    "default and named arguments",
+    "operator overloading",
+    "infix and tailrec",
+    "contracts and smart-cast enablement",
+    "generics: erasure, reified workarounds, bounds, variance, star projections",
+    "collections vs sequences and collection-operator internals",
+    "mutability and read-only views",
+    "equality / hashCode contracts and data-class pitfalls",
+    "Comparable/Comparator contracts, comparison and sorting",
+    "exceptions, absence of checked exceptions, @Throws",
+    "Java interop: platform types, annotations, SAM, default args from Java, module design",
+    "annotations: use-site targets, JVM interop, @OptIn/stability gating",
+    "Nothing and the type hierarchy",
+    "typealiases incl. nested",
+    "when guard conditions and exhaustiveness",
+    "context parameters",
+    "K2 compiler migration",
+    "unused-return-value checker",
+    "ranges and progressions",
+    "kotlin.time Duration",
+    "unsigned types",
+    "string handling and buildString",
+    "stdlib gotchas",
+    "reflection cost and avoidance",
+    "multiplatform-safe language subset"
+  ],
+  "coverage": {
+    "null-safety internals and platform types": [
+      "kt-0014",
+      "kt-0015",
+      "kt-0016",
+      "kt-0017",
+      "kt-0001",
+      "kt-0002"
+    ],
+    "data / value class / sealed / object / companion modeling": [
+      "kt-0018",
+      "kt-0019",
+      "kt-0020",
+      "kt-0021",
+      "kt-0022",
+      "kt-0023",
+      "kt-0003"
+    ],
+    "destructuring": [
+      "kt-0024"
+    ],
+    "property initialization order, lateinit vs lazy vs nullable, init blocks": [
+      "kt-0025",
+      "kt-0026",
+      "kt-0027"
+    ],
+    "explicit backing fields": [
+      "kt-0028"
+    ],
+    "visibility incl. internal across modules": [
+      "kt-0029",
+      "kt-0030"
+    ],
+    "delegation (custom delegates, class delegation)": [
+      "kt-0031",
+      "kt-0032",
+      "kt-0008"
+    ],
+    "higher-order functions, function references, closures and captured-variable cost": [
+      "kt-0033",
+      "kt-0004"
+    ],
+    "lambdas vs SAM conversion vs fun interfaces": [
+      "kt-0034"
+    ],
+    "default and named arguments": [
+      "kt-0035"
+    ],
+    "operator overloading": [
+      "kt-0036"
+    ],
+    "infix and tailrec": [
+      "kt-0037"
+    ],
+    "contracts and smart-cast enablement": [
+      "kt-0038"
+    ],
+    "generics: erasure, reified workarounds, bounds, variance, star projections": [
+      "kt-0039",
+      "kt-0040",
+      "kt-0041",
+      "kt-0042",
+      "kt-0005",
+      "kt-0007"
+    ],
+    "collections vs sequences and collection-operator internals": [
+      "kt-0043",
+      "kt-0045",
+      "kt-0046",
+      "kt-0047",
+      "kt-0048",
+      "kt-0049",
+      "kt-0006"
+    ],
+    "mutability and read-only views": [
+      "kt-0044"
+    ],
+    "equality / hashCode contracts and data-class pitfalls": [
+      "kt-0050",
+      "kt-0051"
+    ],
+    "Comparable/Comparator contracts, comparison and sorting": [
+      "kt-0052"
+    ],
+    "exceptions, absence of checked exceptions, @Throws": [
+      "kt-0053",
+      "kt-0013"
+    ],
+    "Java interop: platform types, annotations, SAM, default args from Java, module design": [
+      "kt-0054",
+      "kt-0055",
+      "kt-0010"
+    ],
+    "annotations: use-site targets, JVM interop, @OptIn/stability gating": [
+      "kt-0056",
+      "kt-0057"
+    ],
+    "Nothing and the type hierarchy": [
+      "kt-0058"
+    ],
+    "typealiases incl. nested": [
+      "kt-0059"
+    ],
+    "when guard conditions and exhaustiveness": [
+      "kt-0060"
+    ],
+    "context parameters": [
+      "kt-0061"
+    ],
+    "K2 compiler migration": [
+      "kt-0062"
+    ],
+    "unused-return-value checker": [
+      "kt-0063"
+    ],
+    "ranges and progressions": [
+      "kt-0064"
+    ],
+    "kotlin.time Duration": [
+      "kt-0065"
+    ],
+    "unsigned types": [
+      "kt-0066"
+    ],
+    "string handling and buildString": [
+      "kt-0067"
+    ],
+    "stdlib gotchas": [
+      "kt-0068"
+    ],
+    "reflection cost and avoidance": [
+      "kt-0069"
+    ],
+    "multiplatform-safe language subset": [
+      "kt-0070"
+    ]
+  }
+}

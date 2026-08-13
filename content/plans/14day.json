@@ -1,0 +1,690 @@
+{
+  "id": "14day",
+  "title": "15-day deep plan",
+  "description": "Full coverage at senior/staff depth. Sized to about 90 focused minutes a day. Days 1-12 build knowledge track by track; days 13-15 convert it into performance under time pressure. Every task links to real content — click 'open →'.",
+  "pace": {
+    "dailyMinutes": 90,
+    "note": "About 90 minutes/day. Read and rate each linked item, then run the day's drill to push the cards into your review schedule."
+  },
+  "days": [
+    {
+      "title": "Kotlin core",
+      "focus": "Null safety and data modeling — the language surface you will type under a whiteboard.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Null safety and platform types",
+          "itemIds": [
+            "kt-0014",
+            "kt-0015"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Data classes, value classes, sealed hierarchies",
+          "itemIds": [
+            "kt-0018",
+            "kt-0019"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Properties and initialization order",
+          "itemIds": [
+            "kt-0025",
+            "kt-0026"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's Kotlin cards",
+          "itemIds": [
+            "kt-0014",
+            "kt-0015",
+            "kt-0018",
+            "kt-0019",
+            "kt-0025",
+            "kt-0026"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Kotlin deep",
+      "focus": "The advanced surface that separates mid from senior: contracts, generics, delegation.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Smart casts, nullability contracts, generics",
+          "itemIds": [
+            "kt-0016",
+            "kt-0017",
+            "kt-0039"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Properties, delegation and extension functions",
+          "itemIds": [
+            "kt-0027",
+            "kt-0035"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Functions: inline, reified, vararg, scope",
+          "itemIds": [
+            "kt-0020",
+            "kt-0035"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's Kotlin cards",
+          "itemIds": [
+            "kt-0016",
+            "kt-0017",
+            "kt-0039",
+            "kt-0027",
+            "kt-0035",
+            "kt-0020"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Coroutines: structured concurrency",
+      "focus": "Suspend mechanics and the guarantees structured concurrency gives you — the foundation every answer leans on.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Suspend functions and how they compile",
+          "itemIds": [
+            "co-0009",
+            "co-0012"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Scopes, jobs and structured concurrency",
+          "itemIds": [
+            "co-0015",
+            "co-0018"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Coroutine context and composition",
+          "itemIds": [
+            "co-0020"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's coroutines cards",
+          "itemIds": [
+            "co-0009",
+            "co-0012",
+            "co-0015",
+            "co-0018",
+            "co-0020"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Coroutines: cancellation, builders, dispatchers",
+      "focus": "Cooperative cancellation, the builder family, and where work actually runs.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Cooperative cancellation and timeout",
+          "itemIds": [
+            "co-0024",
+            "co-0025"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Builders: async, withContext, supervisorScope",
+          "itemIds": [
+            "co-0029"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Dispatchers: Main, IO, Default, custom",
+          "itemIds": [
+            "co-0031"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's coroutines cards",
+          "itemIds": [
+            "co-0024",
+            "co-0025",
+            "co-0029",
+            "co-0031"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Flow, channels and Android integration",
+      "focus": "Cold flows, hot flows, channels and lifecycle-aware collection.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Flow basics and cold flows",
+          "itemIds": [
+            "co-0035"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Flow internals and operators",
+          "itemIds": [
+            "co-0037"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Channels and shared flows",
+          "itemIds": [
+            "co-0044"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's cards",
+          "itemIds": [
+            "co-0035",
+            "co-0037",
+            "co-0044"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Compose internals",
+      "focus": "Compiler, recomposition, stability and the snapshot system — the mid/senior dividing line.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "The Compose compiler",
+          "itemIds": [
+            "cmp-0012",
+            "cmp-0013"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Recomposition model",
+          "itemIds": [
+            "cmp-0016"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Stability and skipping",
+          "itemIds": [
+            "cmp-0018"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "The snapshot system",
+          "itemIds": [
+            "cmp-0022"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's Compose cards",
+          "itemIds": [
+            "cmp-0012",
+            "cmp-0013",
+            "cmp-0016",
+            "cmp-0018",
+            "cmp-0022"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Compose state and side effects",
+      "focus": "State hoisting, the state APIs and the side-effect family — the most common live-coding surface.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "State: remember, mutableStateOf, hoisting",
+          "itemIds": [
+            "cmp-0026",
+            "cmp-0027"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "State vs StateFlow, saveable state",
+          "itemIds": [
+            "cmp-0030"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Side effects: LaunchedEffect, DisposableEffect",
+          "itemIds": [
+            "cmp-0033",
+            "cmp-0034"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's Compose cards",
+          "itemIds": [
+            "cmp-0026",
+            "cmp-0027",
+            "cmp-0030",
+            "cmp-0033",
+            "cmp-0034"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Compose deep: locals, modifiers, phases",
+      "focus": "CompositionLocal, modifier chains and the three phases — where performance answers come from.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "CompositionLocal and scoping",
+          "itemIds": [
+            "cmp-0036",
+            "cmp-0037"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Modifiers: layout, draw, semantics",
+          "itemIds": [
+            "cmp-0038"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "The three phases and deferred reads",
+          "itemIds": [
+            "cmp-0041"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's Compose cards",
+          "itemIds": [
+            "cmp-0036",
+            "cmp-0037",
+            "cmp-0038",
+            "cmp-0041"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Architecture foundations",
+      "focus": "Layering, events and the domain layer — the shape of an app you would defend.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Layered architecture",
+          "itemIds": [
+            "ar-0008",
+            "ar-0009",
+            "ar-0011"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "State holders and ViewModels",
+          "itemIds": [
+            "ar-0012"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Events and navigation",
+          "itemIds": [
+            "ar-0013",
+            "ar-0014"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's architecture cards",
+          "itemIds": [
+            "ar-0008",
+            "ar-0009",
+            "ar-0011",
+            "ar-0012",
+            "ar-0013",
+            "ar-0014"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Architecture deep: DI, modularization, offline",
+      "focus": "Hilt beyond the toy example, module boundaries, and sync you can defend.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "The domain layer",
+          "itemIds": [
+            "ar-0018",
+            "ar-0019"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Dependency injection with Hilt",
+          "itemIds": [
+            "ar-0023",
+            "ar-0024"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Modularization and release engineering",
+          "itemIds": [
+            "ar-0028",
+            "ar-0030"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's architecture cards",
+          "itemIds": [
+            "ar-0018",
+            "ar-0019",
+            "ar-0023",
+            "ar-0024",
+            "ar-0028",
+            "ar-0030"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Platform foundations",
+      "focus": "Lifecycle, components and startup — how the OS treats your process.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Lifecycle and configuration changes",
+          "itemIds": [
+            "pf-0011",
+            "pf-0014",
+            "pf-0015"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Components and navigation",
+          "itemIds": [
+            "pf-0012"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "App startup",
+          "itemIds": [
+            "pf-0017"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's platform cards",
+          "itemIds": [
+            "pf-0011",
+            "pf-0014",
+            "pf-0015",
+            "pf-0012",
+            "pf-0017"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Platform deep",
+      "focus": "ANRs, IPC, memory, background work and permissions — where the OS bites.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "ANRs and the main thread",
+          "itemIds": [
+            "pf-0021"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "IPC and Binder",
+          "itemIds": [
+            "pf-0024"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Background work and WorkManager",
+          "itemIds": [
+            "pf-0028",
+            "pf-0034"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Permissions and runtime model",
+          "itemIds": [
+            "pf-0031"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's platform cards",
+          "itemIds": [
+            "pf-0021",
+            "pf-0024",
+            "pf-0028",
+            "pf-0034",
+            "pf-0031"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Data & performance",
+      "focus": "Networking, persistence and app health — breadth day before the mock-heavy back half.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Networking and serialization",
+          "itemIds": [
+            "dn-0005",
+            "dn-0010",
+            "dn-0015"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Room and DataStore",
+          "itemIds": [
+            "dn-0019",
+            "dn-0021",
+            "dn-0025"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Paging",
+          "itemIds": [
+            "dn-0027"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Startup, jank, memory and profiling",
+          "itemIds": [
+            "pe-0004",
+            "pe-0009",
+            "pe-0013",
+            "pe-0015",
+            "pe-0025",
+            "pe-0030",
+            "pe-0032"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's data and performance cards",
+          "itemIds": [
+            "dn-0005",
+            "dn-0010",
+            "dn-0015",
+            "dn-0019",
+            "dn-0021",
+            "dn-0025",
+            "dn-0027",
+            "pe-0004",
+            "pe-0009",
+            "pe-0013",
+            "pe-0015",
+            "pe-0025",
+            "pe-0030",
+            "pe-0032"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Build, testing & problem solving",
+      "focus": "The build you own, the tests you trust, and coding out loud.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Gradle and multi-module builds",
+          "itemIds": [
+            "bt-0003",
+            "bt-0015"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Testing strategy and coroutine tests",
+          "itemIds": [
+            "bt-0026",
+            "bt-0030"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Compose UI testing",
+          "itemIds": [
+            "bt-0037"
+          ]
+        },
+        {
+          "kind": "dsa",
+          "label": "Hashing, two pointers, sliding window",
+          "itemIds": [
+            "ds-0020",
+            "ds-0021",
+            "ds-0022"
+          ]
+        },
+        {
+          "kind": "dsa",
+          "label": "Binary search, sorting, heaps, trees, graphs",
+          "itemIds": [
+            "ds-0025",
+            "ds-0027",
+            "ds-0033",
+            "ds-0037",
+            "ds-0042"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's build and testing cards",
+          "itemIds": [
+            "bt-0003",
+            "bt-0015",
+            "bt-0026",
+            "bt-0030",
+            "bt-0037"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Security, KMP, system design & behavior",
+      "focus": "Closing breadth: security and KMP, the design framework applied, and the soft skills.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Security, integrity and network security",
+          "itemIds": [
+            "sk-0004",
+            "sk-0008",
+            "sk-0015"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Kotlin Multiplatform and Play policy",
+          "itemIds": [
+            "sk-0022",
+            "sk-0049"
+          ]
+        },
+        {
+          "kind": "design",
+          "label": "Feature flags, observability, image loading, networking, offline-first",
+          "itemIds": [
+            "sd-0005",
+            "sd-0006",
+            "sd-0007",
+            "sd-0008",
+            "sd-0010"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "STAR stories, live coding craft, questions to ask",
+          "itemIds": [
+            "bh-0004",
+            "bh-0002",
+            "bh-0003"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Skim the coroutines cheat sheet",
+          "itemIds": [
+            "cs-0002"
+          ]
+        },
+        {
+          "kind": "mock",
+          "label": "Full loop mock: Android screen → system design → coding"
+        },
+        {
+          "kind": "drill",
+          "label": "Drill every card you rated Again or Hard this week"
+        },
+        {
+          "kind": "note",
+          "label": "Check your setup. Sleep early."
+        }
+      ]
+    }
+  ]
+}

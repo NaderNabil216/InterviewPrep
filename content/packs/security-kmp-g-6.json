@@ -1,0 +1,500 @@
+{
+  "id": "security-kmp-g-6",
+  "title": "Security, KMP & Modern Android",
+  "track": "security-kmp",
+  "items": [
+    {
+      "id": "sk-0054",
+      "track": "security-kmp",
+      "topic": "Tech radar",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "tech-radar",
+        "2026",
+        "strategy"
+      ],
+      "q": "It is 2026 and you are building the Android tech radar for your org — which technologies go in Adopt, Trial, Assess, and Hold, and why?",
+      "shortAnswer": [
+        "Adopt what is stable and mainstream: Compose with Material 3, KMP for shared logic, Credential Manager with passkeys, and Media3 — each is the default answer Google now points to.",
+        "Trial what is nearly there: Compose Multiplatform for iOS UI, on-device AI via ML Kit GenAI, and adaptive layouts for foldables and large screens.",
+        "Hold the things we keep choosing despite evidence: hand-rolled OAuth, WebView-heavy architectures, and plain SharedPreferences for secrets."
+      ],
+      "answer": "#### Adopt — the safe default\n**Compose with Material 3** is the primary UI stack; **Media3** is where ExoPlayer lives; **Credential Manager** with passkeys is the sign-in direction; **KMP** for shared business logic is production-proven across Android and iOS. These are what Google and JetBrains actively steer new work toward, and each has a long support tail.\n\n#### Trial — wait but verify\n**Compose Multiplatform for iOS** is stable but an organizational bet, **on-device AI** via ML Kit GenAI is device-gated, and the **Swift export** path for KMP is promising but not the default. Put them here so a spike can prove or kill them without betting the product.\n\n#### Assess — watch the horizon\n**XR and Wear OS** Compose support, **Android 17** behavior changes, and **16 KB page-size** compliance. No commitment yet, but each reshapes a decision within a year or two.\n\n#### Hold — stop choosing it\nHand-rolled OAuth, WebView-heavy architectures, plaintext preference storage, and dependency-copying build setups.\n\nThe point interviewers want: a radar is a **judgment about where the platform is heading**, not a popularity list — every Adopt entry earns its place on support tail and team leverage, and Hold entries show you can say no.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A radar as data, so the team can argue about placement",
+          "src": "enum class RadarRing { ADOPT, TRIAL, ASSESS, HOLD }\n\ndata class RadarEntry(\n    val name: String,\n    val ring: RadarRing,\n    val rationale: String\n)\n\nval android2026 = listOf(\n    RadarEntry(\"Jetpack Compose\", RadarRing.ADOPT, \"default UI toolkit, long support tail\"),\n    RadarEntry(\"Kotlin Multiplatform\", RadarRing.ADOPT, \"share logic, keep native UI\"),\n    RadarEntry(\"Compose Multiplatform iOS\", RadarRing.TRIAL, \"stable but an org bet\"),\n    RadarEntry(\"On-device GenAI\", RadarRing.TRIAL, \"device-gated today\"),\n    RadarEntry(\"Hand-rolled OAuth\", RadarRing.HOLD, \"Credential Manager covers it\")\n)"
+        }
+      ],
+      "followUps": [
+        "Which Adopt pick would you defend under pressure, and what evidence would move it to Hold?",
+        "Where do Compose Multiplatform and the Swift-export direction interact on the same radar?",
+        "How do you make a radar decision falsifiable — what triggers a move from Trial to Adopt?"
+      ],
+      "traps": [
+        "Listing what is popular without a judgment; a radar is a decision record, not a news digest.",
+        "Putting experimental tech in Adopt — on-device AI and CMP iOS are still gated or a bet.",
+        "Missing the Hold quadrant; interviewers want to see you willing to say no."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin release process and schedule",
+          "url": "https://kotlinlang.org/docs/releases.html",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "AndroidX releases",
+          "url": "https://developer.android.com/jetpack/androidx/versions",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0055",
+      "track": "security-kmp",
+      "topic": "Native concurrency",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "native",
+        "concurrency",
+        "atomicfu",
+        "memory-model"
+      ],
+      "q": "The old frozen-object memory model is gone — under the new one, when do you still reach for atomicfu, and what is a Kotlin/Native Worker actually for now?",
+      "shortAnswer": [
+        "The modern memory manager gives you a shared heap and a concurrent GC, so any thread can touch any object — which means data races are now your discipline, exactly as on the JVM.",
+        "atomicfu is for lock-free atomic shared state — counters, flags, single-shot latches — that many threads read and mutate without a lock.",
+        "Workers survive for a different job: owning a real thread for blocking or callback-driven native code that coroutine dispatchers cannot express."
+      ],
+      "answer": "#### What the new model changed\nKotlin/Native now has a shared heap with a tracing, concurrent GC: any thread can read any object, and `freeze()`, `TransferMode`, and the old worker-transfer ceremony are obsolete. Coroutines, Flow, and shared collections behave like they do on the JVM. The trade-off: the compiler no longer guarantees thread-safety for you, so **mutation discipline** is your job.\n\n#### When atomicfu earns its place\n`kotlinx.atomicfu` provides lock-free `atomic(initial)` refs usable from common code — a download counter, a one-shot guard, a rate-limit flag read from a callback thread. For those, a lock is overkill and an unguarded `var` is a race. If the state is more than one word, prefer a lock or thread confinement over faking it with atomics.\n\n#### What Workers are for now\nNot memory safety — **thread ownership**. `Worker.start()` gives you a real thread you control, which matters for blocking native calls and C callbacks that must never touch the main run loop, and for keeping work off `Dispatchers.Main`. Migrating old code is mostly deleting `freeze()` calls; you keep a Worker only where you genuinely need a dedicated thread.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Atomic shared state, and a Worker for blocking native work",
+          "src": "import kotlinx.atomicfu.atomic\n\nclass DownloadTracker {\n    private val active = atomic(0)\n\n    fun start() { active.incrementAndGet() }\n    fun finish() { active.decrementAndGet() }\n    fun isBusy(): Boolean = active.value > 0\n}\n\nval worker = Worker.start()\n\nval future: Future<Int> = worker.execute(TransferMode.SAFE) {\n    blockingNativeParse(payload)   // long C call, stays off the main run loop\n}"
+        }
+      ],
+      "followUps": [
+        "Where does the new memory model still not protect you — what one rule do you keep enforcing?",
+        "When is a mutex the right call over an atomic, and vice versa?",
+        "What does migrating a frozen-object codebase actually involve?"
+      ],
+      "traps": [
+        "Claiming atomicfu is obsolete because the model is safe — it protects you from the memory model, not from data races.",
+        "Describing Workers as the old freezing mechanism; their thread-ownership role is the current story."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin/Native memory management",
+          "url": "https://kotlinlang.org/docs/native-memory-manager.html",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "kotlinx-atomicfu",
+          "url": "https://github.com/Kotlin/kotlinx-atomicfu",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0056",
+      "track": "security-kmp",
+      "topic": "Data security",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "tls",
+        "encryption-at-rest",
+        "end-to-end"
+      ],
+      "q": "TLS protects the wire and the OS encrypts the disk — so when does your app still need to add its own encryption, and what does end-to-end actually add?",
+      "shortAnswer": [
+        "In transit, TLS with server certificate validation is the default and cleartext should be off; pinning only for high-value endpoints.",
+        "At rest, file-based encryption already covers the storage layer — your job is protecting specific secrets with Keystore-backed keys, not re-encrypting everything.",
+        "End-to-end means the server cannot read the data either, and it earns its key-management cost only when your threat model treats the server as untrusted."
+      ],
+      "answer": "#### Transport\nTLS everywhere: `cleartextTrafficPermitted=false` in Network Security Config, HTTPS-only endpoints, certificate validation left to the platform. Transport encryption protects the wire between device and server — not the data once it arrives. Pinning narrows trust to a specific key for high-value APIs but must ship with a backup pin and a kill switch.\n\n#### At rest\nThe OS already encrypts userdata (file-based encryption since Android 7). App-level encryption is about **secrets, not volumes**: generate an AES key in the Android Keystore (`KeyGenParameterSpec`, hardware-backed), and encrypt tokens, PII, and refresh tokens with AES-GCM before they touch storage. Encrypting every row of every database is usually overhead without a matching threat.\n\n#### End-to-end\nTransport and at-rest encryption both stop at the server. End-to-end encryption keeps keys client-managed so the server holds ciphertext it cannot read — against a compromised or untrusted server — at the cost of key distribution, recovery, and search. It fits messaging and health data; for most apps the server is the trusted party and transport plus at-rest covers the realistic attacks.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Secrets stay encrypted at rest; the wire is the network stack's job",
+          "src": "fun encrypt(plain: ByteArray, key: SecretKey): ByteArray {\n    val cipher = Cipher.getInstance(\"AES/GCM/NoPadding\")\n    cipher.init(Cipher.ENCRYPT_MODE, key)\n    val iv = cipher.iv\n    return iv + cipher.doFinal(plain)   // store iv + ciphertext together\n}\n\nfun decrypt(data: ByteArray, key: SecretKey): ByteArray {\n    val iv = data.copyOfRange(0, 12)\n    val ciphertext = data.copyOfRange(12, data.size)\n    val cipher = Cipher.getInstance(\"AES/GCM/NoPadding\")\n    cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))\n    return cipher.doFinal(ciphertext)\n}"
+        }
+      ],
+      "followUps": [
+        "What do backup rules and the Android backup story have to do with at-rest encryption?",
+        "When would you add application-level encryption even though the disk is already encrypted?",
+        "What breaks in an end-to-end design when the user switches devices?"
+      ],
+      "traps": [
+        "Treating disk encryption as if it protects the app from a malicious app or a rooted device — it only covers an off device at rest.",
+        "Proposing app-wide double encryption just to be safe; without a threat model that is cost without control.",
+        "Conflating transport encryption with end-to-end: both say encrypted, only one keeps the server out."
+      ],
+      "refs": [
+        {
+          "title": "Security with HTTPS and SSL",
+          "url": "https://developer.android.com/privacy-and-security/security-ssl",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Android Keystore system",
+          "url": "https://developer.android.com/privacy-and-security/keystore",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0057",
+      "track": "security-kmp",
+      "topic": "Authentication flows",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "oauth2",
+        "pkce",
+        "sso",
+        "refresh-token"
+      ],
+      "q": "Walk through the OAuth 2.0 authorization-code flow with PKCE on Android — where do tokens live, how does refresh rotation work, and what does logout actually terminate?",
+      "shortAnswer": [
+        "A mobile app is a public client, so you run authorization-code plus PKCE: a per-request verifier whose challenge goes to the server, so a stolen code without the verifier is worthless.",
+        "Tokens live in Keystore-backed storage, not SharedPreferences; refresh tokens rotate on every use, and a replayed rotated token is treated as a leak that revokes the whole family.",
+        "Logout is local deletion plus a server-side revoke of the session; anything less leaves a refresh token alive that outlives the logout."
+      ],
+      "answer": "#### The flow\nA public client has no secret it can hide in an APK, so you use **Authorization Code + PKCE** (RFC 7636). Generate a 43–128 character verifier per request, send its SHA-256 (`S256`) challenge to the authorization server, receive the code on a redirect, then exchange code plus verifier for tokens. A stolen code without the verifier is useless. The exchange happens in the app or a backend; either way the tokens land client-side and must be guarded there.\n\n#### Token lifecycle\nAccess tokens are short-lived; refresh tokens live in **hardware-backed Keystore** storage. Refresh-token rotation: every refresh returns a new refresh token and invalidates the old one. If a rotated token is ever replayed, that is a theft signal — revoke the entire token family and force re-authentication.\n\n#### Logout semantics\nClearing the local session is not logout. Logout must delete tokens from secure storage, call the authorization server's revocation endpoint so the refresh token dies server-side, and be honest that SSO across apps is best-effort: the identity provider governs other apps' sessions, not your button.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "PKCE verifier and S256 challenge generation",
+          "src": "private const val PKCE_ALPHABET =\n    \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~\"\n\nfun pkcePair(): Pair<String, String> {\n    val verifier = (1..64).map { PKCE_ALPHABET.random() }.joinToString(\"\")\n    val digest = MessageDigest.getInstance(\"SHA-256\").digest(verifier.toByteArray())\n    val challenge = Base64.getUrlEncoder().withoutPadding().encodeToString(digest)\n    return verifier to challenge\n}\n\n// Every refresh rotates: server returns a fresh refresh_token and the old one dies.\n// Replay of a rotated token revokes the whole family."
+        }
+      ],
+      "followUps": [
+        "Why does a native app need PKCE when there is no client secret to leak?",
+        "How do you make concurrent token refreshes safe — what does single-flight look like?",
+        "Where does Credential Manager overlap with a hand-rolled OAuth client, and when do you use which?"
+      ],
+      "traps": [
+        "Storing a client secret in the app — a public client cannot hold secrets; PKCE exists because of that.",
+        "Implementing logout as a local clear only, leaving a refresh token that keeps the session alive.",
+        "Not mentioning rotation replay detection; that is the whole point of rotating."
+      ],
+      "refs": [
+        {
+          "title": "OAuth 2.0 for installed applications",
+          "url": "https://developers.google.com/identity/protocols/oauth2/native-app",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "RFC 8252 — OAuth 2.0 for Native Apps",
+          "url": "https://datatracker.ietf.org/doc/html/rfc8252",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0058",
+      "track": "security-kmp",
+      "topic": "Permissions",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "permissions",
+        "least-privilege",
+        "one-time-grant"
+      ],
+      "q": "When should an app ask for a runtime permission, and how do one-time grants and least privilege change the design?",
+      "shortAnswer": [
+        "Declare only what the app genuinely uses, and request at the point of first use inside the feature that needs it — never as an onboarding splash for something unrelated.",
+        "One-time grants and auto-reset mean a grant is a per-session fact: re-check on resume and degrade gracefully instead of nagging.",
+        "Prefer system pickers over broad permissions — the Photo Picker, for example, needs no storage permission at all."
+      ],
+      "answer": "#### Least privilege first\nThe manifest is a source of truth you can justify line by line. If only the sync feature touches the calendar, only it declares the calendar permission. Prefer capability-scoped APIs: the system **Photo Picker** for images and the document picker for files need no storage permission, and partial media access means a grant can be narrower than the app itself.\n\n#### Timing\nRequest at the moment the feature needs it, in context, with `rememberLauncherForActivityResult` and `ActivityResultContracts.RequestPermission` wired to the specific action. Grouping unrelated requests into one prompt (camera plus location) tanks consent and reads as sloppy. When the system rationale appears, explain in-app why, then re-request; when the user permanently denies, route to settings or disable the feature instead of prompting again.\n\n#### Grants are state\nSince one-time grants and auto-reset exist, a permission granted last launch may be gone now. Treat it as state: re-evaluate on every resume and build the UI so the feature hides or explains rather than crashing. The lifecycle interviewers want: declare minimally, ask late, degrade gracefully.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Request-on-use wiring in Compose",
+          "src": "val locationLauncher = rememberLauncherForActivityResult(\n    ActivityResultContracts.RequestPermission()\n) { granted ->\n    if (granted) startLocationTracking() else showRationaleCard()\n}\n\nButton(onClick = {\n    locationLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)\n}) {\n    Text(\"Start tracking\")\n}"
+        }
+      ],
+      "followUps": [
+        "How do you handle the permanently-denied state without a settings loop?",
+        "What does partial media access mean for a picker that used to request READ_EXTERNAL_STORAGE?",
+        "Where does a one-time grant auto-revoking break an app's assumptions about long-running access?"
+      ],
+      "traps": [
+        "Requesting everything at startup for a smoother flow later — consent at first launch for an unseen feature is the classic rejection.",
+        "Ignoring that one-time grants expire; code that caches granted forever misbehaves on Android 11+.",
+        "Reaching for storage permissions when the Photo Picker needs none."
+      ],
+      "refs": [
+        {
+          "title": "Permissions overview",
+          "url": "https://developer.android.com/guide/topics/permissions/overview",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Request app permissions",
+          "url": "https://developer.android.com/training/permissions/requesting",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0059",
+      "track": "security-kmp",
+      "topic": "Security testing",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "mastg",
+        "owasp",
+        "pen-testing"
+      ],
+      "q": "Walk me through actually running OWASP MASTG-style security testing on your own app — what would you check first, and how do you automate it?",
+      "shortAnswer": [
+        "Static on the release artifact: decompile the APK and hunt for hardcoded secrets, exported components, cleartext traffic allowed, backup enabled, and debug bits.",
+        "Dynamic on a rooted device or emulator with a proxy: replay traffic, verify pinning actually binds, check runtime memory for tokens, and confirm tamper detection fires.",
+        "Automate the static half in CI and run a manual MASVS-based pass quarterly for what tooling cannot judge."
+      ],
+      "answer": "#### The stance\nSecurity claims must be tested against the **release artifact**, not the source. Start from the OWASP **MASVS** checklist — insecure storage, insufficient transport protection, tampering, reverse-engineering resistance — and work through the matching **MASTG** tests.\n\n#### Static, on the APK\nPull the release build, unpack with `apktool`, decompile with `jadx`. Look first for: secrets in strings or resources, `android:allowBackup` not disabled, `android:exported` on components that should be private, `cleartextTrafficPermitted` still true, `addJavascriptInterface` on untrusted WebViews, and a release build that is debuggable. None of this needs a device, which is why it belongs in CI.\n\n#### Dynamic, on a device\nInstall on a rooted test device or emulator, route traffic through a proxy with your CA installed, and confirm: pinning actually rejects the MITM, tokens never surface in logs or memory dumps, root and hook detection fires and the app **fails closed** rather than showing a toast, and a tampered APK refuses to start.\n\n#### Automation\nThe static half is automatable today (MobSF, Android Lint security rules, dependency advisories); the dynamic half stays a quarterly manual ritual against the MASVS level you claim to meet.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A tiny static-check model for the MASVS-L1 transport and storage tests",
+          "src": "enum class Severity { INFO, WARN, CRITICAL }\n\ndata class Finding(val control: String, val severity: Severity, val detail: String)\n\nfun scanMergedManifest(manifestText: String): List<Finding> = buildList {\n    if (\"cleartextTrafficPermitted=\\\"true\\\"\" in manifestText)\n        add(Finding(\"MASVS-NETWORK-1\", Severity.CRITICAL, \"cleartext traffic permitted\"))\n    if (\"android:allowBackup=\\\"true\\\"\" in manifestText)\n        add(Finding(\"MASVS-DATA-2\", Severity.WARN, \"backup may expose data\"))\n    if (\"android:exported=\\\"true\\\"\" in manifestText)\n        add(Finding(\"MASVS-PLATFORM-1\", Severity.WARN, \"exported component found\"))\n}"
+        }
+      ],
+      "followUps": [
+        "Which MASVS controls can tooling verify and which genuinely need a human?",
+        "How do you test a token-storage claim without waiting for a real compromise?",
+        "How does a MASTG finding map to a Play Integrity decision at runtime?"
+      ],
+      "traps": [
+        "Testing against the source tree instead of the shipped APK — the artifact is what attackers get.",
+        "Treating the mobile scan as the whole story; the server side of the same flow is in scope too.",
+        "Installing a scanning tool and calling it a pass — you still have to assert on the findings."
+      ],
+      "refs": [
+        {
+          "title": "OWASP Mobile Application Security Testing Guide",
+          "url": "https://github.com/OWASP/owasp-mastg",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "App security best practices",
+          "url": "https://developer.android.com/privacy-and-security/security-tips",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0060",
+      "track": "security-kmp",
+      "topic": "KMP publishing",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "kmp",
+        "publishing",
+        "maven-central"
+      ],
+      "q": "You are publishing a Kotlin Multiplatform library — what does the artifact format look like, and what does getting onto Maven Central actually require?",
+      "shortAnswer": [
+        "A KMP library publishes one module with Gradle Module Metadata plus per-target artifacts — an aar for Android and klibs for native targets — and consumers resolve the variant matching their target.",
+        "`maven-publish` with the Kotlin plugin publishes the module; native targets must be built on macOS and Apple artifacts are usually signed too.",
+        "Maven Central now goes through the Central Portal, not the legacy OSSRH path — verified namespace, complete POM metadata, sources, and GPG signatures."
+      ],
+      "answer": "#### The artifact model\nA KMP library is one Maven module whose Gradle Module Metadata (the `.module` file) declares a set of **variants**: an Android `aar`, a JVM `jar`, and `klib`s for each native target. A consumer building for Android resolves the aar; an iOS app resolves the `iosArm64` or `iosSimulatorArm64` klib. Without the metadata, Maven-only consumers see one artifact and cannot build a multi-target library — the `.module` file is the load-bearing part.\n\n#### Publishing mechanics\nApply `maven-publish`; the Kotlin plugin wires per-target publications. `publishAllPublicationsToMavenRepository` produces the metadata plus every variant, so publish and verify the full set, not just the JVM jar. Apple targets require a macOS host to build, and iOS frameworks are commonly signed.\n\n#### Maven Central in 2026\nThe legacy OSSRH deploy path is gone — publishing runs through the **Central Portal**, which needs a verified namespace, a complete POM (licenses, scm, developers), sources and docs artifacts, and **GPG signatures** on everything. Gradle plugins, by contrast, go to the Gradle Plugin Portal. Version-neutral advice: test with `publishToMavenLocal` and a consumer project before touching a real repository.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The publishing block for a KMP library",
+          "src": "plugins {\n    kotlin(\"multiplatform\")\n    `maven-publish`\n    signing\n}\n\nkotlin {\n    androidTarget()\n    iosArm64()\n    iosSimulatorArm64()\n\n    sourceSets {\n        commonMain.dependencies {\n            implementation(\"org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0\")\n        }\n    }\n}\n\npublishing {\n    publications.withType<MavenPublication>().configureEach {\n        pom {\n            licenses { license { name = \"Apache-2.0\" } }\n            developers { developer { id = \"you\" } }\n        }\n    }\n}\n\nsigning {\n    sign(publishing.publications)\n}"
+        }
+      ],
+      "followUps": [
+        "Why does a KMP module need Gradle Module Metadata — what breaks without it?",
+        "What is different about publishing a JS or Wasm target versus the Apple ones?",
+        "How do you test a library before Central rejects it for missing metadata?"
+      ],
+      "traps": [
+        "Publishing only the Android target and assuming iOS resolves it — consumers on Apple get nothing.",
+        "Not knowing the OSSRH-era steps are obsolete; the 2026 answer is the Central Portal.",
+        "Skipping signing and POM completeness, which are exactly what Central enforces."
+      ],
+      "refs": [
+        {
+          "title": "Publish a multiplatform library",
+          "url": "https://kotlinlang.org/docs/multiplatform-publish-lib.html",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Gradle Maven Publish Plugin",
+          "url": "https://docs.gradle.org/current/userguide/publishing_maven.html",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0061",
+      "track": "security-kmp",
+      "topic": "iOS interop",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "swift",
+        "interop",
+        "cinterop"
+      ],
+      "q": "The KMP boundary runs both ways — how does Swift call your Kotlin, and how does Kotlin call Swift back, and what parts of Swift never cross?",
+      "shortAnswer": [
+        "Kotlin to Swift: your module compiles to a framework whose API is exported through the Objective-C bridge — classes, methods, completion handlers; SKIE sharpens suspend and Flow into async and AsyncSequence.",
+        "Swift to Kotlin: Kotlin consumes Swift through cinterop, but only the Objective-C-visible surface — @objc classes and members — is callable; Swift structs, generics, protocol extensions, and top-level functions are invisible.",
+        "Keep the seam narrow: cross it with simple data and design the Swift-visible API explicitly instead of exporting everything."
+      ],
+      "answer": "#### Kotlin into Swift\n`kotlin(\"multiplatform\")` compiles to an Apple framework; the Kotlin/Native compiler emits an Objective-C header that Swift imports. Kotlin classes appear as classes, `suspend fun` becomes a completion-handler method, and Flow becomes a collect-by-callback type. SKIE rewrites that surface so suspend becomes `async`, Flow becomes `AsyncSequence`, and `@Throws` becomes `throws` — the ergonomics layer most teams use today.\n\n#### Kotlin into Swift, reversed\nKotlin reaches Swift the same way, through cinterop, which reads the Objective-C-visible API. Any Swift code that is not `@objc`-exported simply does not exist on the Kotlin side — **structs, enums without @objc, protocol extensions, generics, and top-level functions** do not cross. Calling a pure-Swift library from Kotlin usually means exposing a small `@objc` facade first.\n\n#### The boundary discipline\nEach direction passes through a lossy bridge, so the seam should be narrow and typed in the middle: pass `String`, numbers, and Codable or `@Serializable`-shaped models, not Kotlin objects held inside SwiftUI state (retain cycles) or Swift objects stashed into Kotlin (leaked bridge types). The exported API is an interface decision, not an implementation detail.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Kotlin calls an @objc-visible Swift class through cinterop",
+          "src": "// Swift side — only @objc-visible members cross the bridge:\n//    @objc(Scanner) public final class Scanner: NSObject {\n//        @objc public func scan(text: String) -> String { text.uppercased() }\n//    }\n\n@OptIn(ExperimentalForeignApi::class)\nfun scanViaSwift(text: String): String {\n    val scanner = Scanner()      // cinterop binding for the @objc class\n    return scanner.scan(text)    // a plain Kotlin call across the bridge\n}\n\n// A Swift struct is invisible to Kotlin — only @objc classes and members\n// survive cinterop; expose a facade for anything you need to call."
+        }
+      ],
+      "followUps": [
+        "Why is a Swift struct invisible to Kotlin while a Kotlin data class is visible to Swift?",
+        "What threading assumptions cross the bridge when Swift calls a Kotlin suspend function?",
+        "When would you rather keep a Swift-only library on the Swift side than bridge it?"
+      ],
+      "traps": [
+        "Assuming Kotlin can call arbitrary Swift — only the @objc-visible surface exists for cinterop.",
+        "Treating the bridge as free: passing Kotlin objects into Swift state causes retain cycles and memory surprises.",
+        "Exporting every Kotlin symbol and hoping it reads well; the exported API needs design."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin/Native Objective-C interop",
+          "url": "https://kotlinlang.org/docs/native-objc-interop.html",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Kotlin/Native C interop",
+          "url": "https://kotlinlang.org/docs/native-c-interop.html",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0062",
+      "track": "security-kmp",
+      "topic": "Obfuscation & KMP",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "r8",
+        "obfuscation",
+        "native",
+        "kmp"
+      ],
+      "q": "R8 renames Android bytecode — in a KMP project, what actually gets obfuscated, and what survives untouched in the native iOS binary?",
+      "shortAnswer": [
+        "R8 runs only on the Android DEX path: it shrinks, optimizes, and renames classes, methods, and fields, but string literals, URLs, and resource names survive verbatim.",
+        "The iOS target is not R8-processed at all — Kotlin/Native goes through LLVM, so the exported framework symbols keep their real names and the klib keeps its metadata.",
+        "Obfuscation coverage is per-target: Android gets renamed symbols, iOS gets effectively none, which is why obfuscation stays defense in depth, never a secret keeper."
+      ],
+      "answer": "#### What R8 covers\nOn the Android target of a KMP project, the shared Kotlin compiles to the same DEX as your Android code, so R8 handles it identically: shrinking, optimization, renaming, resource shrinking. What survives is **every string literal**, URLs, JSON keys, and any class name reached by reflection unless pinned — and kotlinx.serialization's generated `serializer`, which is exactly why serialization keep rules exist. A `@Keep` annotation is a deliberate surface, not a convenience.\n\n#### What the iOS binary gets\nNone of it. Kotlin/Native emits LLVM bitcode and a binary; R8 has nothing to do with that pipeline. The framework exported to Swift keeps **full symbol names** in the header and runtime metadata, and the klib on disk keeps names for linking. Obfuscating a KMP project therefore means Android-side renaming only, plus whatever you decide about the framework surface you ship to iOS.\n\n#### The implication\nThe same source, two radically different obfuscation realities. That asymmetry is the argument for the standard line: R8 raises the cost of casual analysis on Android, is absent on iOS, and neither is a place to hide a secret. If a value must be confidential, it does not live in the app at all.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "R8 on the Android target, and the keep rules serialization needs",
+          "src": "android {\n    buildTypes {\n        release {\n            isMinifyEnabled = true\n            isShrinkResources = true\n            proguardFiles(\n                getDefaultProguardFile(\"proguard-android-optimize.txt\"),\n                \"proguard-rules.pro\"\n            )\n        }\n    }\n}\n\n// proguard-rules.pro — kotlinx.serialization reflection needs explicit keep rules\n//   -keepattributes *Annotation*, InnerClasses\n//   -dontnote kotlinx.serialization.**\n//   -keepclassmembers class **$$serializer { *; }\n//\n// The iOS framework is NOT processed by R8: LLVM output keeps real symbol names."
+        }
+      ],
+      "followUps": [
+        "What does the kotlinx.serialization reflection path need from R8, specifically?",
+        "If obfuscation is per-target, what does that do to a threat model that assumed one release process?",
+        "Where does resource shrinking bite Compose Multiplatform and KMP resources?"
+      ],
+      "traps": [
+        "Saying the KMP project is obfuscated without separating the Android DEX from the native binary.",
+        "Believing renaming protects a hardcoded secret — strings survive on both targets.",
+        "Shipping without serialization keep rules and blaming a downstream crash on R8."
+      ],
+      "refs": [
+        {
+          "title": "Shrink, obfuscate, and optimize your app (R8)",
+          "url": "https://developer.android.com/build/shrink-code",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Kotlin/Native targets overview",
+          "url": "https://kotlinlang.org/docs/native-overview.html",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0063",
+      "track": "security-kmp",
+      "topic": "Enterprise mobile platform",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "mdm",
+        "enterprise",
+        "byod",
+        "compliance"
+      ],
+      "q": "Design a secure-by-default mobile platform for an enterprise — enrollment, device policy, secrets, and compliance. Where do the controls actually live?",
+      "shortAnswer": [
+        "Start from the ownership model: BYOD with a work profile versus fully managed devices, because you cannot treat a personal phone as a fully controlled asset.",
+        "Controls layer on Android Enterprise: managed configuration and policy from a device policy controller, work-profile-isolated storage, Keystore keys, and file-based encryption so work data is locked at boot.",
+        "Fail closed: attestation gates high-risk actions, secrets live server-side with short-lived credentials, and a lost device gets a work-profile wipe, never a personal one."
+      ],
+      "answer": "#### Threat model first\nThe design hinges on ownership. **Fully managed** devices are company property: app allowlists, device VPN, kiosk modes are fair game. **BYOD** keeps the personal side sacrosanct — you get a **work profile** (Android Enterprise), the sandbox where policy applies. Enforce nothing on the personal side and say so.\n\n#### Where the controls live\n- **Policy**: an MDM device policy controller pushes managed configuration and device policy (camera, USB, backup) scoped to the work profile.\n- **Storage**: file-based encryption splits device- and credential-encrypted storage, so work data is unreachable before first unlock; app secrets sit behind Keystore keys, with StrongBox for the crown jewels.\n- **Identity**: SSO with PKCE, device-bound client certificates, and **Play Integrity attestation** as a conditional-access signal — attestation failure degrades to read-only, never warn-and-proceed.\n- **Secrets**: server-side, short-lived, revocable; nothing baked into apps.\n- **Compliance**: attestation results, policy violations, and audit logs flow to the DPC; a lost device triggers work-profile wipe and credential revocation, leaving personal data alone.\n\n#### The interview point\nSecure-by-default means **fail closed** and policy as a first-class artifact: enrollment is unproductive until compliant, and every security decision is expressible in policy, not scattered across app code.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A compliance gate that fails closed",
+          "src": "fun gateAccess(\n    attestation: IntegrityResult,\n    profile: WorkProfileState\n): AccessDecision {\n    val verified = attestation.isVerified && !attestation.isDeviceTampered\n    val compliant = profile.isPolicyCompliant && profile.isLockedAtBoot\n    return when {\n        verified && compliant -> AccessDecision.FULL\n        verified             -> AccessDecision.READ_ONLY\n        else                 -> AccessDecision.DENIED\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "How do you handle a BYOD device that fails attestation but whose user needs email?",
+        "What belongs in device policy versus the app's own threat model?",
+        "How does a work-profile wipe interact with file-based encryption and key rotation?"
+      ],
+      "traps": [
+        "Designing as if every device is fully managed; BYOD boundaries are the hard part.",
+        "Client-side-only checks — attestation must feed a server decision.",
+        "Wiping personal data in an incident; that is exactly what the work profile exists to prevent."
+      ],
+      "refs": [
+        {
+          "title": "Android Enterprise and the work profile",
+          "url": "https://developer.android.com/work",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Android encryption (file-based and full-disk)",
+          "url": "https://source.android.com/docs/security/features/encryption",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    }
+  ]
+}

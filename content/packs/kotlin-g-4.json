@@ -1,0 +1,232 @@
+{
+  "id": "kotlin-g-4",
+  "title": "Kotlin Language",
+  "track": "kotlin",
+  "items": [
+    {
+      "id": "kt-0029",
+      "track": "kotlin",
+      "topic": "Visibility & API surface",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "internal",
+        "visibility",
+        "bytecode"
+      ],
+      "q": "What does `internal` compile to, and who can actually call it?",
+      "shortAnswer": [
+        "`internal` is enforced only by the compiler: the bytecode member is public with a mangled name, so Java code or reflection can call it.",
+        "Unit tests see internals because the test source set is an associated module, but that association does not extend across Gradle modules.",
+        "`protected` in Kotlin has no package visibility like Java's, and `@JvmSynthetic` is how you hide a member from Java entirely."
+      ],
+      "answer": "`internal` is a **compile-time-only** restriction. The Kotlin compiler enforces it at source level — same-module code sees the member, other modules do not — but the JVM knows nothing about it. The compiled member is `public` in the bytecode with a **mangled name**: `fun foo()` in module `app` becomes `foo$app()`. Java code compiled against the same module does not see Kotlin's internal check (it reads public bytecode and calls `foo$app()` freely), and reflection is unaffected by mangling.\n\n#### Who can actually call it\n- **Any Java code** in the same compilation unit — bytecode visibility is public.\n- **Reflective callers** (Spring, Hilt processors, mock frameworks) — they look up the mangled name.\n- **Unit tests in the same module** — this is *not* an accident. Kotlin treats the test source set as an **associated module** (a friend), which is why `internal` members are reachable from `test/` and `androidTest/`. That friendship is module-scoped: it does **not** cross Gradle modules, so internals of library `:core` are invisible to `:app`'s tests.\n\n#### The `protected` difference\nJava `protected` gives package-private *plus* subclass access. Kotlin `protected` is only **subclass access** — there is no package-private tier in Kotlin at all (that is why `@JvmPackageName`/package-private hacks exist).\n\n#### Hiding from Java entirely\n`@JvmSynthetic` marks a member so Java's compiler excludes it from source-level access (and it is not visible in IDE completion), though reflection still sees it. This is the tool for internal-only helpers you never want a Java consumer to discover.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "internal in bytecode, friend modules, and Java visibility",
+          "src": "// module app\ninternal fun foo() = \"secret\"\n\n// compiles to (bytecode): public final foo$app()\n// Java caller:  foo$app()  — works fine, no compile error\n\n// test source set is a friend module:\nclass AppTest { @Test fun t() { foo() } }   // OK — sees internal\n\n// Kotlin protected = subclass only (no package tier):\nopen class A { protected fun p() {} }\n// class B { fun q(a: A) { a.p() } }  // ERROR — not a subclass"
+        }
+      ],
+      "followUps": [
+        "Why is `internal` in a library still leaking to Java consumers?",
+        "How does `@JvmSynthetic` differ from `private`?",
+        "When would you rely on the test-source-set friendship?"
+      ],
+      "traps": [
+        "Saying `internal` is private at runtime. The JVM bytecode is public; only the compiler enforces it.",
+        "Thinking `protected` includes package access like Java — it does not."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Visibility modifiers",
+          "url": "https://kotlinlang.org/docs/visibility-modifiers.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0030",
+      "track": "kotlin",
+      "topic": "Visibility & API surface",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "binary-compat",
+        "inline",
+        "const"
+      ],
+      "q": "Which Kotlin-specific changes silently break binary compatibility for a library's consumers?",
+      "shortAnswer": [
+        "`inline` function bodies and `const val` values are copied into consumer bytecode, so a bug fix does nothing until consumers recompile.",
+        "Default arguments compile to a synthetic `$default` method carrying an int bitmask, so adding or reordering a parameter changes the signature.",
+        "Binary-compatibility-validator `.api` dumps and `explicitApi()` are the guardrails that catch these breaks before release."
+      ],
+      "answer": "Kotlin's headline features have hidden ABI costs. Four classes of change break consumers without any source error:\n\n#### 1. `inline` function bodies are baked into consumers\nThe body is copied into every call site's bytecode. Fix a bug in the body and the *fix does not exist for consumers until they recompile* — the old body is already frozen in their `.class` files. Worse, any `internal`/`private` helper the body touches must be `@PublishedApi`, or the inline function cannot be public at all.\n\n#### 2. `const val` is inlined too\nThe literal is pasted at each use site, so a constant's value change requires a consumer recompile. That is why public API constants use `@JvmField val` — a real static field read at runtime.\n\n#### 3. Default arguments compile to a `$default` method\n`fun foo(a: Int = 1)` produces `foo(int)` plus synthetic `foo$default(int, int, int, Object)`, where the extra `int` is a **bitmask** encoding which parameters were omitted. Add, reorder, or retype a parameter and the synthetic signature changes → `NoSuchMethodError` at the call site.\n\n#### 4. Sealed subtypes / data-class constructor changes\nAdding a sealed subtype or a data-class constructor parameter breaks exhaustive `when`s and `copy()` signatures respectively (details in those items).\n\n#### Guardrails\n- **`binary-compatibility-validator`**: a checked-in `.api` dump of your public surface; CI fails when the ABI changes without review.\n- **`explicitApi()`**: forces you to annotate every public declaration, making the surface deliberate.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Where the ABI silently changes",
+          "src": "// v1\nconst val BASE_URL = \"https://api.example\"   // pasted into consumers\n\ninline fun Int.double(): Int = this * 2       // body pasted into consumers\n\nfun fetch(page: Int = 0) {}                    // + fetch$default(int, int, Object)\n\n// v2 — each of these is a silent binary break:\nconst val BASE_URL = \"https://v2.api.example\" // needs consumer recompile\ninline fun Int.double(): Int = this * 2 + 1    // fix unseen until recompile\nfun fetch(page: Int = 0, size: Int = 20) {}    // fetch$default signature changed"
+        }
+      ],
+      "followUps": [
+        "Why does `@PublishedApi` exist, and what breaks without it?",
+        "How does the bitmask in `$default` methods work?",
+        "What does binary-compatibility-validator actually diff?"
+      ],
+      "traps": [
+        "Claiming inline body changes are picked up automatically — consumers hold a stale copy until recompile.",
+        "Forgetting `const val` in the answer; it is the same inline-in-consumer mechanism."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Inline functions",
+          "url": "https://kotlinlang.org/docs/inline-functions.html",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "kotlinx binary-compatibility-validator",
+          "url": "https://github.com/Kotlin/binary-compatibility-validator",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0031",
+      "track": "kotlin",
+      "topic": "Delegation",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "delegated-properties",
+        "Delegates",
+        "KProperty"
+      ],
+      "q": "Write a custom property delegate — and what does the stdlib already give you?",
+      "shortAnswer": [
+        "A delegate needs `operator fun getValue(thisRef, property: KProperty<*>)` and optionally `setValue` for a `var`, or implement `ReadOnlyProperty`/`ReadWriteProperty`.",
+        "The stdlib ships `Delegates.observable`, `vetoable`, `notNull`, and `by map` for map-backed properties.",
+        "`provideDelegate` lets you validate or register per property at construction, which is how SavedStateHandle and preference delegates key off `property.name`."
+      ],
+      "answer": "The contract: for `var x: T by delegate`, the compiler calls `delegate.getValue(thisRef, property)` on read and `delegate.setValue(thisRef, property, value)` on write, where `property` is a `KProperty<*>` describing the field. Implement the two `operator` functions directly or implement the `ReadOnlyProperty`/`ReadWriteProperty` interfaces. `thisRef` is the containing instance (`null` for top-level).\n\n#### A minimal custom delegate\n`class TrimmingDelegate : ReadWriteProperty<Any?, String>` (shown in the code array) trims the value in `setValue` before storing.\n\n#### What the stdlib gives you\n- **`Delegates.observable(initial)`** — callback after a change (`onChange(property, old, new)`).\n- **`Delegates.vetoable(initial)`** — return `false` in the callback and the write is rejected (validation).\n- **`Delegates.notNull()`** — a `lateinit`-like delegate that throws `IllegalStateException` if read before write.\n- **`by map`** — `val name: String by mapOf(\"name\" to \"x\")` reads `map[\"name\"]`; the type must match, and `var` needs `MutableMap`. This is the JSON/config-to-object pattern.\n\n#### `provideDelegate`\n`operator fun provideDelegate(thisRef, property): ReadWriteProperty<...>` runs **at construction** of the object — before any get/set. That is how SavedStateHandle, preference, and Bundle delegates know `property.name` to key their storage, or reject an illegal delegate at field-declaration time. The cost to note: each delegated property holds a field for the delegate plus a `KProperty` reference.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Custom delegate + the stdlib trio + provideDelegate",
+          "src": "class PrefDelegate(private val prefs: SharedPreferences)\n    : ReadWriteProperty<Any?, String> {\n    override fun getValue(r: Any?, p: KProperty<*>) = prefs.getString(p.name, \"\") ?: \"\"\n    override fun setValue(r: Any?, p: KProperty<*>, v: String) =\n        prefs.edit().putString(p.name, v).apply()\n}\n\nvar token: String by PrefDelegate(prefs)   // key = \"token\"\n\nvar count by Delegates.observable(0) { _, _, new -> save(new) }\nvar age by Delegates.vetoable(0) { _, _, new -> new in 0..150 }\nvar db by Delegates.notNull<Database>()\nval j: Int by mapOf(\"j\" to 42)"
+        }
+      ],
+      "followUps": [
+        "What is the difference between `provideDelegate` and the get/set operators?",
+        "Why does a delegated property cost a field plus a KProperty reference?",
+        "When is `Delegates.notNull()` preferable to `lateinit`?"
+      ],
+      "traps": [
+        "Forgetting the `operator` keyword on getValue/setValue — the delegation silently fails to apply.",
+        "Not mentioning `provideDelegate`; the interviewer wants to know how property.name-based keys work."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Delegated properties",
+          "url": "https://kotlinlang.org/docs/delegated-properties.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0032",
+      "track": "kotlin",
+      "topic": "Delegation",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "class-delegation",
+        "decorator",
+        "by"
+      ],
+      "q": "`class A(b: B) : B by b` — what does the compiler generate, and what is the self-call problem?",
+      "shortAnswer": [
+        "The compiler generates one forwarding method per interface member, delegating to the `by`-expression captured once at construction.",
+        "If you override a member, the delegate's internal calls still hit its own implementation, not your override — the broken-decorator trap.",
+        "Members added to the interface later are forwarded silently with no compile error, so the delegation surface can drift from intent."
+      ],
+      "answer": "`class CacheRepo(inner: Repo) : Repo by inner` compiles to a class implementing `Repo` with one **forwarding method per interface member**, each simply calling the corresponding member on the captured `inner` instance. It is mechanical codegen — no proxy, no reflection.\n\n#### The self-call problem\nThe generated forwarders call `inner.member()`. If you **override** one member (`override fun get(key: String)` — shown in the code array), then `get()` routes through your override only when the *caller* invokes `CacheRepo.get()`.\n\n…then `get()` routes through your override only when the *caller* invokes `CacheRepo.get()`. But if `Repo` has a method that *internally calls* `get()` — say `getAll()` internally calls `get()` — that internal call runs on `inner`'s own implementation, **not your override**. Your caching decorator's `getAll()` never sees the cache. This is the classic **broken decorator**: delegation does not give you intercept-hooks for self-calls the way inheritance `super` does.\n\nThe fix is usually to avoid class delegation when you need interception: either hold the delegate as a plain field and forward manually, or restructure so internal calls go through a seam you control.\n\n#### Silent growth\nIf the interface later gains a member, delegation keeps compiling and the new member is forwarded with no warning — the decorated behavior silently skips your override until a consumer hits it. There is no compiler assistance telling you your wrapper no longer wraps everything.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The self-call gap in a decorated repository",
+          "src": "interface Repo {\n    fun get(key: String): String\n    fun getAll(): List<String>       // internally calls get()\n}\n\nclass BaseRepo : Repo {\n    override fun get(key: String) = \"base:$key\"\n    override fun getAll() = listOf(get(\"a\"), get(\"b\"))  // calls BaseRepo.get\n}\n\nclass CacheRepo(private val inner: Repo) : Repo by inner {\n    override fun get(key: String): String {\n        println(\"CACHE $key\")\n        return inner.get(key)\n    }\n}\n\n// repo.getAll() -> BaseRepo.get — the CACHE line never prints."
+        }
+      ],
+      "followUps": [
+        "How is this different from inheritance with `super`?",
+        "When would you still prefer class delegation over manual forwarding?",
+        "What happens if the interface adds a method after you've wrapped it?"
+      ],
+      "traps": [
+        "Claiming overrides intercept internal calls — the self-call problem is precisely that they do not.",
+        "Saying delegation forwards via reflection — it is plain generated methods."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Delegation",
+          "url": "https://kotlinlang.org/docs/delegation.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0033",
+      "track": "kotlin",
+      "topic": "Functions",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "lambda",
+        "invokedynamic",
+        "capture"
+      ],
+      "q": "What does a lambda or a function reference actually cost at runtime in Kotlin 2.x?",
+      "shortAnswer": [
+        "Non-inlined lambdas compile to `invokedynamic`/LambdaMetafactory by default since Kotlin 2.0, cutting JVM class count — but D8 desugars that back into classes for Android.",
+        "Capturing lambdas allocate per creation, captured `var`s are boxed into `Ref.IntRef`/`ObjectRef`, and a lambda capturing `this` retains the enclosing Activity or ViewModel — the listener-leak mechanism.",
+        "Bound references (`instance::method`) allocate, while top-level `::fun` references generally do not."
+      ],
+      "answer": "In Kotlin 2.x the cost profile changed in two directions.\n\n#### Class count: down, then back up on Android\nPre-2.0, every lambda compiled to an anonymous class. Since Kotlin 2.0, non-inlined lambdas compile to **`invokedynamic` + `LambdaMetafactory`** (`-Xlambdas=class` reverts), avoiding a class per site on the JVM. But **Android's D8 desugars `indy` back into classes**, so the dex win is mostly theoretical — the class count is re-created at build time.\n\n#### Allocation: still real, and the capture story\n- A **non-capturing** lambda can be a singleton, but a **capturing** lambda allocates on every evaluation.\n- A captured **`var`** is boxed into `Ref.IntRef`/`ObjectRef` on the heap.\n- A lambda capturing `this` holds a strong reference to the enclosing instance — the classic **listener leak**: `button.setOnClickListener { ... this.foo() }` keeps the Activity alive after it is destroyed. Capture `this@Activity` deliberately or null out listeners in `onDestroy`.\n\n#### Function references\n`::topLevelFun` typically compiles to a cached singleton. **Bound** references — `instance::method` — allocate per evaluation (they must capture the instance); cache them in hot loops.\n\n#### The net\nModern lambdas are cheap in *class* terms but not free: capture costs an allocation plus possibly a `Ref` box, and Android re-introduces the classes D8 synthesizes. The point is knowing *where* the remaining costs live.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Capture and the leak mechanism",
+          "src": "// Capturing lambda: allocates per call site evaluation\nfun makeCounter(): () -> Int {\n    var count = 0                       // boxed into Ref.IntRef on the heap\n    return { ++count }                  // captures the Ref\n}\n\n// Listener leak: lambda captures this@Activity strongly\nclass MainActivity : AppCompatActivity() {\n    override fun onCreate(b: Bundle?) {\n        viewModel.button.setOnClickListener { load() }  // retains this\n    }\n}\n\n// Bound reference allocates; top-level reference is cached\nval ref = this::load                // allocates per evaluation\nval ref2 = ::topLevel              // cached singleton"
+        }
+      ],
+      "followUps": [
+        "Why does D8 reverse the invokedynamic win on Android?",
+        "What is `Ref.IntRef` and when does the compiler create it?",
+        "How do you avoid the listener leak?"
+      ],
+      "traps": [
+        "Claiming 2.x lambdas are free because of indy — capture still allocates, and D8 reverses the class win on Android.",
+        "Not knowing `var` captures box via `Ref.*` classes."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Inline functions (what inline actually changes)",
+          "url": "https://kotlinlang.org/docs/inline-functions.html",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "What's new in Kotlin 2.0 — lambdas via invokedynamic",
+          "url": "https://kotlinlang.org/docs/whatsnew20.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    }
+  ]
+}

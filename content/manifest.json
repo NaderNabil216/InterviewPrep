@@ -1,0 +1,638 @@
+{
+  "version": "2026.08.15",
+  "generatedAt": "2026-08-13",
+  "stackSnapshot": {
+    "kotlin": "2.4.10 stable; 2.4.20-RC (Aug 2026); the 2.3 line stabilized nested typealiases, explicit backing fields, unused-return-value checker",
+    "compose": "BOM 2026.06.01 / core 1.11.4",
+    "navigation3": "1.1.0 stable (Apr 2026), 1.1.1 patch (Apr 2026); 1.2 line in alpha",
+    "agp": "9.3.0 (Jul 2026) — built-in Kotlin support by default",
+    "androidStudio": "Quail 3 (2026.1.3) stable",
+    "platform": "Android 16 and Android 17 both released; Android 17 QPR betas in flight",
+    "playPolicy": "targetSdk 36 required by 2026-08-31 (extension window to 2026-11-01); 16 KB page sizes required for updates from 2027-02-01",
+    "kmp": "Compose Multiplatform for iOS stable; CMP 1.11 line stable, 1.12 in beta; Room/DataStore/ViewModel/Paging KMP-ready"
+  },
+  "stackSnapshotChecked": "2026-08-13",
+  "packs": [
+    {
+      "id": "kotlin-a",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-a.json"
+    },
+    {
+      "id": "kotlin-b",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-b.json"
+    },
+    {
+      "id": "kotlin-g-1",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-1.json"
+    },
+    {
+      "id": "kotlin-g-10",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-10.json"
+    },
+    {
+      "id": "kotlin-g-11",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-11.json"
+    },
+    {
+      "id": "kotlin-g-12",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-12.json"
+    },
+    {
+      "id": "kotlin-g-2",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-2.json"
+    },
+    {
+      "id": "kotlin-g-3",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-3.json"
+    },
+    {
+      "id": "kotlin-g-4",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-4.json"
+    },
+    {
+      "id": "kotlin-g-5",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-5.json"
+    },
+    {
+      "id": "kotlin-g-6",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-6.json"
+    },
+    {
+      "id": "kotlin-g-7",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-7.json"
+    },
+    {
+      "id": "kotlin-g-8",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-8.json"
+    },
+    {
+      "id": "kotlin-g-9",
+      "title": "Kotlin Language",
+      "track": "kotlin",
+      "file": "packs/kotlin-g-9.json"
+    },
+    {
+      "id": "coroutines-a",
+      "title": "Coroutines & Flow",
+      "track": "coroutines-flow",
+      "file": "packs/coroutines-a.json"
+    },
+    {
+      "id": "coroutines-g-5",
+      "title": "Coroutines & Flow",
+      "track": "coroutines-flow",
+      "file": "packs/coroutines-g-5.json"
+    },
+    {
+      "id": "coroutines-g-1",
+      "title": "Coroutines & Flow",
+      "track": "coroutines-flow",
+      "file": "packs/coroutines-g-1.json"
+    },
+    {
+      "id": "coroutines-g-2",
+      "title": "Coroutines & Flow",
+      "track": "coroutines-flow",
+      "file": "packs/coroutines-g-2.json"
+    },
+    {
+      "id": "coroutines-g-3",
+      "title": "Coroutines & Flow",
+      "track": "coroutines-flow",
+      "file": "packs/coroutines-g-3.json"
+    },
+    {
+      "id": "coroutines-g-4",
+      "title": "Coroutines & Flow",
+      "track": "coroutines-flow",
+      "file": "packs/coroutines-g-4.json"
+    },
+    {
+      "id": "compose-a",
+      "title": "Jetpack Compose",
+      "track": "compose",
+      "file": "packs/compose-a.json"
+    },
+    {
+      "id": "compose-b",
+      "title": "Jetpack Compose",
+      "track": "compose",
+      "file": "packs/compose-b.json"
+    },
+    {
+      "id": "compose-c",
+      "title": "Jetpack Compose",
+      "track": "compose",
+      "file": "packs/compose-c.json"
+    },
+    {
+      "id": "compose-g-1",
+      "title": "Jetpack Compose",
+      "track": "compose",
+      "file": "packs/compose-g-1.json"
+    },
+    {
+      "id": "compose-g-2",
+      "title": "Jetpack Compose",
+      "track": "compose",
+      "file": "packs/compose-g-2.json"
+    },
+    {
+      "id": "compose-g-3",
+      "title": "Jetpack Compose",
+      "track": "compose",
+      "file": "packs/compose-g-3.json"
+    },
+    {
+      "id": "compose-g-4",
+      "title": "Jetpack Compose",
+      "track": "compose",
+      "file": "packs/compose-g-4.json"
+    },
+    {
+      "id": "compose-g-5",
+      "title": "Jetpack Compose",
+      "track": "compose",
+      "file": "packs/compose-g-5.json"
+    },
+    {
+      "id": "compose-g-6",
+      "title": "Jetpack Compose",
+      "track": "compose",
+      "file": "packs/compose-g-6.json"
+    },
+    {
+      "id": "compose-g-7",
+      "title": "Jetpack Compose",
+      "track": "compose",
+      "file": "packs/compose-g-7.json"
+    },
+    {
+      "id": "platform",
+      "title": "Platform & Framework",
+      "track": "platform",
+      "file": "packs/platform.json"
+    },
+    {
+      "id": "platform-b",
+      "title": "Platform & Framework",
+      "track": "platform",
+      "file": "packs/platform-b.json"
+    },
+    {
+      "id": "platform-g-1",
+      "title": "Platform & Framework",
+      "track": "platform",
+      "file": "packs/platform-g-1.json"
+    },
+    {
+      "id": "platform-g-2",
+      "title": "Platform & Framework",
+      "track": "platform",
+      "file": "packs/platform-g-2.json"
+    },
+    {
+      "id": "platform-g-3",
+      "title": "Platform & Framework",
+      "track": "platform",
+      "file": "packs/platform-g-3.json"
+    },
+    {
+      "id": "platform-g-4",
+      "title": "Platform & Framework",
+      "track": "platform",
+      "file": "packs/platform-g-4.json"
+    },
+    {
+      "id": "platform-g-5",
+      "title": "Platform & Framework",
+      "track": "platform",
+      "file": "packs/platform-g-5.json"
+    },
+    {
+      "id": "architecture",
+      "title": "Architecture & DI",
+      "track": "architecture",
+      "file": "packs/architecture.json"
+    },
+    {
+      "id": "architecture-b",
+      "title": "Architecture & DI",
+      "track": "architecture",
+      "file": "packs/architecture-b.json"
+    },
+    {
+      "id": "architecture-g-1",
+      "title": "Architecture & DI",
+      "track": "architecture",
+      "file": "packs/architecture-g-1.json"
+    },
+    {
+      "id": "architecture-g-2",
+      "title": "Architecture & DI",
+      "track": "architecture",
+      "file": "packs/architecture-g-2.json"
+    },
+    {
+      "id": "architecture-g-3",
+      "title": "Architecture & DI",
+      "track": "architecture",
+      "file": "packs/architecture-g-3.json"
+    },
+    {
+      "id": "architecture-g-4",
+      "title": "Architecture & DI",
+      "track": "architecture",
+      "file": "packs/architecture-g-4.json"
+    },
+    {
+      "id": "architecture-g-5",
+      "title": "Architecture & DI",
+      "track": "architecture",
+      "file": "packs/architecture-g-5.json"
+    },
+    {
+      "id": "dsa",
+      "title": "Problem Solving",
+      "track": "dsa",
+      "file": "packs/dsa.json"
+    },
+    {
+      "id": "dsa-b",
+      "title": "Problem Solving",
+      "track": "dsa",
+      "file": "packs/dsa-b.json"
+    },
+    {
+      "id": "dsa-c",
+      "title": "Problem Solving",
+      "track": "dsa",
+      "file": "packs/dsa-c.json"
+    },
+    {
+      "id": "dsa-g-1",
+      "title": "Problem Solving",
+      "track": "dsa",
+      "file": "packs/dsa-g-1.json"
+    },
+    {
+      "id": "dsa-g-2",
+      "title": "Problem Solving",
+      "track": "dsa",
+      "file": "packs/dsa-g-2.json"
+    },
+    {
+      "id": "dsa-g-3",
+      "title": "Problem Solving",
+      "track": "dsa",
+      "file": "packs/dsa-g-3.json"
+    },
+    {
+      "id": "dsa-g-4",
+      "title": "Problem Solving",
+      "track": "dsa",
+      "file": "packs/dsa-g-4.json"
+    },
+    {
+      "id": "dsa-g-5",
+      "title": "Problem Solving",
+      "track": "dsa",
+      "file": "packs/dsa-g-5.json"
+    },
+    {
+      "id": "dsa-g-6",
+      "title": "Problem Solving",
+      "track": "dsa",
+      "file": "packs/dsa-g-6.json"
+    },
+    {
+      "id": "system-design",
+      "title": "Mobile System Design",
+      "track": "system-design",
+      "file": "packs/system-design.json"
+    },
+    {
+      "id": "system-design-b",
+      "title": "Mobile System Design",
+      "track": "system-design",
+      "file": "packs/system-design-b.json"
+    },
+    {
+      "id": "system-design-g-1",
+      "title": "Mobile System Design",
+      "track": "system-design",
+      "file": "packs/system-design-g-1.json"
+    },
+    {
+      "id": "system-design-g-2",
+      "title": "Mobile System Design",
+      "track": "system-design",
+      "file": "packs/system-design-g-2.json"
+    },
+    {
+      "id": "system-design-g-3",
+      "title": "Mobile System Design",
+      "track": "system-design",
+      "file": "packs/system-design-g-3.json"
+    },
+    {
+      "id": "data-networking",
+      "title": "Data, Networking & Persistence",
+      "track": "data-networking",
+      "file": "packs/data-networking.json"
+    },
+    {
+      "id": "data-networking-g-1",
+      "title": "Data, Networking & Persistence",
+      "track": "data-networking",
+      "file": "packs/data-networking-g-1.json"
+    },
+    {
+      "id": "data-networking-g-2",
+      "title": "Data, Networking & Persistence",
+      "track": "data-networking",
+      "file": "packs/data-networking-g-2.json"
+    },
+    {
+      "id": "data-networking-g-3",
+      "title": "Data, Networking & Persistence",
+      "track": "data-networking",
+      "file": "packs/data-networking-g-3.json"
+    },
+    {
+      "id": "data-networking-g-4",
+      "title": "Data, Networking & Persistence",
+      "track": "data-networking",
+      "file": "packs/data-networking-g-4.json"
+    },
+    {
+      "id": "performance",
+      "title": "Performance & App Health",
+      "track": "performance",
+      "file": "packs/performance.json"
+    },
+    {
+      "id": "performance-g-1",
+      "title": "Performance & App Health",
+      "track": "performance",
+      "file": "packs/performance-g-1.json"
+    },
+    {
+      "id": "performance-g-2",
+      "title": "Performance & App Health",
+      "track": "performance",
+      "file": "packs/performance-g-2.json"
+    },
+    {
+      "id": "performance-g-3",
+      "title": "Performance & App Health",
+      "track": "performance",
+      "file": "packs/performance-g-3.json"
+    },
+    {
+      "id": "performance-g-4",
+      "title": "Performance & App Health",
+      "track": "performance",
+      "file": "packs/performance-g-4.json"
+    },
+    {
+      "id": "performance-g-5",
+      "title": "Performance & App Health",
+      "track": "performance",
+      "file": "packs/performance-g-5.json"
+    },
+    {
+      "id": "build-testing",
+      "title": "Build, Tooling & Testing",
+      "track": "build-testing",
+      "file": "packs/build-testing.json"
+    },
+    {
+      "id": "build-testing-g-1",
+      "title": "Build, Tooling & Testing",
+      "track": "build-testing",
+      "file": "packs/build-testing-g-1.json"
+    },
+    {
+      "id": "build-testing-g-2",
+      "title": "Build, Tooling & Testing",
+      "track": "build-testing",
+      "file": "packs/build-testing-g-2.json"
+    },
+    {
+      "id": "build-testing-g-3",
+      "title": "Build, Tooling & Testing",
+      "track": "build-testing",
+      "file": "packs/build-testing-g-3.json"
+    },
+    {
+      "id": "build-testing-g-4",
+      "title": "Build, Tooling & Testing",
+      "track": "build-testing",
+      "file": "packs/build-testing-g-4.json"
+    },
+    {
+      "id": "build-testing-g-5",
+      "title": "Build, Tooling & Testing",
+      "track": "build-testing",
+      "file": "packs/build-testing-g-5.json"
+    },
+    {
+      "id": "build-testing-g-6",
+      "title": "Build, Tooling & Testing",
+      "track": "build-testing",
+      "file": "packs/build-testing-g-6.json"
+    },
+    {
+      "id": "security-kmp",
+      "title": "Security, KMP & Modern Android",
+      "track": "security-kmp",
+      "file": "packs/security-kmp.json"
+    },
+    {
+      "id": "security-kmp-g-1",
+      "title": "Security, KMP & Modern Android",
+      "track": "security-kmp",
+      "file": "packs/security-kmp-g-1.json"
+    },
+    {
+      "id": "security-kmp-g-2",
+      "title": "Security, KMP & Modern Android",
+      "track": "security-kmp",
+      "file": "packs/security-kmp-g-2.json"
+    },
+    {
+      "id": "security-kmp-g-3",
+      "title": "Security, KMP & Modern Android",
+      "track": "security-kmp",
+      "file": "packs/security-kmp-g-3.json"
+    },
+    {
+      "id": "security-kmp-g-4",
+      "title": "Security, KMP & Modern Android",
+      "track": "security-kmp",
+      "file": "packs/security-kmp-g-4.json"
+    },
+    {
+      "id": "security-kmp-g-5",
+      "title": "Security, KMP & Modern Android",
+      "track": "security-kmp",
+      "file": "packs/security-kmp-g-5.json"
+    },
+    {
+      "id": "security-kmp-g-6",
+      "title": "Security, KMP & Modern Android",
+      "track": "security-kmp",
+      "file": "packs/security-kmp-g-6.json"
+    },
+    {
+      "id": "security-kmp-g-7",
+      "title": "Security, KMP & Modern Android",
+      "track": "security-kmp",
+      "file": "packs/security-kmp-g-7.json"
+    },
+    {
+      "id": "behavioral",
+      "title": "Behavioral & Interview Craft",
+      "track": "behavioral",
+      "file": "packs/behavioral.json"
+    },
+    {
+      "id": "behavioral-g-1",
+      "title": "Behavioral Interviews",
+      "track": "behavioral",
+      "file": "packs/behavioral-g-1.json"
+    },
+    {
+      "id": "behavioral-g-2",
+      "title": "Behavioral Interviews",
+      "track": "behavioral",
+      "file": "packs/behavioral-g-2.json"
+    },
+    {
+      "id": "cheatsheets",
+      "title": "Cheat Sheets",
+      "track": "cheatsheets",
+      "file": "packs/cheatsheets.json"
+    },
+    {
+      "id": "cheatsheets-b",
+      "title": "Cheat Sheets",
+      "track": "cheatsheets",
+      "file": "packs/cheatsheets-b.json"
+    }
+  ],
+  "plans": [
+    {
+      "id": "7day",
+      "file": "plans/7day.json"
+    },
+    {
+      "id": "14day",
+      "file": "plans/14day.json"
+    }
+  ],
+  "releases": [
+    {
+      "version": "2026.08.15",
+      "date": "2026-08-13",
+      "summary": "Convergence T111: fenced code blocks removed from all 28 prose fields that had them (16 qa answers, 12 system-design reference answers) — code moved into each item's code[] array or inlined; validate.mjs gains gate 15, which errors on ``` in any prose field so the no-fenced-block rendering contract cannot regress"
+    },
+    {
+      "version": "2026.08.14",
+      "date": "2026-08-14",
+      "summary": "Stage F: both study plans re-authored against the full 629-item library — 7-day (121 items, 130 min/day) and 14-day (181 items, 90 min/day), each track's share matching the FR-010 interview-weight table within ±5pp and the schedule fitting its declared budget at the SC-002 paces. Source hygiene: okhttp refs normalized to the canonical lysine-dev org (square/okhttp moved), two dead links replaced (ar-0039 interceptors, ar-0044 flatMapLatest), five genuinely official hosts added to the primary-source allowlist (youtrack.jetbrains.com, mas.owasp.org, ktor.io, firebase.google.com, developer.apple.com), gate-13 audit added two sourcing refs (sd-0006 ApplicationExitInfo, sd-0018 Yjs), and 21 behavioral items stamped with the addedIn release that shipped them."
+    },
+    {
+      "version": "2026.08.13",
+      "date": "2026-08-13",
+      "summary": "Stage E: dsa +41 (ds-0020..ds-0060: arrays to DP to Android system design), system-design +14 (sd-0005..sd-0018: client library and large-scale feature designs), behavioral +22 (bh-0004..bh-0025: STAR to staff-level and comp negotiation); scopes frozen with coverage mapped; off-allowlist refs swapped to allowlisted primary sources; Kotlin snapshot refreshed to 2.4.20-RC; bh-0003 trimmed to band"
+    },
+    {
+      "version": "2026.08.12",
+      "date": "2026-08-12",
+      "summary": "Stage D: build-testing +58 (bt-0003..bt-0060), security-kmp +67 (sk-0004..sk-0070); scopes frozen with coverage mapped; sk-0002/sk-0003 trimmed"
+    },
+    {
+      "version": "2026.08.11",
+      "date": "2026-08-13",
+      "summary": "Stage C: platform 50 (+50), architecture 43 (+43), data-networking 36 (+36), performance 37 (+37); scope frozen + coverage mapped; 20 over-band answers trimmed"
+    },
+    {
+      "version": "2026.08.10",
+      "date": "2026-08-13",
+      "summary": "Coroutines & Flow: 40 new items (co-0009..co-0048). Compose: 64 new depth items (cmp-0012..cmp-0075) + 9 over-band answers remediated (cmp-0001, 0002, 0004, 0005, 0007-0011)."
+    },
+    {
+      "version": "2026.08.9",
+      "date": "2026-08-13",
+      "summary": "Kotlin: 57 new items (kt-0014..kt-0070) + 7 remediated"
+    },
+    {
+      "version": "2026.08.8",
+      "date": "2026-08-09",
+      "summary": "Closes the sourcing gap: all 19 Problem Solving exercises and all 5 Mobile System Design scenarios now carry dated primary-source references, so every item in the library has a route to further depth. The seven answers that ran over the 350-word ceiling — architecture, build & testing, security and behavioral — were trimmed into the 120-250 band with no loss of substance, and code that was trapped in the prose now renders properly as code. Also corrects two stale version numbers in the Gradle catalog example."
+    },
+    {
+      "version": "2026.08.7",
+      "date": "2026-08-09",
+      "summary": "Adopts the seven Coroutines & Flow items that were authored but never registered (co-0049 to co-0055) — hot flows, Android lifecycle integration, and coroutine test debugging. Every answer was trimmed into the 120-250 word band and all fourteen references were re-verified against their primary sources and re-dated. The version-truth registry was re-checked: Kotlin is 2.4.10, Compose BOM 2026.06.01 (core 1.11.4), Android Studio Quail 3 (2026.1.3), and Android 17 has released — the three cheat sheets carrying the old numbers were corrected."
+    },
+    {
+      "version": "2026.08.6",
+      "date": "2026-08-07",
+      "summary": "Plan-gap closeout. Difficulty level 2 is now labelled **Mid-Level** (was 'Solid'). Two cheat sheets that were promised and missing: **Android 13→17 behavior deltas** and a **Gradle/AGP/R8 flags** reference. **Inline-SVG architecture diagrams** added to all four system design scenarios. Fixes: `j`/`k` navigation was leaking a stale listener per item viewed; the 'New in this release' topic filter was dead code; study-plan tasks now **auto-tick** when every linked item has been rated; **Shift to today** re-anchors a plan you've fallen behind on; drill mode is now timed."
+    },
+    {
+      "version": "2026.08.5",
+      "date": "2026-08-07",
+      "summary": "Compose and Architecture depth pass. Compose: **lazy list performance** (what `key` and `contentType` actually do), **choosing an animation API** and animating without recomposing, and **accessibility + View interop**. Architecture: **one-shot events without the replay bug** (and why `SingleLiveEvent` is an anti-pattern), **whether a domain layer earns its place** — argued both ways, and **shipping risky changes safely** with feature flags, staged rollout and kill switches."
+    },
+    {
+      "version": "2026.08.4",
+      "date": "2026-08-07",
+      "summary": "Kotlin and Platform depth pass. Kotlin: **sealed interfaces vs enums**, **extension-function static dispatch** (the classic trick question), **what's actually new in Kotlin 2.3/2.4** including explicit backing fields, **error modeling** and why `runCatching` breaks cancellation, and **type-safe builders / DSLs**. Platform: **launch modes and task affinity**, the **runtime permission flow** with the modern Photo Picker and partial media access, **App Links verification and deep-link security**, and a full **lifecycle** walkthrough including the Fragment view-lifecycle trap."
+    },
+    {
+      "version": "2026.08.3",
+      "date": "2026-08-07",
+      "summary": "Problem-solving and system-design expansion. **13 new DSA problems** covering two pointers, binary search on the answer, monotonic stack, heap/top-K, topological sort, grid traversal, backtracking, linked-list primitives, 2D string DP, intervals, and tries — plus two Android-flavored design exercises (**single-flight request cache**, **offline mutation queue**). Two new system design scenarios: **offline media downloads** and **designing an analytics SDK**."
+    },
+    {
+      "version": "2026.08.2",
+      "date": "2026-08-07",
+      "summary": "Compose depth pass: **custom layouts and the `Modifier.Node` system** (why `composed {}` is a performance smell, why measuring a child twice throws), and **Compose UI testing** — semantics-tree queries, synchronization without sleeping, and screenshot testing across theme and font-scale axes."
+    },
+    {
+      "version": "2026.08.1",
+      "date": "2026-08-07",
+      "summary": "Initial release, verified against the web on 2026-08-07. Covers **Kotlin**, **Coroutines & Flow**, **Jetpack Compose** (incl. internals), **Platform & Framework**, **Architecture & DI**, **Data/Networking/Persistence**, **Performance**, **Build & Testing**, **Security/KMP/Modern Android**, **Problem Solving**, **Mobile System Design**, **Behavioral**, plus printable cheat sheets and 7-day / 14-day study plans."
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "id": "compose-b",
+  "title": "Jetpack Compose",
+  "track": "compose",
+  "items": [
+    {
+      "id": "cmp-0007",
+      "track": "compose",
+      "topic": "Custom layout",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "layout",
+        "modifier-node",
+        "internals"
+      ],
+      "q": "How do you write a custom layout, and what is `Modifier.Node`?",
+      "shortAnswer": [
+        "`Layout(content) { measurables, constraints -> ... }` — measure each child **once**, decide your own size, then place children. Single pass, no multi-pass measurement.",
+        "`Modifier.Node` is the modern modifier implementation: a long-lived node object in a tree, so a modifier can hold state and be updated without reallocating on every recomposition.",
+        "The old `composed { }` API allocated per composition and defeated skipping; `Modifier.Node` replaced it for performance reasons."
+      ],
+      "answer": "#### Custom layout\n`Layout` content receives `measurables` and `constraints`; you measure each child **exactly once** and call `layout(width, height)` before placing. Measuring the same `Measurable` twice throws — that single-measure invariant is what keeps Compose layout O(n) instead of the exponential blow-up nested `LinearLayout` weights allowed. If you genuinely need a child's size before deciding constraints, the options are **intrinsics** (`minIntrinsicWidth`, which cost an extra query pass) or `SubcomposeLayout` (defers composition into layout; powerful and expensive — it's what `LazyColumn` and `BoxWithConstraints` use).\n\n#### Modifier.Node\nModifiers used to be built with `composed { }`, which ran a composable per usage — allocating every recomposition and blocking skipping. `Modifier.Node` replaced it: a `ModifierNodeElement` is a lightweight, comparable data holder; the long-lived `Modifier.Node` is attached to the layout node, and Compose diffs elements and calls `update(node)` instead of recreating. Nodes implement `LayoutModifierNode`, `DrawModifierNode`, `PointerInputModifierNode`, and can hold state and their own coroutine scope. Seeing `composed { }` is a performance smell.\n\n#### Modifier order\nModifiers apply outside-in and order changes behaviour: `padding(8.dp).background(Red)` pads *outside* the red area; `background(Red).padding(8.dp)` paints red behind the padding. `clip` before `clickable` clips the ripple; after, it doesn't.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A custom layout and a Modifier.Node-based modifier",
+          "src": "@Composable\nfun VerticalStack(modifier: Modifier = Modifier, content: @Composable () -> Unit) {\n    Layout(content = content, modifier = modifier) { measurables, constraints ->\n        val placeables = measurables.map { it.measure(constraints) }  // exactly once each\n        val width = placeables.maxOfOrNull { it.width } ?: 0\n        val height = placeables.sumOf { it.height }\n\n        layout(width, height) {\n            var y = 0\n            placeables.forEach { p ->\n                p.placeRelative(x = 0, y = y)\n                y += p.height\n            }\n        }\n    }\n}\n\n// Modifier.Node: element is the cheap comparable holder, node is long-lived\nprivate data class PaddedElement(val all: Dp) : ModifierNodeElement<PaddedNode>() {\n    override fun create() = PaddedNode(all)\n    override fun update(node: PaddedNode) { node.all = all }   // no reallocation\n}\n\nprivate class PaddedNode(var all: Dp) : Modifier.Node(), LayoutModifierNode {\n    override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {\n        val pad = all.roundToPx() * 2\n        val placeable = measurable.measure(constraints.offset(-pad, -pad))\n        return layout(placeable.width + pad, placeable.height + pad) {\n            placeable.place(pad / 2, pad / 2)\n        }\n    }\n}\n\nfun Modifier.padded(all: Dp) = this then PaddedElement(all)"
+        }
+      ],
+      "followUps": [
+        "Why does Compose forbid measuring a child twice?",
+        "When is `SubcomposeLayout` worth its cost?",
+        "Why is `composed { }` considered a performance problem?"
+      ],
+      "traps": [
+        "Measuring a child twice — it throws at runtime, and the reason it throws is the interesting answer.",
+        "Not knowing modifier order matters. It's the most common source of 'why doesn't my padding work' bugs."
+      ],
+      "refs": [
+        {
+          "title": "Custom layouts in Compose",
+          "url": "https://developer.android.com/develop/ui/compose/layouts/custom",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Compose modifiers",
+          "url": "https://developer.android.com/develop/ui/compose/modifiers",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.2",
+      "updatedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0008",
+      "track": "compose",
+      "topic": "Testing & tooling",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "testing",
+        "semantics",
+        "screenshot"
+      ],
+      "q": "How do you test Compose UI, and how do you catch visual regressions?",
+      "shortAnswer": [
+        "Compose tests query the **semantics tree**, not the view hierarchy: `onNodeWithTag`, `onNodeWithText`, then assertions and actions.",
+        "Prefer `Modifier.testTag` over text matching — text breaks when copy or translation changes.",
+        "Use `waitUntil` rather than sleeping; the test clock auto-advances and syncs with the composition, so most waits are unnecessary."
+      ],
+      "answer": "#### The semantics tree\nCompose tests operate on the semantics tree — the same structure accessibility consumes, which is why testable Compose and accessible Compose are largely the same work.\n\n`onNodeWithTag`, `onNodeWithText`, `onNodeWithContentDescription`, plus `hasParent`/`hasAnyChild` matchers. `printToLog()` dumps the tree and is the fastest way to debug a failing matcher.\n\n#### Rules\n`createComposeRule()` — no Activity, fastest. `createAndroidComposeRule<MainActivity>()` — when you need the real Activity (Hilt, intents).\n\n#### Synchronization\nThe rule **auto-syncs** with the composition: it waits for idle before each assertion, so `Thread.sleep` is never right. For work outside Compose's knowledge use `waitUntil(timeoutMillis) { onAllNodesWithTag(\"row\").fetchSemanticsNodes().isNotEmpty() }`. To drive time deterministically, `mainClock.autoAdvance = false` plus `mainClock.advanceTimeBy(...)`.\n\n#### Screenshot testing\nThe cheapest visual-regression net across themes, font scales, locales: the first-party **Compose Preview screenshot testing** plugin (renders `@Preview`s and diffs), **Paparazzi** (JVM-only, no device, fast in CI), **Roborazzi** (Robolectric-based). Render each component at a couple of font scales and in dark mode — that's where most regressions hide.\n\n#### What to test where\nComposables: screenshots for appearance, semantics for behaviour. ViewModels: plain JVM unit tests. Whole screens: a few instrumented journey tests. Don't write a UI test for logic that could be a ViewModel unit test — it's 100x slower and flakier.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A semantics test and a preview-based screenshot test",
+          "src": "class FeedScreenTest {\n    @get:Rule val composeTestRule = createComposeRule()\n\n    @Test\n    fun showsEmptyState_thenContent() {\n        val state = mutableStateOf<FeedUiState>(FeedUiState.Empty)\n\n        composeTestRule.setContent { FeedScreen(state.value, onAction = {}) }\n\n        composeTestRule.onNodeWithTag(\"empty_state\").assertIsDisplayed()\n\n        state.value = FeedUiState.Content(listOf(item))\n\n        composeTestRule.waitUntil(5_000) {\n            composeTestRule.onAllNodesWithTag(\"feed_row\").fetchSemanticsNodes().isNotEmpty()\n        }\n        composeTestRule.onNodeWithTag(\"empty_state\").assertDoesNotExist()\n    }\n}\n\n// Screenshot coverage across the axes that actually regress\n@Preview(name = \"light\")\n@Preview(name = \"dark\", uiMode = Configuration.UI_MODE_NIGHT_YES)\n@Preview(name = \"large font\", fontScale = 1.5f)\n@Composable\nprivate fun FeedRowPreview() {\n    AppTheme { FeedRow(item = sampleItem) }\n}"
+        }
+      ],
+      "followUps": [
+        "Why is testing against the semantics tree also an accessibility win?",
+        "When would you turn off `mainClock.autoAdvance`?",
+        "Paparazzi vs the first-party preview screenshot plugin — how would you choose?"
+      ],
+      "traps": [
+        "Using `Thread.sleep` in Compose tests. The rule already synchronizes; sleeping just makes the suite slow and still flaky.",
+        "Matching on user-visible text everywhere, so a copy change or a new translation breaks the suite."
+      ],
+      "refs": [
+        {
+          "title": "Testing your Compose layout",
+          "url": "https://developer.android.com/develop/ui/compose/testing",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Compose preview screenshot testing",
+          "url": "https://developer.android.com/studio/preview/compose-screenshot-testing",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.2",
+      "updatedIn": "2026.08.10"
+    }
+  ]
+}

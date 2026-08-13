@@ -1,0 +1,324 @@
+{
+  "id": "system-design-g-2",
+  "title": "Mobile System Design",
+  "track": "system-design",
+  "items": [
+    {
+      "id": "sd-0009",
+      "track": "system-design",
+      "topic": "Live location sharing",
+      "level": 3,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "location",
+        "presence",
+        "real-time"
+      ],
+      "q": "Design Uber-style live location tracking and sharing",
+      "prompt": "Design live location tracking and sharing (a driver ETA product / Find-My-Friends): users see each other's positions moving on a map, with consent, background updates, and battery constraints.\n\nAssume tens of millions of users, Android + iOS, and location must keep updating while the app is in the background. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "Two hard systems in one: on-device **location lifecycle** (accuracy vs battery) and a **server fan-out** problem (many watchers per publisher). Interviewers probe battery/background handling and the live-update path hardest.",
+      "requirements": [
+        "Clarify the sharing model: who shares with whom, consent",
+        "Define the on-device location pipeline (GPS, fused, accuracy modes)",
+        "Design background location with Android restrictions",
+        "Design the upload policy: how often, batching, batching under weak signal",
+        "Design the live-update path: push to all watchers",
+        "Design the server: ingestion, session state, fan-out",
+        "Handle the ETA estimation input (speed, history)",
+        "Handle stale or no GPS (cached last known, interpolation)",
+        "Address battery and data cost explicitly",
+        "Design consent, privacy, and revocation",
+        "Cover cold-start of a sharing session",
+        "Design the geofence use case (arrival alert)",
+        "Mention how accuracy differs by UI state (foreground map vs background)",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### Model\nA publisher (the tracked user) runs a **session**; watchers subscribe to it. The core payload is a position fix `{ lat, lng, accuracy, heading, speed, ts }` plus a session lifecycle event (started/ended/paused). Publish-subscribe is per-session: a session id with a watcher list. `Publisher device ──publish──> LocationIngest ──> session store ──> push fan-out ──> watcher devices`.\n\n#### On-device location\nUse the fused location provider with adaptive accuracy: **foreground UI visible → high accuracy (GPS + network), background → low power** (network + battery saver). The foreground/background switch is driven by app lifecycle + a foreground service holding a `location` type while sharing is active. Android requires the user-facing “ongoing” notification for background location — that is not a bug, it is the platform's consent contract and the product should embrace it.\n\n#### Upload policy\nServer-adaptive and battery-aware: at rest → 30–60 s cadence; moving with speed > threshold → 5–10 s; low battery → back off to 5 minutes. Batch multiple fixes per request. Under weak signal, buffer and send a delta of positions on reconnect. This is the “distance since last upload” heuristic.\n\n#### Fan-out\nEach update fans out to the watcher set. Two delivery tiers: **active watchers** (map is on screen) get a push (FCM data message) and then pull the fix; **passive watchers** just get the ETA on an interval. Push + pull hybrid: push tells the client “a new fix exists”, the client fetches it, which keeps the wire format simple and lets the server batch. For a live map, a WebSocket/persistent connection tier is the right call at scale, with pushes as the heartbeat.\n\n#### ETA\nComputed server-side from recent speed samples and route — client displays the server's ETA so all watchers agree. Never estimate purely on the client; the server has the history.\n\n#### Staleness & correctness\nEvery fix carries a server timestamp. Watchers show age: green < 15 s, amber < 60 s, grey beyond. If GPS is lost, the client reports the last known fix + `gpsLost: true` and interpolation is done client-side for smoothness only, never for ETA.\n\n#### Consent & privacy\nSharing is opt-in per watcher or per group, revocable instantly. Revocation stops publishing immediately and the session ends server-side. The consent record is auditable; the location payload is stored with a short TTL (not mined). Only the current fix is fanned out — no historical path is kept by default (a decision the product can override for trip receipts).\n\n#### Failure modes\nBad GPS indoors → fused provider + WiFi scan. Server down → clients keep publishing locally and replay on reconnect; watchers show stale. Battery death → last known + 'stopped updating' flag. Cross-timezone clocks → use server timestamps throughout.",
+      "rubric": [
+        "Defined the publish/subscribe session model",
+        "Designed adaptive accuracy driven by UI state",
+        "Handled Android background location with a foreground service",
+        "Designed a battery-aware, distance-based upload policy",
+        "Designed a push+pull fan-out with staleness UX",
+        "Put ETA computation server-side and justified it",
+        "Handled GPS loss without polluting ETA",
+        "Designed consent, revocation, and data retention",
+        "Named failure modes without prompting",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: 'a 10M-DAU publisher base at 20 s cadence is ~500k publish/s — ingest must partition by session and the fan-out is the bottleneck, not storage'",
+        "Designs a back-pressure story when a watcher's socket is slow: coalesce fixes rather than queueing them",
+        "Considers the battery-budget contract: 'background location must not exceed ~1%/hour or we get uninstalled'",
+        "Plans the driver/rider ETA as a product where 'all watchers agree' is a correctness requirement",
+        "Designs the geofence path (arrival alert) as a server-side evaluation so it works even when the watcher's app is killed"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Live location architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"95.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Location</text><text x=\"95.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">fused + adaptive</text><rect x=\"220\" y=\"20\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"300.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Session</text><text x=\"300.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">publish cadence</text><rect x=\"430\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">LocationIngest</text><text x=\"500.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">partition by session</text><rect x=\"430\" y=\"120\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"144.0\" text-anchor=\"middle\" class=\"dg-label\">ETA service</text><text x=\"500.0\" y=\"159.0\" text-anchor=\"middle\" class=\"dg-sub\">speed history</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"655.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Fan-out</text><text x=\"655.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">push + pull</text><rect x=\"610\" y=\"160\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"191.0\" text-anchor=\"middle\" class=\"dg-label\">Watcher</text><line x1=\"170\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"570\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"589.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">fix</text><line x1=\"655\" y1=\"74\" x2=\"655\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"685.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">notify</text><line x1=\"500\" y1=\"74\" x2=\"500\" y2=\"118\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"530.0\" y=\"100.0\" text-anchor=\"middle\" class=\"dg-edge-label\">samples</text><line x1=\"500\" y1=\"174\" x2=\"655\" y2=\"76\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"580.0\" y=\"150.0\" text-anchor=\"middle\" class=\"dg-edge-label\">eta</text></svg>",
+      "refs": [
+        {
+          "title": "Location and context",
+          "url": "https://developer.android.com/training/location",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Location permissions",
+          "url": "https://developer.android.com/training/location/permissions",
+          "checked": "2026-08-13"
+        }
+      ],
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "sd-0010",
+      "track": "system-design",
+      "topic": "Offline-first",
+      "level": 3,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "offline",
+        "sync",
+        "conflict"
+      ],
+      "q": "Design an offline-first news reader",
+      "prompt": "Design an offline-first news reader: articles are available on a plane, content is fresh when online, bookmarks and read-state sync across devices, and edits to read-state never conflict badly.\n\nAssume ~50M MAU, a shared content feed, and that 'offline' must be a first-class state, not a degraded one. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "The canonical local-first scenario. The interviewer wants to see **local as the source of truth** (see sd-0017) plus a freshness strategy, plus a conflict-resolution policy for tiny per-item writes.",
+      "requirements": [
+        "Clarify what is local vs remote state",
+        "Design the offline content model (article, metadata, images)",
+        "Design the fetch-ahead policy: what gets prefetched and when",
+        "Design the sync model: full refresh vs delta vs push",
+        "Design conflict resolution for read-state and bookmarks",
+        "Handle the freshness contract: staleness, 'updated on disk' timestamps",
+        "Design image caching offline (bounded disk, eviction)",
+        "Handle the online/offline transition cleanly",
+        "Design multi-device convergence of bookmarks and history",
+        "Cover first-run onboarding vs returning user",
+        "Address bandwidth and storage budgets",
+        "Design a way to measure offline quality (coverage of 'offline opened' vs 'online opened')",
+        "Mention how new articles reach the client without a full poll",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### Local-first framing\n**Local storage is the source of truth for read-state; the network is the source of truth for content.** Every article read is written to Room immediately; the 'unread' badge reads Room, not the server. This inverts the classic architecture and is the whole point of the design — offline is not a fallback, it is the primary path.\n\n#### Content model\n`Article { id, sectionId, title, body, imageRefs[], publishedAt }` in a Room DB, with an FTS index for search (sk-00xx). Image files live in a disk cache, referenced by URL hash, so the DB never stores blobs. Read-state is `ArticleState { id, readAt?, bookmarked?, progressPercent? }`, per-device but synced.\n\n#### Prefetch / fetch-ahead\nOn connect (or via push “new issue”), the client fetches the section manifest + the top N articles per section (body as one payload, images separate, lazy). A background worker on unmetered WiFi + charging downloads the full issue — 'magazine mode'. The manifest carries sizes so the client can budget: 'this issue is 40 MB, download images only on WiFi'.\n\n#### Sync\nDeltas, not full refreshes: the client sends `since <lastSyncedAt>` and the server replies with changed ids. New content arrives via FCM topic push ('issue 42 is ready') plus a periodic reconciliation for missed pushes. Outbound: read-state is a small, monotonic log of mutations, replayed to the server; the server merges by last-write-wins per field with the client's clock, but read-state is *monotonic* (unread → read never reverts) so conflicts are trivial.\n\n#### Conflict resolution\nThe dangerous field is 'bookmarked' (toggle-able). Policy: **LWW on the server timestamp**, with a small reconciliation window — if two devices write conflicting values within a day, keep the newer server ts and show the user a merge hint once. `progressPercent` uses max, never min. This is far simpler than CRDTs because the per-item state is tiny and toggle-heavy; a CRDT is over-engineering here (unlike sd-0018).\n\n#### Online/offline transition\nA single `ConnectivityManager` + network-quality gate drives the sync worker. The client exposes state as a `Flow<SyncState>`; the UI shows 'Offline — you'll get 42 new articles when back online'. No screen is blocked by connectivity.\n\n#### Image budget\nDisk cache sized to ~10% of free space, LRU eviction, `isOfflineEligible` only for prefetched images. Images are never required for reading text; tapping an image shows a loader if it missed.\n\n#### Measurement\nThe north-star is **offline coverage** = 'articles opened while offline' / 'articles opened'. Everything else (sync lag, conflict rate) is secondary. You tune prefetch depth until coverage is high enough.\n\n#### Trade-offs\nLocal-first costs storage and sync complexity but buys instant UI and airplane reliability. Prefetching a magazine costs bandwidth; make it opt-in. Monotonic LWW is simple but can't express 'sibling' edits — acceptable here because per-field state is small.",
+      "rubric": [
+        "Made local storage the source of truth for read-state",
+        "Separated content from read-state in the model",
+        "Designed an explicit prefetch policy with budgets",
+        "Used delta sync plus push for freshness",
+        "Chose a conflict policy (monotonic LWW) and justified it",
+        "Handled online/offline transitions without blocking",
+        "Designed bounded image caching",
+        "Defined an offline-coverage metric",
+        "Covered first-run vs returning-user",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: 'read-state is ~200 bytes per mutation, so the entire history for a heavy reader is ~100 KB — it can be replayed anywhere, anytime'",
+        "Designs multi-device conflict as monotonic fields to avoid CRDT machinery, and says exactly when they'd *need* a CRDT (sd-0018)",
+        "Plans the push infrastructure dependency and the failure mode of missed pushes (reconciliation poll)",
+        "Defines a storage-evolution story for Room (schema migrations with a versioning policy)",
+        "Designs the 'freshness' contract as per-section: sports is fresh at 5 min, features at 1 day"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Offline-first news architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"95.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">UI</text><text x=\"95.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">reads Room, not net</text><rect x=\"220\" y=\"20\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"300.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Room</text><text x=\"300.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">articles + read-state</text><rect x=\"430\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Sync worker</text><text x=\"500.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">delta + replay</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"51.0\" text-anchor=\"middle\" class=\"dg-label\">Content API</text><rect x=\"220\" y=\"160\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"300.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Image cache</text><text x=\"300.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">LRU, disk budget</text><rect x=\"430\" y=\"160\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Push (FCM)</text><text x=\"500.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">'issue 42 ready'</text><line x1=\"170\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"570\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"589.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">delta</text><line x1=\"380\" y1=\"74\" x2=\"300\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"340.0\" y=\"110.0\" text-anchor=\"middle\" class=\"dg-edge-label\">read-state</text><line x1=\"430\" y1=\"160\" x2=\"570\" y2=\"74\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"510.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">sync on push</text></svg>",
+      "refs": [
+        {
+          "title": "Offline-first architecture",
+          "url": "https://developer.android.com/topic/architecture/data-layer/offline-first",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "sd-0011",
+      "track": "system-design",
+      "topic": "Push notifications",
+      "level": 3,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "push",
+        "fcm",
+        "notifications"
+      ],
+      "q": "Design push notifications at scale on FCM",
+      "prompt": "Design a push-notification service built on FCM: campaign pushes to millions, personalized daily digests, transactional alerts, and the on-device handling that makes the product not annoying.\n\nAssume ~50M devices, multiple push campaigns per week, and that delivery rate and opt-out rate are the two numbers that matter. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "Half infrastructure (scheduling, batching, retries, token lifecycle), half product discipline (throttling, user-visible channel design). Interviewers probe token freshness and the 'not annoying' layer — opt-outs kill the product.",
+      "requirements": [
+        "Clarify the push types and their SLAs",
+        "Design the token lifecycle: registration, refresh, invalidation",
+        "Design the scheduler for campaigns (who, when, throttling)",
+        "Design the send pipeline: batching, fan-out, retries",
+        "Handle FCM's delivery contract: data vs notification messages, priority",
+        "Design the on-device receiving and display policy",
+        "Design digest aggregation and time-of-day batching",
+        "Handle geographic/local time delivery",
+        "Design unsubscribe, mute, and quiet-hours",
+        "Cover delivery analytics: FCM ack vs on-device receipt",
+        "Design the rate-limiter for a campaign over millions",
+        "Handle multiple devices per user",
+        "Mention the cold-start no-network case",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### Push types\nThe contract must separate delivery urgency from display: **transactional** (OTP, payment — deliver fast, display loud), **campaign** (newsletter-ish — batch, throttled, quiet), **digest** (aggregated, at a chosen local time). One pipeline, three queues with different SLA and throttle settings.\n\n#### Token lifecycle\nFCM gives each app install a token that changes on reinstall, restore, and after long inactivity. The client reports the token to our registry on every launch; the registry marks a token stale if it doesn't see the device in N days, and FCM's `unregistered` response on send prunes it. Token hygiene is a feedback loop: prune rate is a metric, not an afterthought.\n\n#### Scheduler\nA campaign = a targeting query (segment, e.g. 'active in 30d, not muted') evaluated against the profile store → a list of `(device, local_time)` tuples. Delivery is spread over hours and localized to the user's timezone — a global launch at 09:00 UTC is a 09:00 local launch for everyone. Per-user throttling: max N pushes/day, cooldown between pushes, quiet-hours respected. This is where opt-out rate is won or lost.\n\n#### Send pipeline\nFan-out in waves (100k at a time) through FCM with per-batch backoff; a message queue holds the fan-out so a spike doesn't melt the sender. Use **data messages** (not notification messages) for campaign content so the app decides display — needed for digests and muting. Transactional uses high-priority data or notification messages per SLA.\n\n#### Retries & dead-letter\nFCM failures: transient → retry with exponential backoff; `UnregisteredError` → drop the token and mark the device stale; invalid payload → dead-letter to a quarantine queue for operator review. No unbounded retry on campaign pushes — they have a delivery window.\n\n#### On-device policy\nThe app receives the push (data message → a NotificationManager post). The client applies the mute/quiet-hours/channel rules *before* posting — never post then cancel, the flicker is worse. Channels (per product area) let the OS carry user intent. A settings screen writes to Room; the client also reports the effective mute state to the registry so the server can skip sends.\n\n#### Digests\nDaily digest = aggregate N stories/alerts into one notification at a user-chosen time. Server-side aggregation at generation, delivered once — cheaper than N sends and dramatically less annoying.\n\n#### Analytics\nTwo layers: **FCM ack** (FCM accepted and forwarded — delivery proxy) and **on-device receipt** (app actually received and displayed). The gap is 'FCM silent drops', measured by comparing the two. Success metrics: delivery rate, open rate, and the guarded one — **opt-out rate**, tied to a throttling dashboard with rollback.\n\n#### Failure modes\nCold start offline → pushes are delivered by the OS later, no work needed. Token storm after a reinstall wave → registry must handle bursty registration. FCM outage → queue and retry, and the throttling dashboard pauses campaigns. Multiple devices per user → send once per device, mute on any.",
+      "rubric": [
+        "Separated push types with distinct SLAs",
+        "Designed the token lifecycle as a feedback loop",
+        "Scheduled with local-time and per-user throttling",
+        "Fanned out in waves with retry and dead-lettering",
+        "Chose data messages and justified it",
+        "Applied mute/quiet-hours before posting on-device",
+        "Designed digest aggregation",
+        "Separated FCM ack from on-device receipt in analytics",
+        "Protected the opt-out metric with throttling",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: 'a 10M campaign over 2 h is ~1,400 sends/s sustained — comfortably under FCM's limits but the fan-out queue is the thing that must not block on one slow batch'",
+        "Designs the quiet-hours contract as server-enforced *and* client-enforced to survive a client bug",
+        "Plans an on-call dashboard: delivery rate, ack-vs-receipt gap, token prune rate, opt-out rate",
+        "Considers the analytics consent interplay (privacy) and how opt-out is stored locally first",
+        "Defines the rollback: kill-switch channel (sd-0005) pauses campaigns in seconds"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Push architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"90.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Scheduler</text><text x=\"90.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">segment + local time</text><rect x=\"220\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"295.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Fan-out queue</text><text x=\"295.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">waves of 100k</text><rect x=\"430\" y=\"20\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"495.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">FCM</text><text x=\"495.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">data messages</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"655.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Device</text><text x=\"655.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">mute rules first</text><rect x=\"220\" y=\"160\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"295.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Token registry</text><text x=\"295.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">prune + refresh</text><rect x=\"430\" y=\"160\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"495.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Analytics</text><text x=\"495.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">ack vs receipt</text><line x1=\"160\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"189.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">plan</text><line x1=\"370\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"399.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">send</text><line x1=\"560\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"295\" y1=\"74\" x2=\"295\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"430\" y1=\"160\" x2=\"495\" y2=\"160\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"462.0\" y=\"155.0\" text-anchor=\"middle\" class=\"dg-edge-label\">tokens</text><line x1=\"560\" y1=\"187\" x2=\"655\" y2=\"76\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"610.0\" y=\"150.0\" text-anchor=\"middle\" class=\"dg-edge-label\">receipt</text></svg>",
+      "refs": [
+        {
+          "title": "FCM overview",
+          "url": "https://github.com/firebase/firebase-android-sdk/tree/main/firebase-messaging",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "sd-0012",
+      "track": "system-design",
+      "topic": "Modularization",
+      "level": 3,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "modularization",
+        "build-time",
+        "architecture"
+      ],
+      "q": "Design modularization for a large Android app",
+      "prompt": "Design the module structure for an app with ~200 engineers across 40 teams: split a monolith into buildable, ownable modules without blowing up build times or creating dependency hell.\n\nAssume an existing large app that builds in 15+ minutes, circular dependencies, and no enforced boundaries. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "This is more of an architecture/process scenario than a runtime design. The interviewer wants dependency-structure thinking (layering, direction, cycles) plus build-time engineering (Gradle, incremental builds, remote cache).",
+      "requirements": [
+        "Clarify the goals: build time, ownership, test isolation",
+        "Define the module layering (core → domain → feature → app)",
+        "Define the ownership and API-boundary rules",
+        "Design the dependency rules and how cycles are prevented",
+        "Design the build-time strategy: R8/Room/KSP tasks, Gradle cache, task configuration",
+        "Handle the code-path: how features depend on other features",
+        "Design the app shell and feature discovery",
+        "Design how shared UI and design system is modularized",
+        "Address the migration path from a monolith",
+        "Design the enforcement: lint rules, architecture tests, CI gates",
+        "Handle analytics and A/B instrumentation across features",
+        "Cover testing at each layer and the test-fixture pattern",
+        "Mention version catalogs and dependency management",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### Why modularize\nThree goals that trade against each other: **build time** (fewer modules → fewer tasks), **ownership** (more modules → clearer boundaries), **testing** (isolated unit tests). The design must make the trade-off explicit per layer.\n\n#### Layering\nThe classic shape, top-down dependency direction: `:app (shell) ──> :feature:* ──> :domain:* ──> :core:* (ui, datastore, network) ──> :libs:*`. Every dependency points downward. `:core:*` never depends on a `:feature:*`. `:domain` is pure Kotlin (no Android) so it compiles in milliseconds and tests in milliseconds — this is the fastest module in the graph and the one that carries the business rules.\n\n#### Feature modules\nOne module per feature, owned by one team. **No feature-to-feature dependency** — a feature that needs another's data talks to it through `:domain` interfaces or an event bus, or the consuming feature depends on the producer's *contract* module. This is the rule that prevents cycles and makes the graph a DAG that CI can verify.\n\n#### API boundaries\nEach module exports an `api()` vs `implementation()` split: implementation deps stay private. Public API is reviewed like a public contract — an `@InternalApi` annotation + a strict-API lint rule that fails a build if a non-public class leaks into `api()`.\n\n#### Build time\nThe two things that make big builds slow: configuration phase (thousands of tasks to evaluate) and non-incremental tasks (KSP, R8, Room). Mitigations: build-time configuration caching, Gradle remote build cache (share compiled classes across CI and devs), task-level input normalization, and **pushing R8 down to release-only** so dev builds skip it. Feature isolation means a change in `:feature:payments` rebuilds that module + dependents, not the whole app — the payoff of the DAG.\n\n#### The app shell\n`:app` is thin: it owns DI wiring (or delegates to a `:app:di` module), navigation graph composition, and feature registration. Features register via a navigator interface or a lightweight service locator in the shell; no feature references another feature's activity class directly.\n\n#### Design system\nA `:ui:design-system` module (tokens, components, theme) that everything depends on. It must be stable: an API freeze with a review process, because its change blast radius is the whole app.\n\n#### Migration\nExtract bottom-up: start with `:core:network`, then `:domain`, then the smallest feature — each extraction is a separate PR that keeps the build green. A migration badge per module ('in monolith' → 'extracted') tracked in a dashboard. The monolith keeps compiling during extraction; you don't do a big-bang rewrite.\n\n#### Enforcement\nThe design is only real if enforced: an architecture test (like ArchUnit) that fails on upward or cross-feature dependencies, a lint rule that flags `api()` leaks, a CI check that the module graph is acyclic, and a `gradle buildHealth` command that reports per-module build times to catch a module that's quietly becoming a second monolith.",
+      "rubric": [
+        "Articulated the three goals and their tension",
+        "Designed clean downward layering with a pure-Kotlin domain",
+        "Banned feature-to-feature dependencies with a contract path",
+        "Separated api()/implementation() and enforced it",
+        "Addressed build time: config caching, remote cache, release-only R8",
+        "Designed a thin app shell with DI and navigation",
+        "Made the design system a stable, review-gated module",
+        "Planned a bottom-up migration that stays green",
+        "Enforced the graph with architecture tests and CI",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: 'a pure-Kotlin domain module compiles in ~2 s and runs unit tests in ~3 s — it is the first module you extract because it pays off immediately'",
+        "Designs a 'dependency budget' for a feature: max N external libraries, tracked in CI like a code-coverage gate",
+        "Plans the metrics: 95th-percentile change-to-build time per module, and the cross-module cycle count trending to zero",
+        "Considers the trade-off of too many modules: coordination overhead, and defines the 'module granularity' review",
+        "Defines the migration rollout cadence: one feature extraction per sprint, with an owner per module"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Module architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"250\" y=\"20\" width=\"220\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"360.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">:app (shell)</text><text x=\"360.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">DI + navigation</text><rect x=\"250\" y=\"110\" width=\"220\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"360.0\" y=\"134.0\" text-anchor=\"middle\" class=\"dg-label\">:feature:payments</text><text x=\"360.0\" y=\"149.0\" text-anchor=\"middle\" class=\"dg-sub\">:feature:feed …</text><rect x=\"250\" y=\"200\" width=\"220\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"360.0\" y=\"224.0\" text-anchor=\"middle\" class=\"dg-label\">:domain</text><text x=\"360.0\" y=\"239.0\" text-anchor=\"middle\" class=\"dg-sub\">pure Kotlin, fast tests</text><rect x=\"20\" y=\"20\" width=\"170\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"105.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">:core:network</text><text x=\"105.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">:core:ui, :core:data</text><rect x=\"20\" y=\"200\" width=\"170\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"105.0\" y=\"224.0\" text-anchor=\"middle\" class=\"dg-label\">:libs:*</text><text x=\"105.0\" y=\"239.0\" text-anchor=\"middle\" class=\"dg-sub\">:ui:design-system</text><line x1=\"360\" y1=\"74\" x2=\"360\" y2=\"108\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"360\" y1=\"164\" x2=\"360\" y2=\"198\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"250\" y1=\"137\" x2=\"105\" y2=\"76\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"170.0\" y=\"100.0\" text-anchor=\"middle\" class=\"dg-edge-label\">no feature→feature</text><line x1=\"105\" y1=\"74\" x2=\"105\" y2=\"198\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"135.0\" y=\"140.0\" text-anchor=\"middle\" class=\"dg-edge-label\">only downward</text></svg>",
+      "refs": [
+        {
+          "title": "Modularize your app",
+          "url": "https://developer.android.com/topic/modularization",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Gradle performance",
+          "url": "https://docs.gradle.org/current/userguide/performance.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "sd-0013",
+      "track": "system-design",
+      "topic": "Offline maps",
+      "level": 3,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "maps",
+        "offline",
+        "navigation"
+      ],
+      "q": "Design offline maps and turn-by-turn navigation",
+      "prompt": "Design an offline maps and turn-by-turn navigation experience: download a region, browse maps without a network, and navigate with voice prompts and rerouting — on constrained devices.\n\nAssume Google-Maps-class product ambitions, Android + iOS, and that battery and storage are the two hard constraints. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "A storage-and-latency system: offline tiles, vector data, route calculation on-device, and the online/offline handoff for rerouting. Interviewers probe the *data layout* (vector tiles) and the *routing engine* more than the UI.",
+      "requirements": [
+        "Clarify what must work offline: browse, search, routes, voice",
+        "Design the map data model: vector tiles vs raster, zoom levels",
+        "Design region download: selection, size budgeting, partial regions",
+        "Design storage layout and eviction",
+        "Design on-device routing and rerouting",
+        "Design search offline (geocoding and POIs)",
+        "Design the voice-prompt engine",
+        "Handle the online/offline handoff and live traffic integration",
+        "Design updates of stale regions",
+        "Handle map rotation and cached precomputation",
+        "Address battery and memory during navigation",
+        "Design the download UX (estimate size, pause/resume)",
+        "Mention how turn-by-turn uses sensors (GPS, gyro, bearing)",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### The data model — vector tiles\nThe core decision: store **vector tiles**, not rasters. A vector tile is compact geometry (roads, buildings, labels) per zoom level; it renders at device DPI and memory is a fraction of a raster. A region of a metro area is ~50–200 MB of vector tiles vs 10x that in raster. Rendering is done on-device with a tile pipeline that caches decoded geometry.\n\n#### Region download\nThe user picks a region (draw a box / city preset). The client computes the tile set at zoom levels 0–16, estimates size from a server-provided size table, and streams it with pause/resume and partial-apply (a region is only 'live' when its index is complete). Budgets: 'this region needs 300 MB, you have 500 MB free'. The metadata index (tile offsets, a name-to-tile lookup) is a small SQLite DB — queries on it power browse and search.\n\n#### Storage layout\nTile files in a read-mostly container + a SQLite index. LRU eviction with region semantics (evict whole tiles, never half a region). Free-space check before download. A 'map on device' list with per-region size and update status.\n\n#### Routing\nThe graph (nodes/edges with weights) is embedded in the tiles. **Precomputed routing data at region-download time**: contraction hierarchies (CH) built server-side and shipped with the region give sub-second routing on mid-range phones. The route engine is pure Kotlin, runs off the main thread, and caches the last route. **Reroute offline**: if the driver deviates, recompute on-device (same CH) — fast enough for 'off route' recovery without the network. When online, traffic weights update the graph and a live route is preferred, with a graceful 'traffic data lost' message.\n\n#### Search\nGeocoding offline = reverse index in the region DB (POI names, street names) + tokenized fuzzy match. Results are region-scoped ('city + area'). Address search quality is the '10% feature' that costs 50% of the effort — be honest that offline search is a degraded, bounded experience.\n\n#### Voice\nTTS runs on-device; prompt generation (maneuver → 'turn right on Elm in 300 m') is a rule engine fed by the route geometry and current position — no network, no latency. Audio focus and volume ducking are UX requirements.\n\n#### Navigation sensors\nLocation with `LocationRequest` at high accuracy while navigating; bearing from a fused GPS + gyro + magnetometer; a dead-reckoning fallback in tunnels (last known velocity extrapolation) with a 'GPS lost' banner. Prompt timing: compute distance-to-maneuver against the route geometry, trigger at ~300 m, repeat with a countdown, recalc after each fix.\n\n#### Battery & memory\nNavigation runs a foreground service; screen-on is the big drain, so the renderer caps at ~30 fps and dims. Tile decode is cached; geometry is not re-decoded each frame. On a long trip, memory stays flat — a leak here kills the app mid-drive.\n\n#### Trade-offs\nVector tiles cost a tile-pipeline build but save storage and enable high-DPI rendering. Precomputed CH routing costs download size but gives fast offline reroute. Offline search is bounded and that's a product decision to be explicit about.",
+      "rubric": [
+        "Chose vector tiles and explained the storage math",
+        "Designed region download with budgets and pause/resume",
+        "Designed storage with region-scoped eviction",
+        "Embedded precomputed routing (CH) for fast offline reroute",
+        "Handled the offline/online traffic handoff",
+        "Designed offline search with honest limits",
+        "Designed an on-device voice-prompt engine",
+        "Handled dead-reckoning in tunnels",
+        "Addressed battery and memory during navigation",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: 'a metro region at 16 zoom levels is ~80 MB of vector tiles; CH adds ~15% — vs ~600 MB of raster, so vector + CH is the whole storage story'",
+        "Designs the tile-pipeline metrics: decode latency p95, frame time during pan/zoom, region-download completion rate",
+        "Considers the offline update flow: region diffs, not full re-downloads, shipped as background patches",
+        "Plans a phased zoom strategy: high zoom only for the metro core, coarse elsewhere, to halve size",
+        "Defines navigation success metrics: 'reached destination without network', reroute latency, and prompt-accuracy"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Offline maps architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"95.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Map renderer</text><text x=\"95.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">vector tiles</text><rect x=\"220\" y=\"20\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"300.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Region store</text><text x=\"300.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">SQLite index + files</text><rect x=\"430\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"500.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Routing engine</text><text x=\"500.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">CH, offline reroute</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"51.0\" text-anchor=\"middle\" class=\"dg-label\">Voice TTS</text><rect x=\"220\" y=\"160\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"300.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Offline search</text><text x=\"300.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">fuzzy index</text><rect x=\"430\" y=\"160\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Region downloader</text><text x=\"500.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">budget + resume</text><line x1=\"170\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"570\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"74\" x2=\"500\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"440.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">patch updates</text><line x1=\"500\" y1=\"214\" x2=\"300\" y2=\"76\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"400.0\" y=\"150.0\" text-anchor=\"middle\" class=\"dg-edge-label\">regions in</text></svg>",
+      "refs": [
+        {
+          "title": "Map data for offline use",
+          "url": "https://developers.google.com/maps/documentation/android-sdk/tileoverlay",
+          "checked": "2026-08-13"
+        }
+      ]
+    }
+  ]
+}

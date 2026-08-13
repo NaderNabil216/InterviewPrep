@@ -1,0 +1,438 @@
+{
+  "id": "7day",
+  "title": "7-day sprint",
+  "description": "The highest-yield subset when you have one week. Sized to about 130 focused minutes a day: reads that link to the full answer, then a drill pass over the same cards. Cuts breadth deliberately to protect depth on what gets asked in every loop.",
+  "pace": {
+    "dailyMinutes": 130,
+    "note": "About 130 minutes/day of focused study. Read the linked item, rate it, then hit the day's drill to lock the cards into your review schedule."
+  },
+  "days": [
+    {
+      "title": "Kotlin fluency",
+      "focus": "You will be writing Kotlin live. Remove every hesitation about the language itself before a single Compose or coroutines question.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Null safety, platform types, safe calls",
+          "itemIds": [
+            "kt-0014",
+            "kt-0015"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Data modeling with classes",
+          "itemIds": [
+            "kt-0018"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Properties and initialization",
+          "itemIds": [
+            "kt-0025"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Functions: scope, inline, lambdas",
+          "itemIds": [
+            "kt-0035"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Generics and variance",
+          "itemIds": [
+            "kt-0039"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Collections and the standard library",
+          "itemIds": [
+            "kt-0043",
+            "kt-0064"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's Kotlin cards",
+          "itemIds": [
+            "kt-0014",
+            "kt-0015",
+            "kt-0018",
+            "kt-0025",
+            "kt-0035",
+            "kt-0039",
+            "kt-0043",
+            "kt-0064"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Coroutines & Flow",
+      "focus": "The single most-asked senior Android topic. Do not move on until structured concurrency is automatic.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Suspend mechanics and structured concurrency",
+          "itemIds": [
+            "co-0009",
+            "co-0015",
+            "co-0018"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Cancellation and coroutine builders",
+          "itemIds": [
+            "co-0024",
+            "co-0029"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Flow basics and operators",
+          "itemIds": [
+            "co-0035",
+            "co-0040"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Lifecycle-aware collection in Android",
+          "itemIds": [
+            "co-0051"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's coroutines cards",
+          "itemIds": [
+            "co-0009",
+            "co-0015",
+            "co-0018",
+            "co-0024",
+            "co-0029",
+            "co-0035",
+            "co-0040",
+            "co-0051"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Compose, including internals",
+      "focus": "Recomposition, stability and the three phases — the mid/senior dividing line.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "The Compose compiler and how recomposition works",
+          "itemIds": [
+            "cmp-0012",
+            "cmp-0016"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Stability and skipping",
+          "itemIds": [
+            "cmp-0018"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "State: remember, hoisting, snapshot",
+          "itemIds": [
+            "cmp-0026"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Side effects and CompositionLocal",
+          "itemIds": [
+            "cmp-0033",
+            "cmp-0036"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Modifiers, lazy lists and navigation",
+          "itemIds": [
+            "cmp-0038",
+            "cmp-0046",
+            "cmp-0059"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's Compose cards",
+          "itemIds": [
+            "cmp-0012",
+            "cmp-0016",
+            "cmp-0018",
+            "cmp-0026",
+            "cmp-0033",
+            "cmp-0036",
+            "cmp-0038",
+            "cmp-0046",
+            "cmp-0059"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Architecture & DI",
+      "focus": "Layering, events, domain purity and Hilt — the shape of an app you would defend in an interview.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Layered architecture foundations",
+          "itemIds": [
+            "ar-0008",
+            "ar-0009",
+            "ar-0011"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Events and navigation, domain layer",
+          "itemIds": [
+            "ar-0013",
+            "ar-0018"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Dependency injection and Hilt",
+          "itemIds": [
+            "ar-0023"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Modularization",
+          "itemIds": [
+            "ar-0028"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's architecture cards",
+          "itemIds": [
+            "ar-0008",
+            "ar-0009",
+            "ar-0011",
+            "ar-0013",
+            "ar-0018",
+            "ar-0023",
+            "ar-0028",
+            "ar-0036"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Platform, framework & data",
+      "focus": "How the OS treats your process, and how data moves through networking and persistence.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Lifecycle and component navigation",
+          "itemIds": [
+            "pf-0011",
+            "pf-0012"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Main thread, ANRs, background work",
+          "itemIds": [
+            "pf-0021",
+            "pf-0028"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Permissions and behavior changes",
+          "itemIds": [
+            "pf-0031",
+            "pf-0042"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Networking: OkHttp and Retrofit",
+          "itemIds": [
+            "dn-0005",
+            "dn-0010"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Room, DataStore and Paging",
+          "itemIds": [
+            "dn-0019",
+            "dn-0025",
+            "dn-0027"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's platform and data cards",
+          "itemIds": [
+            "pf-0011",
+            "pf-0012",
+            "pf-0021",
+            "pf-0028",
+            "pf-0031",
+            "pf-0042",
+            "dn-0005",
+            "dn-0010",
+            "dn-0019",
+            "dn-0025",
+            "dn-0027"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Performance, build & problem solving",
+      "focus": "App health, the build, and coding out loud — breadth today so the last day can be pure mock.",
+      "tasks": [
+        {
+          "kind": "read",
+          "label": "Startup and profiling",
+          "itemIds": [
+            "pe-0004",
+            "pe-0009",
+            "pe-0013"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Jank and Compose performance",
+          "itemIds": [
+            "pe-0025",
+            "pe-0030"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Gradle and multi-module builds",
+          "itemIds": [
+            "bt-0003",
+            "bt-0015"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Testing strategy and Compose tests",
+          "itemIds": [
+            "bt-0026",
+            "bt-0037"
+          ]
+        },
+        {
+          "kind": "dsa",
+          "label": "Hashing, sliding window, binary search",
+          "itemIds": [
+            "ds-0020",
+            "ds-0022",
+            "ds-0025"
+          ]
+        },
+        {
+          "kind": "dsa",
+          "label": "Heaps and graphs",
+          "itemIds": [
+            "ds-0033",
+            "ds-0042"
+          ]
+        },
+        {
+          "kind": "drill",
+          "label": "Drill today's performance and build cards",
+          "itemIds": [
+            "pe-0004",
+            "pe-0009",
+            "pe-0013",
+            "pe-0025",
+            "pe-0030",
+            "bt-0003",
+            "bt-0015",
+            "bt-0026",
+            "bt-0037"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "System design, security, behavior",
+      "focus": "The framework applied twice, security and KMP breadth, and the soft skills that close the loop.",
+      "tasks": [
+        {
+          "kind": "design",
+          "label": "Feature flags and observability",
+          "itemIds": [
+            "sd-0005",
+            "sd-0006"
+          ]
+        },
+        {
+          "kind": "design",
+          "label": "Networking and offline-first",
+          "itemIds": [
+            "sd-0008",
+            "sd-0010"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Security, integrity and Play policy",
+          "itemIds": [
+            "sk-0004",
+            "sk-0008",
+            "sk-0049"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Kotlin Multiplatform",
+          "itemIds": [
+            "sk-0022"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "STAR stories and mechanics",
+          "itemIds": [
+            "bh-0004",
+            "bh-0001"
+          ]
+        },
+        {
+          "kind": "read",
+          "label": "Cheat sheet: versions and policy",
+          "itemIds": [
+            "cs-0001"
+          ]
+        },
+        {
+          "kind": "mock",
+          "label": "Full loop mock: Android screen → system design → coding"
+        },
+        {
+          "kind": "drill",
+          "label": "Drill every card you rated Again or Hard this week"
+        },
+        {
+          "kind": "note",
+          "label": "Check your setup. Sleep early."
+        }
+      ]
+    }
+  ]
+}

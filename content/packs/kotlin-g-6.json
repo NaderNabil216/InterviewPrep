@@ -1,0 +1,227 @@
+{
+  "id": "kotlin-g-6",
+  "title": "Kotlin Language",
+  "track": "kotlin",
+  "items": [
+    {
+      "id": "kt-0039",
+      "track": "kotlin",
+      "topic": "Generics",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "erasure",
+        "signature",
+        "typeOf"
+      ],
+      "q": "What survives type erasure on the JVM, and how do libraries recover the type anyway?",
+      "shortAnswer": [
+        "Type arguments are erased, so `is List<String>` is illegal and `as List<String>` is an unchecked cast that fails later at the first element read.",
+        "The generic signature is retained in the class file's Signature attribute and Kotlin metadata, which is what the anonymous-subclass trick and `typeOf<T>()` exploit.",
+        "Arrays are the exception — they are reified and covariant on the JVM, and `ArrayStoreException` catches the mismatch."
+      ],
+      "answer": "On the JVM, generic **type arguments are erased**: `List<String>` and `List<Int>` are both `List` at runtime. Consequences: `x is List<String>` does not compile (only the raw `is List`), and `x as List<String>` compiles only as an *unchecked cast* — the failure is deferred to the first element you read as a `String`, where a `ClassCastException` explodes far from the cast site.\n\n#### What survives\nTwo things:\n1. The **`Signature` attribute** — the class file records the generic signature it was compiled against (a field typed `List<User>` keeps `Ljava/util/List<Lpkg/User;>;`).\n2. **Kotlin metadata** — the `@Metadata` annotation stores Kotlin-level type information.\n\nLibraries exploit exactly this. **Gson/Moshi's `TypeToken`** trick: `object : TypeToken<List<User>>() {}` — an anonymous subclass *inherits* the generic supertype, readable via reflection. `typeOf<T>()` and kotlinx.serialization's `serializer(typeOf<T>())` do the same via the metadata.\n\n#### Arrays are different\nArrays are **reified**: `Array<String>` is a real `String[]` with a runtime element type. And they are **covariant** (`String[]` is an `Object[]`), so a bad write is caught by `ArrayStoreException` instead of silent corruption — the classic contrast to erasure.\n\n#### The practical rule\n`is` on raw types, `typeOf<T>()` when you need the parameterized type, and never treat an unchecked cast as safe.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Erasure, the TypeToken trick, and reified arrays",
+          "src": "// is with type args — illegal\n// if (x is List<String>) { }   // ERROR: cannot check for instanceof parameterized type\n\n// unchecked cast defers failure to first read\nval s = x as List<String>      // compiles with warning\ns[0].uppercase()               // ClassCastException here, not at the cast\n\n// the anonymous-subclass trick\nval token = object : TypeToken<List<User>>() {}   // Signature attribute preserved\n\n// typeOf recovers the parameterized type via Kotlin metadata\nval t: KType = typeOf<List<User>>()\n\n// arrays: reified + covariant\nval a: Array<String> = arrayOf(\"x\")\nval o: Array<Any> = a          // compiles (covariance)\no[0] = 1                       // ArrayStoreException at runtime"
+        }
+      ],
+      "followUps": [
+        "Why can you check `is List` but not `is List<String>`?",
+        "How does `typeOf<T>()` differ from `T::class`?",
+        "What makes arrays covariant where generics are not?"
+      ],
+      "traps": [
+        "Thinking `as List<String>` is checked at the cast — erasure defers the failure.",
+        "Missing that arrays are reified and covariant — the exception to the rule."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Type erasure and unchecked casts",
+          "url": "https://kotlinlang.org/docs/generics.html#type-erasure",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0040",
+      "track": "kotlin",
+      "topic": "Generics",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "reified",
+        "inline",
+        "typeOf"
+      ],
+      "q": "What can't `reified` do, and what are the standard workarounds?",
+      "shortAnswer": [
+        "`reified` exists only inside `inline` functions, so it cannot appear in a virtual/override member and cannot be forwarded to a non-inline generic function.",
+        "It cannot construct `T` — no `T()` — so pass a factory lambda or a `KClass` and pay reflection.",
+        "A public inline reified function inlines into consumers, so its body is ABI and may only touch public API or `@PublishedApi` declarations, and `T::class` loses nested type arguments where `typeOf<T>()` keeps them."
+      ],
+      "answer": "`reified` is only legal inside an **`inline` function**: the compiler substitutes the actual type argument at the call site, which is how `T::class`, `is T`, and `is T?` become legal in the body. But the power has hard edges:\n\n#### What it can't do\n- **No virtual/override members**: a `reified` function can't be `open`, can't be an interface method, can't be overridden — it must be inlineable. A `reified` parameter in a `when`/`if` dispatch still has to be resolved statically.\n- **No forwarding to a non-inline generic**: `fun <T> a() = b<T>()` where `b` is a plain generic function — `T` is not a real type there, so it can't be passed.\n- **No `T()` construction**: there is no reified constructor. Instantiation needs a **factory lambda** (`{ T() }` passed in) or a `KClass` + reflection.\n\n#### The ABI footgun\nA **public inline reified function** gets its body inlined into every consumer. That makes the body part of your binary surface: any helper it touches must be public or `@PublishedApi`, and changes to the body don't reach consumers until they recompile (same mechanism as `inline` in general).\n\n#### `T::class` vs `typeOf<T>()`\n`T::class` gives a `KClass` — the raw class. It **loses nested type arguments** (`T::class` for `T = List<User>` is just `List`). `typeOf<T>()` gives a `KType` that preserves them (`List<User>`), which is why serializers and JSON mappers use `typeOf`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "reified constraints and the factory workaround",
+          "src": "inline fun <reified T> fromJson(json: String): T =\n    decode(json, typeOf<T>())        // typeOf keeps List<User> intact\n\n// Cannot be: open, in an interface, or forwarded to non-inline generic\n// open inline fun <reified T> f() {}   // ERROR\n\n// No T() — pass a factory instead\ninline fun <reified T> create(factory: () -> T): T = factory()\n\n// T::class loses type arguments; typeOf preserves them\n// T = List<User>  ->  T::class == List; typeOf<T>() == List<User>"
+        }
+      ],
+      "followUps": [
+        "Why must `reified` live in an `inline` function?",
+        "What is the ABI consequence of a public inline reified function?",
+        "When would you prefer a `KClass` parameter over `reified`?"
+      ],
+      "traps": [
+        "Trying to construct `T` — no reified constructor exists.",
+        "Using `T::class` where `typeOf<T>()` is needed to preserve nested arguments."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Inline functions (reified)",
+          "url": "https://kotlinlang.org/docs/inline-functions.html#reified-type-parameters",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0041",
+      "track": "kotlin",
+      "topic": "Generics",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "bounds",
+        "where",
+        "T-and-Any"
+      ],
+      "q": "What is the implicit upper bound of `<T>`, and when do you need `where` or `T & Any`?",
+      "shortAnswer": [
+        "`fun <T> f(x: T)` has upper bound `Any?`, so `f(null)` compiles — the trap behind 'non-null' generic helpers that silently accept null.",
+        "`<T : Any>` fixes it; multiple bounds require `where T : Comparable<T>, T : Serializable`; recursive bounds emulate the self type Kotlin lacks.",
+        "`T & Any` (1.7+) is the definitely non-nullable type you write when overriding a Java generic method whose parameter is annotated `@NotNull`."
+      ],
+      "answer": "The implicit upper bound of a bare `<T>` is **`Any?`**. That means `fun <T> nonNull(x: T)` happily accepts `null` — `T = String?` is inferred and no check fires. The trap: generic helpers that look non-null on the surface quietly admit null.\n\n#### Fixes\n- **`<T : Any>`** — upper bound `Any`, so `T` can never be nullable. The standard fix for 'my generic helper should reject null'.\n- **Multiple bounds** need the `where` clause: `fun <T> sort(x: T) where T : Comparable<T>, T : Serializable`. Inline listing (`<T : Comparable<T> & Serializable>`) is not legal syntax.\n- **Recursive bounds**: `interface Builder<T : Builder<T>>` — `T` bounded by itself, emulating the *self type* (F-bounded polymorphism) Kotlin lacks. Used by fluent builders.\n\n#### `T & Any` — definitely non-nullable\nSince 1.7, `T & Any` says 'T, but never null even if the type argument could be nullable'. Its main use: **overriding a Java generic method whose parameter is annotated `@NotNull`** — Java declares `void set(K key, @NotNull V value)` and you write `override fun set(key: K, value: V & Any)`. The compiler needs the annotation-aware form because a plain `V` could infer nullable.\n\n#### Summary\nBare `<T>` means `Any?`; add `: Any` when nullability is a contract, `where` for multiple bounds, `T & Any` to express 'non-null regardless of inference' at a Java interop seam.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Bare T accepts null; bounds and T & Any constrain it",
+          "src": "fun <T> f(x: T) = x\nf<String?>(null)          // compiles — T's bound is Any?\n\nfun <T : Any> g(x: T) = x\n// g(null)                  // ERROR: Type argument is not within its bounds\n\nfun <T> h(x: T) where T : Comparable<T>, T : Serializable = x\n\ninterface Builder<T : Builder<T>> { fun build(): String }   // self type\n\n// Java:  void register(@NotNull K key, V value)\noverride fun register(key: K, value: V & Any) { }"
+        }
+      ],
+      "followUps": [
+        "Why is the implicit bound `Any?` and not `Any`?",
+        "What does `T & Any` solve that `<T : Any>` cannot?",
+        "When would you use a recursive bound?"
+      ],
+      "traps": [
+        "Forgetting bare `<T>` admits null — the 'non-null generic' trap.",
+        "Confusing `T & Any` with `<T : Any>` — one constrains declaration, the other constrains inference at a call site."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Generics (bounds, where)",
+          "url": "https://kotlinlang.org/docs/generics.html",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "What's new in Kotlin 1.7 — definitely non-nullable types",
+          "url": "https://kotlinlang.org/docs/whatsnew17.html#definitely-non-nullable-types",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0042",
+      "track": "kotlin",
+      "topic": "Generics",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "variance",
+        "UnsafeVariance",
+        "projection"
+      ],
+      "q": "You are designing a generic API — how do you decide variance, and what is `@UnsafeVariance` doing in `List<out E>.contains`?",
+      "shortAnswer": [
+        "Producers get `out` — Flow, StateFlow, List — and consumers get `in` — Comparator, Continuation; `Nothing` lets a covariant type have a singleton bottom variant.",
+        "`contains(element: @UnsafeVariance E)` suppresses the position check because the operation only reads the element, never stores it.",
+        "Mutable containers must stay invariant — `MutableList`/`MutableStateFlow` cannot be `out` — and use-site projection (`List<out T>`) beats declaration-site when the variance is call-specific."
+      ],
+      "answer": "The decision rule is the producer/consumer split:\n\n- **Producer** — the type only ever produces `E` *out* of itself → declare `out` (`List<out E>`, `Flow<out T>`, `StateFlow<out T>`). A `Flow<Login>` is a `Flow<Any>`; that subtyping makes streams composable.\n- **Consumer** — the type only consumes `E` → declare `in` (`Comparator<in T>`, `Continuation<in T>`). A `Comparator<Any>` is a `Comparator<String>`.\n- **Both** — mutable containers (`MutableList`, `MutableStateFlow`) must stay **invariant**: they read and write `E`, so no direction of subtyping is safe.\n\n#### The `@UnsafeVariance` hole\n`List` is `out E`, yet `contains(element: E)` and `indexOf(element: E)` take `E` **as input** — the 'wrong' position for `out`. The stdlib annotates the parameter `@UnsafeVariance` to suppress the position check, because the operation is read-only in practice (it compares, never stores). A deliberate, documented exception, not a hack to copy casually.\n\n#### `Nothing` as the bottom\n`Nothing` is a subtype of everything, so `List<out T>` accepts `List<Nothing>` — an empty list is assignable to any `List<T>` (`emptyList()` is `List<Nothing>`). Same idea gives `Flow<Nothing>` as the never-emitting flow.\n\n#### Declaration-site vs use-site\n`out`/`in` on the declaration helps *every* call site. When variance applies to only one call, project at the use site: `fun pushAll(list: List<out T>)` or `MutableList<in T>` — narrower, less contract surface.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Producer/consumer variance and the UnsafeVariance read",
+          "src": "interface Producer<out T> { fun produce(): T }   // out — T only leaves\ninterface Consumer<in T> { fun accept(v: T) }      // in — T only enters\n\nclass MutableBox<T> { var value: T }               // invariant — reads AND writes\n\n// List<out E> yet contains(E): the UnsafeVariance exception\ninterface List<out E> {\n    fun contains(element: @UnsafeVariance E): Boolean   // read-only use\n}\n\n// emptyList(): List<Nothing> — assignable to List<T>\nval anyList: List<String> = emptyList()\n\n// use-site projection, when variance is call-specific\nfun <T> combineInto(dst: MutableList<in T>, src: List<out T>)"
+        }
+      ],
+      "followUps": [
+        "Why can't `MutableList` be declared `out`?",
+        "What is the difference between declaration-site and use-site variance?",
+        "Why does `Nothing` make covariant types useful at the bottom?"
+      ],
+      "traps": [
+        "Declaring a mutable container `out` — invariance is mandatory for read/write types.",
+        "Not knowing the `@UnsafeVariance` exception in `contains` — it's the standard 'gotcha' this question tests."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Generics (variance, projections)",
+          "url": "https://kotlinlang.org/docs/generics.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0043",
+      "track": "kotlin",
+      "topic": "Collections",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "listOf",
+        "arrayOf",
+        "IntArray"
+      ],
+      "q": "`listOf` vs `mutableListOf` vs `arrayOf` vs `IntArray` — what do you pick and why?",
+      "shortAnswer": [
+        "`List` is a read-only interface (backed by `ArrayList` or a shared singleton for `emptyList()`); `Array<Int>` boxes every element into `Integer` while `IntArray` is a real `int[]`.",
+        "Arrays are fixed-size and compare by identity — you need `contentEquals`/`contentDeepEquals` — while lists compare structurally.",
+        "`buildList {}` avoids the mutable-then-`toList()` dance."
+      ],
+      "answer": "The pragmatic split is *size and boxing*.\n\n#### `List` vs `Array`\n`List<T>` is a read-only **interface**; the common backing is `ArrayList`. It grows, knows its own size, and has the rich operator library (`map`, `filter`, `first`...). `Array<T>` is a fixed-size Java array with no collection operators — you index it manually. A `List` from `listOf()` may be a shared `EmptyList` singleton (no allocation for empty); a non-empty `listOf` wraps a fixed-size `ArrayList` copy.\n\n#### Boxing: `Array<Int>` vs `IntArray`\n`Array<Int>` is `Integer[]` — every element is **boxed**, so a 10k-element array holds 10k `Integer` objects. `IntArray` is a real `int[]` — primitive, flat, no allocation per element, cache-friendly. The same for `LongArray`, `DoubleArray`, `BooleanArray`. When the data is numerically heavy (sensors, buffers, bitmaps), `IntArray` is both smaller and faster.\n\n#### Equality\nTwo `Array`s compare by **identity** — `arrayOf(1,2) == arrayOf(1,2)` is false; you need `contentEquals` (and `contentDeepEquals` for nested). `List`s compare structurally, so `listOf(1,2) == listOf(1,2)` is true.\n\n#### Building\n`buildList { add(...); addAll(...) }` runs a block with a `MutableList` and returns a read-only `List` — no intermediate `toList()` copy.\n\n#### Choosing\n- Dynamic, functional, size-unknown → `List` (prefer read-only `List` over `MutableList` when you control the surface).\n- Fixed-size, primitive-heavy, performance-critical → `IntArray` and friends.\n- Fixed-size but boxed types required → `Array<T>`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Boxing, equality, and building",
+          "src": "val list = listOf(1, 2, 3)            // List<Int> — read-only interface\nval mutable = mutableListOf(1, 2)     // MutableList<Int> — ArrayList\nval boxed = arrayOf(1, 2, 3)          // Array<Int> — Integer[] (boxed!)\nval prim = intArrayOf(1, 2, 3)        // IntArray — int[] (no boxing)\n\nboxed == arrayOf(1, 2, 3)             // false — identity\nboxed.contentEquals(arrayOf(1, 2, 3)) // true\n\nval built = buildList { add(1); addAll(listOf(2, 3)) }  // read-only, one copy"
+        }
+      ],
+      "followUps": [
+        "When would you reach for `IntArray` over `List<Int>`?",
+        "Why does `emptyList()` not allocate?",
+        "What is the difference between `contentEquals` and `contentDeepEquals`?"
+      ],
+      "traps": [
+        "Assuming `Array<Int>` is a primitive array — it is boxed; `IntArray` is the primitive.",
+        "Using `==` on arrays and getting identity comparison."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    }
+  ]
+}

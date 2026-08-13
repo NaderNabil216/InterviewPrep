@@ -1,0 +1,96 @@
+{
+  "track": "behavioral",
+  "scope": [
+    "STAR structure done well and done badly (L2)",
+    "quantifying impact honestly (L2)",
+    "tell me about a failure — model structure + worked example (L2)",
+    "conflict with a colleague (L2)",
+    "disagreeing with your manager (L3)",
+    "a project that slipped (L2)",
+    "taking ownership beyond your remit (L3)",
+    "mentoring someone (L3)",
+    "giving difficult feedback (L3)",
+    "receiving critical feedback (L3)",
+    "influencing without authority (L3)",
+    "a technical decision you got wrong (L2)",
+    "pushed back on a product requirement (L3)",
+    "handling an on-call incident or production outage (L3)",
+    "working with an underperforming teammate (L3)",
+    "navigating ambiguity with no clear owner (L3)",
+    "prioritizing under a hard deadline (L2)",
+    "saying no (L4)",
+    "Google/Meta/Amazon flavour differences and Amazon Leadership Principles mapping (L2)",
+    "staff-level vs senior-level answers — scope, leverage, org impact (L4)",
+    "asking clarifying questions in a design round (L2)",
+    "discussing compensation and negotiating an offer (L1)"
+  ],
+  "specs": [],
+  "coverage": {
+    "STAR structure done well and done badly (L2)": [
+      "bh-0004"
+    ],
+    "quantifying impact honestly (L2)": [
+      "bh-0005"
+    ],
+    "tell me about a failure — model structure + worked example (L2)": [
+      "bh-0006"
+    ],
+    "conflict with a colleague (L2)": [
+      "bh-0007"
+    ],
+    "disagreeing with your manager (L3)": [
+      "bh-0008"
+    ],
+    "a project that slipped (L2)": [
+      "bh-0009"
+    ],
+    "taking ownership beyond your remit (L3)": [
+      "bh-0010"
+    ],
+    "mentoring someone (L3)": [
+      "bh-0011"
+    ],
+    "giving difficult feedback (L3)": [
+      "bh-0012"
+    ],
+    "receiving critical feedback (L3)": [
+      "bh-0013"
+    ],
+    "influencing without authority (L3)": [
+      "bh-0014"
+    ],
+    "a technical decision you got wrong (L2)": [
+      "bh-0015"
+    ],
+    "pushed back on a product requirement (L3)": [
+      "bh-0016"
+    ],
+    "handling an on-call incident or production outage (L3)": [
+      "bh-0017"
+    ],
+    "working with an underperforming teammate (L3)": [
+      "bh-0018"
+    ],
+    "navigating ambiguity with no clear owner (L3)": [
+      "bh-0019"
+    ],
+    "prioritizing under a hard deadline (L2)": [
+      "bh-0020"
+    ],
+    "saying no (L4)": [
+      "bh-0021"
+    ],
+    "Google/Meta/Amazon flavour differences and Amazon Leadership Principles mapping (L2)": [
+      "bh-0022"
+    ],
+    "staff-level vs senior-level answers — scope, leverage, org impact (L4)": [
+      "bh-0023"
+    ],
+    "asking clarifying questions in a design round (L2)": [
+      "bh-0024"
+    ],
+    "discussing compensation and negotiating an offer (L1)": [
+      "bh-0025"
+    ]
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "track": "platform",
+  "scope": [
+    "component lifecycles and their real traps (Activity/Fragment/Service/ContentProvider/BroadcastReceiver)",
+    "Fragment view-lifecycle vs Fragment lifecycle",
+    "configuration changes and what actually survives",
+    "process death, saved state, SavedStateHandle, and testing it",
+    "task and back stack, launch modes, taskAffinity, intent flags",
+    "predictive back and OnBackPressedDispatcher",
+    "Binder, TransactionTooLargeException, oneway calls, AIDL, Parcelable vs Serializable",
+    "Looper, Handler, MessageQueue, Choreographer, frame pipeline and vsync",
+    "ANR anatomy — the five triggers, timeouts, reading a traces file, StrictMode",
+    "memory — heap, GC behaviour, LeakCanary, leak shapes, onTrimMemory, LMK",
+    "app-startup sequence from zygote fork to first frame",
+    "manifest components and exported-component safety",
+    "permissions — install-time vs runtime vs special, request flow, rationale, Photo Picker, one-time and partial media access",
+    "scoped storage, MediaStore, SAF, shared-storage migration",
+    "background execution limits, doze, app standby buckets, background start restrictions",
+    "foreground service types and the Android 14+ requirements, user-initiated data transfer",
+    "WorkManager — constraints, backoff, expedited work, chaining, uniqueness, testing",
+    "AlarmManager exact-alarm permission and JobScheduler relationship",
+    "notifications — channels, POST_NOTIFICATIONS, importance, full-screen intents",
+    "PendingIntent mutability",
+    "deep links, App Links and verification, intent filters, intent redirection risk",
+    "edge-to-edge enforcement and insets",
+    "per-app language and locale, dark theme and configuration",
+    "display cutouts, foldables, multi-window and resizability",
+    "Android 13-17 behavior changes, Play targetSdk 36 deadline, 16 KB page-size requirement",
+    "local network access permission, Play policy and data safety",
+    "ART, JIT/AOT, profile-guided compilation, dex and 64K methods",
+    "NDK and JNI basics"
+  ],
+  "specs": [],
+  "coverage": {
+    "component lifecycles and their real traps (Activity/Fragment/Service/ContentProvider/BroadcastReceiver)": [
+      "pf-0010",
+      "pf-0011",
+      "pf-0012",
+      "pf-0013",
+      "pf-0048",
+      "pf-0055",
+      "pf-0056"
+    ],
+    "Fragment view-lifecycle vs Fragment lifecycle": [
+      "pf-0014"
+    ],
+    "configuration changes and what actually survives": [
+      "pf-0015"
+    ],
+    "process death, saved state, SavedStateHandle, and testing it": [
+      "pf-0001",
+      "pf-0050"
+    ],
+    "task and back stack, launch modes, taskAffinity, intent flags": [
+      "pf-0007"
+    ],
+    "predictive back and OnBackPressedDispatcher": [
+      "pf-0016"
+    ],
+    "Binder, TransactionTooLargeException, oneway calls, AIDL, Parcelable vs Serializable": [
+      "pf-0005",
+      "pf-0023",
+      "pf-0024",
+      "pf-0047"
+    ],
+    "Looper, Handler, MessageQueue, Choreographer, frame pipeline and vsync": [
+      "pf-0021",
+      "pf-0022",
+      "pf-0051"
+    ],
+    "ANR anatomy — the five triggers, timeouts, reading a traces file, StrictMode": [
+      "pf-0002",
+      "pf-0053"
+    ],
+    "memory — heap, GC behaviour, LeakCanary, leak shapes, onTrimMemory, LMK": [
+      "pf-0006",
+      "pf-0025",
+      "pf-0026",
+      "pf-0027"
+    ],
+    "app-startup sequence from zygote fork to first frame": [
+      "pf-0017"
+    ],
+    "manifest components and exported-component safety": [
+      "pf-0018"
+    ],
+    "permissions — install-time vs runtime vs special, request flow, rationale, Photo Picker, one-time and partial media access": [
+      "pf-0008",
+      "pf-0031"
+    ],
+    "scoped storage, MediaStore, SAF, shared-storage migration": [
+      "pf-0032",
+      "pf-0033"
+    ],
+    "background execution limits, doze, app standby buckets, background start restrictions": [
+      "pf-0028",
+      "pf-0029"
+    ],
+    "foreground service types and the Android 14+ requirements, user-initiated data transfer": [
+      "pf-0030"
+    ],
+    "WorkManager — constraints, backoff, expedited work, chaining, uniqueness, testing": [
+      "pf-0003",
+      "pf-0034"
+    ],
+    "AlarmManager exact-alarm permission and JobScheduler relationship": [
+      "pf-0035"
+    ],
+    "notifications — channels, POST_NOTIFICATIONS, importance, full-screen intents": [
+      "pf-0036",
+      "pf-0037"
+    ],
+    "PendingIntent mutability": [
+      "pf-0038"
+    ],
+    "deep links, App Links and verification, intent filters, intent redirection risk": [
+      "pf-0009",
+      "pf-0019"
+    ],
+    "edge-to-edge enforcement and insets": [
+      "pf-0039"
+    ],
+    "per-app language and locale, dark theme and configuration": [
+      "pf-0040",
+      "pf-0041",
+      "pf-0054"
+    ],
+    "display cutouts, foldables, multi-window and resizability": [
+      "pf-0020"
+    ],
+    "Android 13-17 behavior changes, Play targetSdk 36 deadline, 16 KB page-size requirement": [
+      "pf-0004",
+      "pf-0042"
+    ],
+    "local network access permission, Play policy and data safety": [
+      "pf-0043"
+    ],
+    "ART, JIT/AOT, profile-guided compilation, dex and 64K methods": [
+      "pf-0044",
+      "pf-0045"
+    ],
+    "NDK and JNI basics": [
+      "pf-0046"
+    ]
+  }
+}

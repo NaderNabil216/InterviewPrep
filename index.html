@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Android Interview Prep</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
+<link rel="stylesheet" href="assets/css/app.css?v=4">
+</head>
+<body>
+
+<div id="offline-notice" class="fileurl-warning" hidden>
+  <div class="fileurl-warning__box">
+    <h1>Run this over a local server</h1>
+    <p>Your browser blocks <code>fetch()</code> of local JSON files when opened directly from disk
+    (<code>file://</code>). Start a tiny local server, then open the printed address:</p>
+    <pre><code>cd /Users/nn/InterviewPrep &amp;&amp; bash tools/serve.sh</code></pre>
+    <p>or, if you don't have the script handy:</p>
+    <pre><code>cd /Users/nn/InterviewPrep &amp;&amp; python3 -m http.server 8777</code></pre>
+    <p>then visit <code>http://localhost:8777</code>.</p>
+  </div>
+</div>
+
+<div id="app" class="app">
+
+  <!-- Raised by app.js when a write fails. Persists until dismissed — a lost rating must not
+       disappear behind a 3.2s toast. -->
+  <div id="storage-banner" class="storage-banner" role="alert" hidden>
+    <span class="storage-banner__icon" aria-hidden="true">⚠️</span>
+    <div class="storage-banner__body">
+      <p class="storage-banner__title" id="storage-banner-title">Your last change could not be saved.</p>
+      <p class="storage-banner__detail" id="storage-banner-detail"></p>
+    </div>
+    <div class="storage-banner__actions">
+      <button class="btn" id="storage-banner-export">Export progress</button>
+      <button class="btn btn--ghost" id="storage-banner-dismiss" title="Dismiss">✕</button>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <button class="topbar__brand" data-nav="dashboard" title="Dashboard">
+      <span class="topbar__logo">🤖</span>
+      <span class="topbar__title">Android Interview Prep</span>
+    </button>
+
+    <nav class="topbar__nav" aria-label="Primary">
+      <button data-nav="dashboard">Dashboard</button>
+      <button data-nav="plan">Plan</button>
+      <button data-nav="topics">Topics</button>
+      <button data-nav="drill">Drill</button>
+      <button data-nav="dsa">DSA</button>
+      <button data-nav="design">System Design</button>
+      <button data-nav="mock">Mock</button>
+      <button data-nav="cheatsheets">Cheat Sheets</button>
+      <button data-nav="whatsnew">What's New</button>
+    </nav>
+
+    <div class="topbar__actions">
+      <button id="search-toggle" class="icon-btn" title="Search ( / )">🔎</button>
+      <button id="update-btn" class="update-btn" title="Check for new content">
+        <span class="update-btn__label">Up to date</span>
+        <span id="update-badge" class="update-btn__badge" hidden>0</span>
+      </button>
+      <button id="theme-toggle" class="icon-btn" title="Toggle theme">🌙</button>
+      <button data-nav="settings" class="icon-btn" title="Settings">⚙️</button>
+    </div>
+  </header>
+
+  <div id="search-overlay" class="search-overlay" hidden>
+    <div class="search-overlay__box">
+      <input id="search-input" type="text" placeholder="Search topics, questions, tags… (Esc to close)" autocomplete="off">
+      <div id="search-results" class="search-results"></div>
+    </div>
+  </div>
+
+  <main id="view" class="view" tabindex="-1"></main>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+</div>
+
+<script type="module" src="assets/js/app.js"></script>
+</body>
+</html>

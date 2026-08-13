@@ -1,0 +1,512 @@
+{
+  "id": "architecture-g-4",
+  "title": "Architecture & DI",
+  "track": "architecture",
+  "items": [
+    {
+      "id": "ar-0038",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "stateflow",
+        "livedata",
+        "compose-state",
+        "ui-layer"
+      ],
+      "q": "StateFlow, LiveData, and Compose State all deliver data to your UI. When do you use which?",
+      "shortAnswer": [
+        "`StateFlow` is the architecture default: a hot, stateful stream that always holds a value, so a re-collecting UI instantly sees the latest state — and `collectAsStateWithLifecycle` makes it lifecycle-aware.",
+        "`LiveData` exists to make observation lifecycle-aware for View-based code; on Compose it adds a heavier observer model with nothing `repeatOnLifecycle` plus `StateFlow` does not already give you.",
+        "Compose `State` is for state that lives inside a composable — a text field, a toggle, an animation — and it should never cross a layer boundary as the transport between ViewModel and view."
+      ],
+      "answer": "#### The three roles\n- **Compose `State`** — `remember { mutableStateOf(...) }` lives inside the composition: the scope is a slot, an element, a node. Perfect for text input, toggles, and animation values. It is not a stream — no subscribers, just snapshot reads — and it should never be the transport between layers.\n- **`StateFlow`** — a hot, stateful flow that always holds a value. This is the architecture workhorse: a ViewModel exposes `StateFlow<UiState>`, and a data layer returns `Flow`s that callers turn into `StateFlow` via `stateIn`. Re-collection after rotation replays the latest state instantly. `collectAsStateWithLifecycle()` bridges it into Compose and stops collection below `STARTED`.\n- **`LiveData`** — a lifecycle-aware observer pattern built for View. Its one genuine feature, starting and stopping observation with the lifecycle, is now a `repeatOnLifecycle` block around a `StateFlow`. For new Compose code it is a legacy dependency: a heavier observer model, no coroutine operators, the same value semantics.\n\n#### The rule of thumb\nCompose `State` for in-composition UI state; `StateFlow` for anything crossing a layer boundary or owned by a state holder; `LiveData` only where View interop or an existing codebase demands it. In a greenfield Compose app, `StateFlow` plus `collectAsStateWithLifecycle` is the whole story.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Compose State in the composition, StateFlow across the boundary",
+          "src": "@HiltViewModel\nclass SearchViewModel @Inject constructor(\n    private val repo: SearchRepository,\n) : ViewModel() {\n    private val _state = MutableStateFlow(SearchUiState())\n    val state: StateFlow<SearchUiState> = _state.asStateFlow()\n\n    init {\n        viewModelScope.launch {\n            repo.observeResults().collect { results ->\n                _state.update { it.copy(results = results) }\n            }\n        }\n    }\n\n    fun onQueryChanged(query: String) {\n        _state.update { it.copy(query = query) }\n    }\n}\n\n@Composable\nfun SearchScreen(viewModel: SearchViewModel) {\n    val state by viewModel.state.collectAsStateWithLifecycle()\n\n    var filtersExpanded by remember { mutableStateOf(false) }   // Compose State\n\n    TextField(value = state.query, onValueChange = viewModel::onQueryChanged)\n    FilterBar(expanded = filtersExpanded, onToggle = { filtersExpanded = !filtersExpanded })\n}"
+        }
+      ],
+      "followUps": [
+        "Why is `StateFlow` described as hot, and what does that mean for a value emitted before a collector arrives?",
+        "What does `collectAsStateWithLifecycle` do that a plain `collectAsState()` does not?",
+        "When would `LiveData` still be the right call in a new codebase?"
+      ],
+      "traps": [
+        "Treating the three as interchangeable — the question is about roles: in-composition state, layer transport, and lifecycle-aware legacy observation.",
+        "Exposing a `MutableStateFlow` publicly instead of `.asStateFlow()` and calling that state management.",
+        "Not being able to say why `LiveData` was invented — lifecycle-aware observation — before dismissing it."
+      ],
+      "refs": [
+        {
+          "title": "StateFlow and SharedFlow",
+          "url": "https://developer.android.com/kotlin/flow/stateflow-and-sharedflow",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "State and Jetpack Compose",
+          "url": "https://developer.android.com/develop/ui/compose/state",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0039",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "retry",
+        "backoff",
+        "interceptor",
+        "data-layer"
+      ],
+      "q": "Where does retry logic live — an OkHttp interceptor, the repository, or the use case? And where does the backoff policy belong?",
+      "shortAnswer": [
+        "Classify the failure first: a transient transport error (connection reset, 503, timeout) and a durable operation that never durably landed (ambiguous timeout, process death) need different owners.",
+        "An OkHttp interceptor owns transport retries with a bounded attempt count, exponential backoff plus jitter, and `Retry-After` — but it can only retry calls that are safe by construction or carry an idempotency key.",
+        "Durable operations belong to the repository plus WorkManager with exponential backoff, because an operation that must eventually succeed cannot depend on an in-memory loop that dies with the process."
+      ],
+      "answer": "#### Sort the failure first\nA retry policy is only correct once you classify the failure. A transient transport error — connection reset, 503, timeout — is different from a durable operation that never landed: an ambiguous timeout, or process death mid-flight. Mixing the two is where duplicate payments and infinite retry loops come from.\n\n#### Transport retries: the interceptor\nRetrofit and OkHttp retry in the stack, not in your code. One interceptor applies a bounded attempt count, exponential backoff with **jitter**, and honors `Retry-After`. It sees every call, so the policy is uniform. The constraint: an interceptor cannot know whether a request is idempotent, so it only retries safe-by-construction calls or requests carrying an idempotency key.\n\n#### Durable retries: repository plus WorkManager\nIf an operation must eventually succeed and survive process death, an in-memory loop is not enough. The repository writes to the outbox and enqueues unique WorkManager work with `BackoffPolicy.EXPONENTIAL` and a 30-second `setBackoffCriteria`; WorkManager owns the schedule across process death and reboots.\n\n#### Orchestration retries\nSequencing retries between steps — do A, then retry B — belongs in the use case, but only for in-process coordination, never as the durability mechanism.\n\n#### Rules to state\nNever retry a non-idempotent write at the transport layer. Bound retries with a budget — a 401 retried forever wastes battery and hides auth bugs. And keep backoff near its retry: interceptor for transport, WorkManager for durable, jitter everywhere so a herd does not re-synchronize.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Transport retries in the interceptor; durable retries in WorkManager",
+          "src": "class RetryInterceptor(\n    private val maxAttempts: Int = 3,\n    private val baseDelayMillis: Long = 500,\n) : Interceptor {\n    private val idempotent = setOf(\"GET\", \"HEAD\", \"PUT\", \"DELETE\")\n\n    override fun intercept(chain: Interceptor.Chain): Response {\n        val request = chain.request()\n        var attempt = 0\n        while (true) {\n            val response = chain.proceed(request)\n            val retryable = response.code() in setOf(429, 503) &&\n                request.method in idempotent\n            if (attempt >= maxAttempts - 1 || !retryable) return response\n\n            response.close()\n            attempt++\n            val delay = baseDelayMillis * (1L shl (attempt - 1)) +\n                Random.nextLong(0, baseDelayMillis)   // jitter\n            Thread.sleep(delay)\n        }\n    }\n}\n\n// Durable: WorkManager owns the schedule across process death\nval outboxWork = OneTimeWorkRequestBuilder<OutboxWorker>()\n    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)\n    .build()"
+        }
+      ],
+      "followUps": [
+        "How do you make a retried POST safe at the transport layer without breaking semantics?",
+        "Why does the WorkManager backoff belong in the data layer and not in the ViewModel?",
+        "What happens to the retry schedule when the user backgrounds the app — who keeps it alive?"
+      ],
+      "traps": [
+        "Putting retry loops in the ViewModel — retries there die with the screen and fight the lifecycle.",
+        "Retrying a POST in the interceptor without an idempotency key — that is how duplicates ship.",
+        "Unbounded retries with no attempt budget and no jitter."
+      ],
+      "refs": [
+        {
+          "title": "OkHttp — Interceptors",
+          "url": "https://github.com/lysine-dev/okhttp/blob/main/docs/features/interceptors.md",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "WorkManager basics",
+          "url": "https://developer.android.com/topic/libraries/architecture/workmanager",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0040",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "remember-saveable",
+        "savedstatehandle",
+        "process-death",
+        "state-restoration"
+      ],
+      "q": "A user is halfway through a form when the process dies. What state comes back, where was it saved, and how do you choose between `rememberSaveable` and `SavedStateHandle`?",
+      "shortAnswer": [
+        "Both `rememberSaveable` and `SavedStateHandle` serialize into the same saved-instance-state Bundle and survive both configuration change and process death — the difference is ownership, not capability.",
+        "Purely visual state — scroll position, an expanded toggle, transient field text — belongs in `rememberSaveable`, which restores into the composition with no ViewModel involvement and needs a custom `Saver` for non-Bundle types.",
+        "State the ViewModel must reconstruct at `init` — a draft id, the selected item — belongs in `SavedStateHandle`, because the handle is built from the Bundle before the constructor runs and is readable via `getStateFlow`."
+      ],
+      "answer": "#### What actually survives\nProcess death serializes the saved-instance-state Bundle, not your objects. Both `rememberSaveable` and `SavedStateHandle` persist into that same Bundle, so the real question is **ownership and reach**, not capability. Both share the roughly 1MB transaction cap — neither is a cache.\n\n#### `rememberSaveable` — composition-owned\n`rememberSaveable { mutableStateOf(\"\") }` restores into the composition with no ViewModel involved. A custom `Saver` — or `listSaver`/`mapSaver` — serializes things like a `LazyListState` or a data class into Bundle-able primitives. It dies with the composition: pop the back stack and it is gone, and the ViewModel cannot read it.\n\n#### `SavedStateHandle` — ViewModel-owned\nThe handle is constructed from the Bundle **before** `init` runs, so the ViewModel can read a saved id and start loading immediately. `getStateFlow(\"draft\", null)` exposes restored state as a `Flow` the UI collects, which lets the ViewModel and screen share one value.\n\n#### The decision\nOnly the screen needs it → `rememberSaveable`. The ViewModel must react at construction, or another screen must see it → `SavedStateHandle`. Large or derived data → neither: persist it in Room or DataStore and save only the key.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Composition-owned restore vs ViewModel-owned restore",
+          "src": "// Composition-owned: restores into the screen, the ViewModel never sees it\n@Composable\nfun DraftEditor() {\n    var body by rememberSaveable { mutableStateOf(\"\") }\n    val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }\n}\n\n// ViewModel-owned: restored before init, visible to init and to the UI\nclass DraftViewModel(private val savedStateHandle: SavedStateHandle) : ViewModel() {\n    private val draftId: String = checkNotNull(savedStateHandle[\"draftId\"])\n\n    val draft: StateFlow<Draft?> = savedStateHandle.getStateFlow(\"draft\", null)\n\n    init {\n        viewModelScope.launch {\n            repo.observeDraft(draftId).collect { latest ->\n                savedStateHandle[\"draft\"] = latest\n            }\n        }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What can `rememberSaveable` not save, and what exactly does a custom `Saver` add?",
+        "Why does the same Bundle back both — and what breaks if you try to save a ViewModel or a lambda?",
+        "Where does draft persistence belong when the draft must outlive the process's saved Bundle?"
+      ],
+      "traps": [
+        "Saving the whole draft — the Bundle is a 1MB transaction, not a database; save the key and re-hydrate.",
+        "Choosing `SavedStateHandle` for a toggle only the screen reads — that state does not need the ViewModel.",
+        "Claiming `rememberSaveable` does not survive process death — it does; it just cannot be reached by the ViewModel."
+      ],
+      "refs": [
+        {
+          "title": "Saved state module for ViewModel",
+          "url": "https://developer.android.com/topic/libraries/architecture/viewmodel/viewmodel-savedstate",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Saving UI state in Jetpack Compose",
+          "url": "https://developer.android.com/develop/ui/compose/state-saving",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0041",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "configuration-change",
+        "window-size",
+        "state-owner",
+        "rotation"
+      ],
+      "q": "How do configuration changes — rotation, window resize, multi-window — fit into your state architecture? What should recompute, and what should survive?",
+      "shortAnswer": [
+        "A configuration change recreates the Activity and its composition, but the process and its ViewModels stay alive — so ViewModel data survives untouched, `rememberSaveable` is re-inflated, and only plain `remember` and in-memory caches are lost.",
+        "Layout state that depends on the new configuration — two panes versus one, the window size class — must be recomputed after the change, so it belongs in the composition via `currentWindowAdaptiveInfo` and `derivedStateOf`, not in the ViewModel.",
+        "The architecture rule: keep the ViewModel configuration-independent — domain data, filters, ids — and the smell to name is a re-fetch on every rotation, which means data and layout are fused."
+      ],
+      "answer": "#### What configuration change is and isn't\nRotation, font scale, night mode, and multi-window resize recreate the Activity and its composition, but the process and its ViewModels stay alive. ViewModel state — fetched data, filters, the current item id — survives untouched; `rememberSaveable` is re-inflated from the Bundle; only plain `remember` and in-memory caches are lost. Most 'rotation bugs' are state that lives in the wrong owner, not data that vanished.\n\n#### Where layout state belongs\nA new configuration implies new layout decisions: two panes at `WindowWidthSizeClass.Expanded`, one below, a reflowed grid. That is composition-side state, computed *after* the change from the current window via `currentWindowAdaptiveInfo()` and `derivedStateOf`. Caching it in the ViewModel means invalidating configuration-derived state on every resize — the ViewModel should not know about panes.\n\n#### The architecture rule\nKeep the ViewModel configuration-independent: domain data, filters, ids. Keep configuration-derived state — layout, pane selection, window size class — in the composition. And test it: rotate and resize in tests; recomposition should be cheap and the data should not reload.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Configuration-derived layout state in the composition, data in the ViewModel",
+          "src": "import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo\nimport androidx.compose.material3.windowsizeclass.WindowWidthSizeClass\n\n@Composable\nfun BrowseScreen(viewModel: BrowseViewModel) {\n    // Recomputed after every config change, inside the composition\n    val windowSizeClass = currentWindowAdaptiveInfo().windowSizeClass\n    val isTwoPane = windowSizeClass.windowWidthSizeClass >= WindowWidthSizeClass.Expanded\n\n    // ViewModel state is configuration-independent: survives rotation untouched\n    val state by viewModel.state.collectAsStateWithLifecycle()\n\n    if (isTwoPane) {\n        MasterDetailPane(state, onSelect = viewModel::select)\n    } else {\n        SinglePane(state, onSelect = viewModel::select)\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What still needs `rememberSaveable` when the ViewModel already survives the config change?",
+        "How do you test a screen under rotation, and under a multi-window resize?",
+        "Where do pane selection and navigation state go when the process dies mid-session?"
+      ],
+      "traps": [
+        "Re-fetching data on every rotation because 'the activity was recreated' — the ViewModel is the cure, and naming that is the point.",
+        "Putting window-size-derived layout state in the ViewModel and invalidating it on every resize.",
+        "Treating configuration change like process death — they share a Bundle path but have opposite state survival."
+      ],
+      "refs": [
+        {
+          "title": "Adaptive layouts in Compose",
+          "url": "https://developer.android.com/develop/ui/compose/adaptive",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Saving UI state in Jetpack Compose",
+          "url": "https://developer.android.com/develop/ui/compose/state-saving",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0042",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "state-hoisting",
+        "reusable-components",
+        "state-holder",
+        "compose"
+      ],
+      "q": "When you extract a reusable composable, who owns its state — the component or its caller? Walk me through the hoisting contract.",
+      "shortAnswer": [
+        "The default is stateless with hoisted state: a reusable component receives `state` and `onEvent` callbacks from its caller, so it stays reusable, previewable, and testable with any input.",
+        "A component may own purely presentational, self-contained, ephemeral state — an expand toggle, drag progress — held by `rememberSaveable` or a plain state holder, but only while no outside consumer needs to control it.",
+        "Never give a shared component its own `hiltViewModel()` for screen data — it wires the component to the wrong lifecycle, breaks preview and tests, and two instances of the component fight over one ViewModel."
+      ],
+      "answer": "#### The contract\nA reusable composable is a function: inputs in, UI out. The moment it owns app data it stops being reusable — its lifecycle, source, and semantics are baked in. So the default is **stateless with hoisted state**: the component takes `state` and `onEvent` callbacks, and the caller — a screen or a state holder — supplies them. That buys testability (drive it with any state) and composition (wrap it, transform its state) at the cost of a few extra parameters.\n\n#### When a component may own state\nPurely presentational, self-contained, ephemeral state — an expand/collapse toggle, drag progress — can stay internal, held by `rememberSaveable` or a plain state holder, because nothing outside it needs that state. The test: would another consumer ever want to control it? If yes, hoist it.\n\n#### The ViewModel trap\nA shared card that calls `hiltViewModel()` couples the component to one scope and one repository. Two cards of the same type fight over a single ViewModel instance, and the component becomes unusable in preview, in tests, or inside another screen's scope. The caller owns the ViewModel; the component receives already-fetched data.\n\n#### The rule\nScreens and feature state holders own state; reusable components render it. When a component accretes a ViewModel, that is the signal it should be a screen.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Stateless reusable card, internal presentational state, screen-owned ViewModel",
+          "src": "// Stateless + hoisted: reusable everywhere, previewable, testable\n@Composable\nfun ItemCard(item: Item, isSelected: Boolean, onSelect: (String) -> Unit) {\n    Card(onClick = { onSelect(item.id) }) {\n        Text(item.title)\n        if (isSelected) SelectedBadge()\n    }\n}\n\n// Presentational state stays internal — nothing outside needs it\n@Composable\nfun ExpandablePanel(title: String, content: @Composable () -> Unit) {\n    var expanded by rememberSaveable { mutableStateOf(false) }\n    Header(title, onToggle = { expanded = !expanded })\n    AnimatedVisibility(visible = expanded) { content() }\n}\n\n// The screen owns the ViewModel; the component is fed state\n@Composable\nfun BrowseScreen(viewModel: BrowseViewModel = hiltViewModel()) {\n    val state by viewModel.state.collectAsStateWithLifecycle()\n    LazyColumn {\n        items(state.items, key = Item::id) { item ->\n            ItemCard(\n                item = item,\n                isSelected = item.id == state.selectedId,\n                onSelect = viewModel::select,\n            )\n        }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What is the exception — a case where a shared component should legitimately own a ViewModel?",
+        "How does hoisting interact with a plain state holder class instead of raw booleans?",
+        "What actually breaks when two instances of the same component each call `hiltViewModel()`?"
+      ],
+      "traps": [
+        "Giving every extracted component its own `hiltViewModel()` — the single most common reusable-component smell.",
+        "Hoisting everything blindly; purely presentational state with no second consumer is ceremony.",
+        "Not naming the test — 'would another consumer ever control this state?' — that is the whole decision."
+      ],
+      "refs": [
+        {
+          "title": "State hoisting — Jetpack Compose",
+          "url": "https://developer.android.com/develop/ui/compose/state-hoisting",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "UI state holders — Android architecture guide",
+          "url": "https://developer.android.com/topic/architecture/ui-layer/stateholders",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0043",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "cold-flow",
+        "hot-flow",
+        "repository",
+        "flow-contract"
+      ],
+      "q": "When should a repository expose a cold `Flow` and when a hot `SharedFlow` or `StateFlow`? What breaks if you pick wrong?",
+      "shortAnswer": [
+        "Cold is the read default: the producer runs once per collector, so two screens get independent, always-fresh observations of the database — a late collector sees the current state.",
+        "Go hot only on a real sharing signal — an expensive or single source (one socket), a value every collector must see identically (an is-online flag), or a derivation you want computed once.",
+        "The failure modes are symmetric: `stateIn` over a one-shot fetch caches stale data forever, and a hot `SharedFlow` where callers need a fresh database read drops exactly the events they wanted."
+      ],
+      "answer": "#### The default is cold\n`fun observeFeed(): Flow<List<FeedItem>> = dao.observeAll()` is cold: the producer runs once per collector, on that collector's context, and ends when collection ends. That is correct for reads — two screens get independent, always-fresh observations of the database, and a late collector sees the current state. Cold is the default because a Room query is cheap to re-run per collector.\n\n#### When hot is the contract\nThree signals point to hot. **Expensive or single source**: one network socket, one websocket stream — `shareIn(replay = 1)` so a second collector does not open a second connection. **Same value for everyone**: an `isOnline` flag or a session — `stateIn` gives every collector the identical current value. **Derived once**: a computation you want performed a single time and consumed everywhere.\n\n#### The mistakes\n- `stateIn` over a one-shot fetch: the producer runs on first collection and the cached value serves stale data forever — a cache wearing a flow costume.\n- A hot `SharedFlow` where callers need a fresh database read: late collectors miss events or read stale values.\n- `collect`-ing a cold flow inside the repository — you have serialized every collector's work.\n\n#### The rule\nExpose cold by default; convert to hot at the layer that knows the sharing requirement, with an explicit replay count and `SharingStarted`, and say who shares and why.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Cold read default; hot when sharing is the actual requirement",
+          "src": "class FeedRepository(\n    private val dao: FeedDao,\n    private val api: FeedApi,\n    private val scope: CoroutineScope,\n) {\n    // Cold: fresh query per collector — the read default\n    fun observeLocal(): Flow<List<FeedItem>> = dao.observeAll()\n\n    // Hot: one in-flight fetch shared by every collector\n    fun observeShared(): Flow<List<FeedItem>> = flow {\n        emit(api.fetch())   // runs once for all collectors\n    }.shareIn(scope, SharingStarted.WhileSubscribed(5000), replay = 1)\n\n    // Hot + value: identical current state for everyone\n    val connection: StateFlow<ConnectionState> = api.observeSocket()\n        .map(ConnectionState::of)\n        .stateIn(scope, SharingStarted.WhileSubscribed(5000), ConnectionState.Disconnected)\n}"
+        }
+      ],
+      "followUps": [
+        "What does `SharingStarted.WhileSubscribed(5000)` actually buy you, and when would `Eagerly` be right?",
+        "How do you avoid a duplicate network fetch when three screens observe a hot flow?",
+        "Why is a cold Room query still the right source of truth even when many screens read it?"
+      ],
+      "traps": [
+        "Answering 'hot is better' — hot flows are the exception chosen for a sharing requirement, not the default.",
+        "Using `stateIn` over a one-shot `flow { emit(fetch()) }` and calling that caching.",
+        "Not naming the sharing signal — expensive source, same-value semantics, or derived-once."
+      ],
+      "refs": [
+        {
+          "title": "StateFlow and SharedFlow",
+          "url": "https://developer.android.com/kotlin/flow/stateflow-and-sharedflow",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Kotlin docs — Asynchronous Flow",
+          "url": "https://kotlinlang.org/docs/flow.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0044",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "combine",
+        "flatmaplatest",
+        "derived-state",
+        "flow-composition"
+      ],
+      "q": "You need state derived from two or more observable sources. When do you `combine` them, and when do you `flatMapLatest` into a new stream?",
+      "shortAnswer": [
+        "`combine` merges parallel, independently-changing sources into one derived value, recomputing on any emission — the tool for inputs that are peers and must both stay live.",
+        "`flatMapLatest` switches: when the outer source emits, it cancels the previous inner stream and subscribes to a fresh one — the tool when the outer value selects which stream to watch.",
+        "The failure modes are symmetric: `combine` where a switch is needed recomputes against a stale inner stream, and `flatMapLatest` where inputs must coexist cancels the branch you still needed."
+      ],
+      "answer": "#### `combine` — parallel sources\n`combine(a, b) { av, bv -> ... }` merges independent, concurrently-changing sources into one derived value, recomputing on any emission. Right when inputs are peers that must both stay live: a filter set and a feed, an entitlement flag and a subscription. Wrong when one value merely *selects* which stream to watch — you would recompute against a stream that no longer applies.\n\n#### `flatMapLatest` — switch on a key\n`key.flatMapLatest { watch(it) }` reacts to an outer emission by cancelling the previous inner stream and subscribing to a fresh one. Right when the outer value is a selector: a selected chat id and its messages, a search query and its results. Cancellation is the point — the stale stream dies instead of leaking.\n\n#### Choosing\nAsk what the outer emission means. It *replaces* the domain of the inner stream → `flatMapLatest`. It only *adds an input* that the inner stream keeps combining with → `combine`. Classic failures: `flatMapLatest` for two independent filters (one keystroke cancels the other's recompute) and `combine` for a selected-id switch (every id change recomputes against every prior result).\n\n#### Emission latency\n`combine` waits until every source has emitted at least once before the first result; `flatMapLatest` re-emits the inner stream's first value immediately. State the latency you accept.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "combine for peer inputs, flatMapLatest for a key that selects a stream",
+          "src": "// combine: two independent inputs, one derived value — both stay live\nval visibleFeed: Flow<List<FeedItem>> = combine(\n    repository.observeFeed(),\n    filters.chips(),\n) { feed, chips ->\n    feed.filter { item -> chips.all { it.accepts(item) } }\n}\n\n// flatMapLatest: the outer value selects which stream to watch\nval messages: Flow<List<Message>> = selectedChatId.flatMapLatest { id ->\n    repository.observeMessages(id)   // previous subscription is cancelled\n}\n\n// Wrong direction 1: flatMapLatest for independent filters — one keystroke\n// cancels the other input's recompute.\n// Wrong direction 2: combine for a selected-id switch — every id change\n// recomputes against results from every prior stream."
+        }
+      ],
+      "followUps": [
+        "What happens to emissions in the gap while `flatMapLatest` cancels and resubscribes?",
+        "When would you prefer `flatMapLatest` over `mapLatest`, and what do they share?",
+        "How do you guard against `combine` computing over stale state after one source completes?"
+      ],
+      "traps": [
+        "Reaching for `combine` for everything — the answer must distinguish 'adds an input' from 'selects a stream'.",
+        "Using `flatMapLatest` where both sources must stay live — it cancels the branch you still needed.",
+        "Not mentioning cancellation, which is the entire reason `flatMapLatest` exists."
+      ],
+      "refs": [
+        {
+          "title": "kotlinx.coroutines — combine",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/combine.html",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "kotlinx.coroutines — flatMapLatest",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/flat-map-latest.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0045",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "unit-testing",
+        "fakes",
+        "viewmodel-testing",
+        "turbine"
+      ],
+      "q": "Walk me through a real unit test of a ViewModel and a repository. What do you fake, what do you run, and what makes the test worth trusting?",
+      "shortAnswer": [
+        "The unit test runs on the JVM, not the emulator: a ViewModel is constructed with a fake repository, `Dispatchers.setMain(StandardTestDispatcher)` replaces the main dispatcher, and assertions run on the exposed `StateFlow`.",
+        "Prefer hand-written fakes over mock recording — a fake reproduces behaviour, while `verify()` asserts a call sequence that breaks on legitimate refactors — and never mock types you do not own like Retrofit, Room, or OkHttp.",
+        "Repository tests run against an in-memory Room database plus a fake `Api`, so the real DAO queries and mapping execute and you test the policy: fetch, upsert, and the cache surviving a failed refresh."
+      ],
+      "answer": "#### The shape\nA ViewModel test constructs the ViewModel with fakes and asserts on the exposed `StateFlow`. The mechanics: a `MainDispatcherRule` calls `Dispatchers.setMain(StandardTestDispatcher)`, `runTest { }` gives you virtual time, and `advanceUntilIdle()` runs the deferred collection. Assert observable behaviour — `state.value.items` — not internal calls.\n\n#### Fakes over mocks\nPrefer hand-written fakes, which reproduce behaviour, to mock recording (`verify(repo).load()`), which asserts a call sequence that breaks when a legitimate refactor changes the calls. Fake the seams you own: repository interfaces, a `Clock`, injected dispatchers. Never mock types you do not own — Retrofit, Room, OkHttp get wrapped or faked.\n\n#### Repository tests\nRun against an **in-memory Room** database (`Room.inMemoryDatabaseBuilder`) plus a fake `Api`, so the real DAO queries and mapping execute. You test the policy: `refresh()` fetches then upserts, the `Flow` re-emits the new rows, and a failed fetch leaves the cache intact.\n\n#### What to fake, concretely\nThe `Api` returns canned DTOs or throws; the `Clock` returns a fixed `Instant`; dispatchers are injected. The invariant: every test drives observable behaviour through the public API — state or flow emissions — and never touches private fields.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A ViewModel unit test on the JVM, driven by fakes",
+          "src": "@OptIn(ExperimentalCoroutinesApi::class)\nclass FeedViewModelTest {\n\n    @get:Rule\n    val mainDispatcherRule = MainDispatcherRule()\n\n    @Test\n    fun `load emits items from the fake repository`() = runTest {\n        val repo = FakeFeedRepository(items = listOf(sampleItem()))\n        val viewModel = FeedViewModel(repo)\n\n        advanceUntilIdle()\n\n        assertEquals(listOf(sampleItem()), viewModel.state.value.items)\n        assertFalse(viewModel.state.value.isRefreshing)\n    }\n\n    @Test\n    fun `failed refresh keeps cached content and surfaces an error`() = runTest {\n        val repo = FakeFeedRepository(items = listOf(sampleItem()), failRefresh = true)\n        val viewModel = FeedViewModel(repo)\n\n        advanceUntilIdle()\n        viewModel.refresh()\n        advanceUntilIdle()\n\n        assertEquals(listOf(sampleItem()), viewModel.state.value.items)\n        assertNotNull(viewModel.state.value.error)\n    }\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "The test dispatcher rule and a fake repository",
+          "src": "class MainDispatcherRule(\n    private val dispatcher: TestDispatcher = StandardTestDispatcher(),\n) : TestWatcher() {\n    override fun starting(description: Description) {\n        Dispatchers.setMain(dispatcher)\n    }\n\n    override fun finished(description: Description) {\n        Dispatchers.resetMain()\n    }\n}\n\nclass FakeFeedRepository(\n    private val items: List<FeedItem>,\n    private val failRefresh: Boolean = false,\n) : FeedRepository {\n    private val _items = MutableStateFlow(items)\n\n    override fun observe(): Flow<List<FeedItem>> = _items\n\n    override suspend fun refresh() {\n        if (failRefresh) throw IOException(\"offline\")\n        _items.value = items   // a successful refresh keeps the seeded data\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Why is `StandardTestDispatcher` (not `runBlocking`) the right base for these tests?",
+        "When is a fake DAO better than in-memory Room, and when does in-memory Room win?",
+        "What breaks when a test asserts on internal calls instead of observable state?"
+      ],
+      "traps": [
+        "Mocking every dependency — the test then re-implements the production wiring and breaks on every refactor.",
+        "Testing a ViewModel against the real `Dispatchers.IO` — flaky, slow, and it hides thread-safety bugs.",
+        "Asserting on an internal method instead of the `StateFlow` the UI actually reads."
+      ],
+      "refs": [
+        {
+          "title": "Local tests",
+          "url": "https://developer.android.com/training/testing/local-tests",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Testing Kotlin coroutines on Android",
+          "url": "https://developer.android.com/kotlin/coroutines/test",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0046",
+      "track": "architecture",
+      "topic": "Offline-first",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "single-source-of-truth",
+        "invalidation",
+        "datastore",
+        "multi-source"
+      ],
+      "q": "Your app has Room, DataStore, an on-disk media cache, and an in-memory cache. Which one is the single source of truth — and how do you stop four stores from drifting apart?",
+      "shortAnswer": [
+        "Single source of truth is per-aggregate, not per-app: each dataset gets one authoritative store, and every other copy of that data is a cache or projection that is only ever written by reading the authority.",
+        "Room is the authority for structured app data, DataStore for preferences and small serialized values, the media cache for blobs, and memory for hot reads — the moment two stores are synced by hand, drift becomes inevitable.",
+        "Invalidation cascades from the authority: Room's `Flow` re-emits on write, a per-dataset version key lets dependent caches refetch, and an HTTP cache revalidates with `ETag` — never trust a TTL for data the user mutates locally."
+      ],
+      "answer": "#### One authority per aggregate\nSingle source of truth is not one database for everything — it is **one authoritative store per aggregate**, and every other copy is a cache or projection. The rule that prevents drift: a derived store is only ever written by reading the authority. Room owns entities, DataStore owns preferences and small serialized values, the media cache owns blobs, and memory owns hot reads. The instant two stores are 'kept in sync by hand', one has stopped being derived and drift becomes inevitable.\n\n#### The invalidation cascade\nThe authority emits changes and caches follow. Room's `Flow` re-emits on write — the invalidation signal, for free. A per-dataset version key (`version.bump()` in the same transaction) lets dependent caches — an image keyed to an entity's `avatarVersion` — know to refetch. An HTTP cache revalidates with `ETag`, a 304 nearly free, but a TTL is never trustworthy for data the user mutates locally.\n\n#### Reads and writes\nReads: the UI observes the authority, and a network refresh is a *write into* Room. Writes: local-first into the outbox with a client id, drained with an idempotency key; the user-visible update is the Room write, not a direct memory mutation.\n\n#### The smell\nWhen a class exists in three stores and code copies between them on every change, the stores have drifted from 'authority plus projection' into peer replicas. Pick one authority and make the rest read-only projections.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Room is the authority; caches follow it, never the other way",
+          "src": "@Entity\ndata class ProfileEntity(\n    @PrimaryKey val userId: String,\n    val displayName: String,\n    val avatarVersion: Int,\n)\n\n@Dao\ninterface ProfileDao {\n    @Query(\"SELECT * FROM profile WHERE userId = :id\")\n    fun observe(userId: String): Flow<ProfileEntity?>\n\n    @Insert(onConflict = OnConflictStrategy.REPLACE)\n    suspend fun upsert(profile: ProfileEntity)\n}\n\nclass ProfileRepository(\n    private val dao: ProfileDao,\n    private val prefs: DataStore<Preferences>,\n    private val imageCache: ImageCache,\n) {\n    // Reads always observe the authority\n    fun observe(userId: String): Flow<Profile> =\n        dao.observe(userId).map { it?.toDomain() }\n\n    suspend fun save(profile: Profile) = withContext(io) {\n        dao.upsert(profile.toEntity())\n        imageCache.evict(profile.userId)   // caches follow the authority\n    }\n\n    val darkMode: Flow<Boolean> =\n        prefs.data.map { it[KEY_DARK_MODE] ?: false }   // DataStore is its own authority\n}"
+        }
+      ],
+      "followUps": [
+        "When is DataStore the authority and Room the projection, and how do you decide?",
+        "How does an image cache stay consistent when an entity is renamed or its avatar changes?",
+        "What breaks first when two stores are both written by hand?"
+      ],
+      "traps": [
+        "Claiming 'the database is the SSOT' without noting it is per-aggregate — prefs and media have their own authorities.",
+        "Hand-syncing two stores and calling the copies consistent — derivation is the mechanism, not diligence.",
+        "Using a TTL for data the user can mutate locally, so a stale write-through outlives the edit."
+      ],
+      "refs": [
+        {
+          "title": "Build an offline-first app",
+          "url": "https://developer.android.com/topic/architecture/data-layer/offline-first",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Data layer — Android architecture guide",
+          "url": "https://developer.android.com/topic/architecture/data-layer",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0047",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "team-size",
+        "ceremony",
+        "coordination-cost",
+        "right-sizing"
+      ],
+      "q": "You're the only Android engineer at a startup, and a year later you're one of fifty on a platform team. How do your architectural choices change — and when does ceremony start paying for itself?",
+      "shortAnswer": [
+        "At one or two engineers the design lives in their heads: no review boards, layers as thin as the feature count demands, and a single module is defensible — but constructor injection, repositories, and tests on painful logic still pay.",
+        "At dozens, structure becomes a coordination technology: ownership, stable contracts between teams, review that protects the public surface, and written-down reasons replace 'ask the author'.",
+        "Add a layer of ceremony exactly when its absence costs — a second consumer of a shared rule, a second team editing one module — and any ceremony that cannot name the coordination problem it solves is decoration."
+      ],
+      "answer": "#### Solo or duo: the honest minimum\nTwo engineers can hold the whole design in their heads. Ceremony that exists to coordinate many people — architecture review boards, per-module ADRs, cross-team contracts — buys nothing, because the coordination problem does not exist yet. What still pays: constructor injection, repositories over the data layer, `StateFlow` state, and tests on the logic that hurts to fix. A single `:app` module is defensible; modularize when a second person starts editing a different screen in the same build file.\n\n#### At scale: structure is coordination\nWith dozens of engineers, decisions are made by many and remembered by none. The load-bearing machinery is ownership (CODEOWNERS), stable contracts between teams (api/impl, navigation contracts), review that protects the public surface, and written-down reasons (ADRs). Modules exist so one team's change stops invalidating another team's work. Architecture review is a budgeting decision, not a gate.\n\n#### The signal to add ceremony\nAdd a layer of ceremony exactly when its absence is costing: a second consumer of a shared rule, a second team editing one module, a revert caused by a public-API change nobody owned. Ceremony that cannot name the coordination problem it solves is decoration — and a review board that slows a solo engineer is overhead, not governance.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The same seam at two sizes: a package boundary now, a contract module later",
+          "src": "// Solo/duo: one :app module, but the seams that make modularization cheap later\n// — constructor injection and interfaces at the data boundary.\ninterface FeedRepository {\n    fun observe(): Flow<List<FeedItem>>\n}\n\nclass FeedViewModel(private val repo: FeedRepository) : ViewModel() {\n    val state: StateFlow<FeedUiState> = repo.observe()\n        .map { FeedUiState(items = it) }\n        .stateIn(viewModelScope, SharingStarted.Eagerly, FeedUiState())\n}\n\n// At scale, the same seams become modules plus ownership:\n//   :feature:search:public  — SearchEntryPoint contract other teams depend on\n//   :core:data:api           — FeedRepository interface; impl in :core:data:impl\n//   CODEOWNERS               — feature/search/ @search-team (ownership, not folders)"
+        }
+      ],
+      "followUps": [
+        "What ceremony would you cut first at a team of two, and what would you never cut?",
+        "How do you decide the exact point where a contract module starts to pay?",
+        "What is the cheapest way to start formalizing review before the team actually needs it?"
+      ],
+      "traps": [
+        "Prescribing the same architecture for both sizes — the question is about the switch point and its cost accounting.",
+        "Saying 'just add modules and review as you grow' — ceremony added before the coordination problem exists is decoration.",
+        "Cutting tests and DI for the solo engineer — those pay at size one, unlike modules and review boards."
+      ],
+      "refs": [
+        {
+          "title": "Guide to Android app modularization",
+          "url": "https://developer.android.com/topic/modularization",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Architecture recommendations",
+          "url": "https://developer.android.com/topic/architecture/recommendations",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    }
+  ]
+}

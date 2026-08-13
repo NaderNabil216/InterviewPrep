@@ -1,0 +1,154 @@
+{
+  "id": "compose-c",
+  "title": "Jetpack Compose",
+  "track": "compose",
+  "items": [
+    {
+      "id": "cmp-0009",
+      "track": "compose",
+      "topic": "Lists & performance",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "lazylist",
+        "performance",
+        "keys"
+      ],
+      "q": "How do you make a Compose lazy list fast? What do `key` and `contentType` actually do?",
+      "shortAnswer": [
+        "`key = { it.id }` gives items a stable identity. Without it, Compose falls back to index, so inserting or reordering re-composes everything below the change and breaks item animations and scroll position.",
+        "`contentType` lets Compose reuse a slot only for items of the same shape — the equivalent of RecyclerView view types. Heterogeneous lists without it thrash their reuse pool.",
+        "The other big ones: don't nest same-direction scrollables, give images fixed sizes to avoid reflow, and keep the item composable skippable."
+      ],
+      "answer": "#### key\nLazy layouts identify items positionally by default. Insert at the top and every index shifts, so Compose thinks every item changed: full recomposition of the visible window, lost scroll state, and animations that morph wrong rows. `items(posts, key = { it.id })` matches items across compositions, preserving `rememberSaveable` inside the item and animating correctly. Keys must be unique and stable — the index defeats the purpose and duplicates throw.\n\n#### contentType\nCompose keeps a reuse pool of item slots. Reusing a slot for a different structure forces a full subtree rebuild. `contentType = { it::class }` reuses slots only for compatible items — cheap reuse, a real win in a mixed feed.\n\n#### The rest of the checklist\n1. Keep the item composable skippable — one unstable parameter re-executes every visible row on any parent recomposition; check the compiler metrics report.\n2. Reserve image space up front; a size that resolves after load causes a reflow and visible jump.\n3. Don't nest same-direction scrolling — a `LazyColumn` inside a `verticalScroll` column throws; use the lazy list's own `item { }` blocks for headers.\n4. Avoid `SubcomposeLayout` (`BoxWithConstraints`) in items — it defers work into layout.\n5. Hoist expensive computation into `remember(input)` or the ViewModel.\n6. `animateItem()` for reorder/insert — it depends on keys being correct.\n\n#### Measuring\nLayout Inspector recomposition counts — a row counting up while scrolling idle is the smoking gun. Macrobenchmark `FrameTimingMetric` over a scripted fling for a CI regression number, on a release build with a Baseline Profile.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A lazy list with every performance lever applied",
+          "src": "@Composable\nfun Feed(state: FeedUiState, onClick: (String) -> Unit) {\n    LazyColumn(\n        contentPadding = PaddingValues(vertical = 12.dp),\n        verticalArrangement = Arrangement.spacedBy(8.dp),\n    ) {\n        item(key = \"header\", contentType = \"header\") { FeedHeader() }\n\n        items(\n            items = state.items,\n            key = { it.id },                 // stable identity\n            contentType = { it.kind },       // slot reuse by shape\n        ) { post ->\n            PostRow(\n                post = post,\n                onClick = onClick,           // auto-memoized under strong skipping\n                modifier = Modifier.animateItem(),\n            )\n        }\n\n        if (state.isLoadingMore) {\n            item(key = \"loading\", contentType = \"loading\") { LoadingRow() }\n        }\n    }\n}\n\n@Composable\nprivate fun PostRow(post: Post, onClick: (String) -> Unit, modifier: Modifier = Modifier) {\n    Row(modifier.clickable { onClick(post.id) }) {\n        AsyncImage(\n            model = post.thumbnailUrl,\n            contentDescription = null,\n            modifier = Modifier.size(64.dp),   // fixed size — no reflow when it loads\n        )\n        Text(post.title)\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What exactly breaks if two items share the same key?",
+        "Why does a LazyColumn inside a vertically-scrolling Column throw?",
+        "How would you prove a list change actually improved frame timing?"
+      ],
+      "traps": [
+        "Omitting `key`. It's the single most common Compose list performance bug, and it also silently breaks item animations and per-item state.",
+        "Using the list index as the key — that's identical to the default and fixes nothing."
+      ],
+      "refs": [
+        {
+          "title": "Lists and grids in Compose",
+          "url": "https://developer.android.com/develop/ui/compose/lists",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Compose performance best practices",
+          "url": "https://developer.android.com/develop/ui/compose/performance/bestpractices",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.5",
+      "updatedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0010",
+      "track": "compose",
+      "topic": "Animation",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "animation",
+        "performance"
+      ],
+      "q": "How do you choose between Compose's animation APIs?",
+      "shortAnswer": [
+        "Climb the ladder: `animate*AsState` for a single value → `updateTransition` for several values driven by one state → `Animatable` for imperative/gesture-driven control → `AnimatedVisibility`/`AnimatedContent` for enter/exit → `rememberInfiniteTransition` for loops.",
+        "Spring-based specs (`spring()`) feel better than fixed durations for anything interruptible, because they handle mid-flight target changes gracefully.",
+        "Performance rule: animate through `graphicsLayer`/lambda modifiers so the animation re-runs draw or layout, not composition."
+      ],
+      "answer": "#### The ladder\n1. **`animate*AsState`** — `animateDpAsState`, `animateColorAsState`, `animateFloatAsState`. One value, declarative, fire-and-forget. 90% of cases.\n2. **`updateTransition`** — several properties animating together off one state change (size + colour + alpha for selected/unselected); keeps them in sync and introspects well in the Animation Preview.\n3. **`Animatable`** — imperative, suspend-based, cancellable; for gesture-driven motion (swipe-to-dismiss, drag) where you must `snapTo`, `animateTo`, and interrupt.\n4. **`AnimatedVisibility`** — enter/exit transitions for appearing/disappearing content.\n5. **`AnimatedContent`** — cross-fade/slide between different content for different states, with `SizeTransform`.\n6. **`rememberInfiniteTransition`** — shimmer, pulsing indicators.\n7. **`Modifier.animateContentSize()`** — animate a layout size change automatically.\n8. **Shared element transitions** — hero images across destinations.\n\n#### Specs\n- **`spring()`** — physics-based, no duration, interruptible: a mid-flight target change retargets smoothly from current velocity via `dampingRatio`/`stiffness`. The right default for anything the user can interrupt.\n- **`tween(durationMillis, easing)`** — fixed duration, fine for deterministic non-interruptible transitions.\n- **`keyframes`** — precise multi-stage control.\n\nRespect the system 'remove animations' accessibility setting — `Settings.Global.ANIMATOR_DURATION_SCALE` — or use Material motion defaults that already do.\n\n#### The performance rule\nWhere you read the animated value decides whether you recompose every frame: `Modifier.offset(y = animatedDp)` recomposes; `Modifier.offset { IntOffset(0, animatedPx.roundToInt()) }` is layout-only; `Modifier.graphicsLayer { alpha = animatedAlpha }` is draw-only and cheapest. `alpha()`/`rotate()` already delegate to `graphicsLayer`, but the lambda form is what defers the *read*.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Declarative vs gesture-driven, with deferred reads",
+          "src": "// 1. Simple: one value, spring spec so it's interruptible\n@Composable\nfun ExpandableCard(expanded: Boolean) {\n    val elevation by animateDpAsState(\n        targetValue = if (expanded) 8.dp else 1.dp,\n        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),\n        label = \"elevation\",\n    )\n    Card(elevation = CardDefaults.cardElevation(elevation)) { /* … */ }\n}\n\n// 2. Several values from one state\n@Composable\nfun SelectableChip(selected: Boolean) {\n    val transition = updateTransition(selected, label = \"chip\")\n    val bg by transition.animateColor(label = \"bg\") { if (it) Primary else Surface }\n    val scale by transition.animateFloat(label = \"scale\") { if (it) 1.05f else 1f }\n\n    Box(\n        Modifier\n            .graphicsLayer { scaleX = scale; scaleY = scale }   // draw-phase read\n            .background(bg)\n    )\n}\n\n// 3. Gesture-driven: needs Animatable\n@Composable\nfun SwipeToDismiss(onDismiss: () -> Unit) {\n    val offsetX = remember { Animatable(0f) }\n    val scope = rememberCoroutineScope()\n\n    Box(\n        Modifier\n            .offset { IntOffset(offsetX.value.roundToInt(), 0) }   // layout-phase read\n            .pointerInput(Unit) {\n                detectHorizontalDragGestures(\n                    onHorizontalDrag = { _, delta ->\n                        scope.launch { offsetX.snapTo(offsetX.value + delta) }\n                    },\n                    onDragEnd = {\n                        scope.launch {\n                            if (abs(offsetX.value) > 300f) { offsetX.animateTo(1000f); onDismiss() }\n                            else offsetX.animateTo(0f)              // spring back\n                        }\n                    },\n                )\n            }\n    )\n}"
+        }
+      ],
+      "followUps": [
+        "Why is a spring spec better than a tween for interruptible animation?",
+        "When do you need `Animatable` rather than `animate*AsState`?",
+        "How do you keep a 120 Hz device smooth during animation?"
+      ],
+      "traps": [
+        "Animating via a modifier that reads the value at composition time, then wondering why the whole screen recomposes 120 times a second.",
+        "Ignoring the system's reduce-motion accessibility setting."
+      ],
+      "refs": [
+        {
+          "title": "Animations in Compose",
+          "url": "https://developer.android.com/develop/ui/compose/animation/introduction",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Choosing an animation API",
+          "url": "https://developer.android.com/develop/ui/compose/animation/choose-api",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.5",
+      "updatedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0011",
+      "track": "compose",
+      "topic": "Accessibility & interop",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "accessibility",
+        "semantics",
+        "interop",
+        "views"
+      ],
+      "q": "How do accessibility and View interop work in Compose?",
+      "shortAnswer": [
+        "Accessibility flows through the **semantics tree** — the same structure your UI tests query, which is why testable Compose and accessible Compose are largely the same work.",
+        "The essentials: `contentDescription` for meaningful images (`null` for decorative ones), `mergeDescendants` to make a row read as one unit, minimum 48dp touch targets, and never encoding meaning in colour alone.",
+        "Interop goes both ways: `AndroidView` embeds a View in Compose, `ComposeView` embeds Compose in a View hierarchy. Both work, both cost — nesting them deeply is a performance problem."
+      ],
+      "answer": "#### Accessibility via semantics\nEvery composable contributes to a semantics tree consumed by TalkBack, Switch Access, and your tests.\n\n- **`contentDescription`** on meaningful images and icon buttons; pass `null` for decorative ones so screen readers skip them.\n- **`Modifier.semantics(mergeDescendants = true)`** so a card reads as one announcement instead of fragments; `Row`/`Card` with `clickable` merges automatically.\n- **Touch targets ≥ 48dp** — `Modifier.minimumInteractiveComponentSize()` or generous padding.\n- **State description** — `stateDescription` for toggles, `Modifier.toggleable`/`selectable` over a bare `clickable`, so the control announces role and state.\n- **Headings** — `semantics { heading() }` lets users jump between sections.\n- **`clearAndSetSemantics`** to replace a subtree's semantics with one meaningful description.\n- **Contrast ≥ 4.5:1** for body text; never colour as the only signal — add an icon or label.\n- **Respect font scale** — `sp` for text, no fixed heights, test at 200%.\n\nTest with the Accessibility Scanner and TalkBack on; since tests share the semantics tree, your UI tests already exercise it.\n\n#### Interop\nViews inside Compose use `AndroidView(factory = { MapView(it) }, update = { view -> view.setZoom(zoom) })` — factory runs once, update on recomposition. Use it for MapView, WebView, AdView, ExoPlayer's `PlayerView`; forward lifecycle with `DisposableEffect` + a `LifecycleEventObserver`, and `onRelease` for teardown.\n\nCompose inside Views uses `ComposeView` + `setContent`, the way you migrate incrementally. Set `ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed` in a Fragment or you leak the composition.\n\n**The cost**: each boundary means two layout systems coordinating. One map is fine; a `LazyColumn` where every row is an `AndroidView` is a disaster. Migrate screen-by-screen.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Accessible custom control, and lifecycle-correct AndroidView",
+          "src": "@Composable\nfun FavoriteToggle(isFavorite: Boolean, onToggle: (Boolean) -> Unit) {\n    Icon(\n        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,\n        contentDescription = null,          // description lives on the toggleable wrapper\n        modifier = Modifier\n            .minimumInteractiveComponentSize()          // >= 48dp target\n            .toggleable(\n                value = isFavorite,\n                onValueChange = onToggle,\n                role = Role.Switch,                      // announces the control type\n            )\n            .semantics {\n                contentDescription = \"Favorite\"\n                stateDescription = if (isFavorite) \"On\" else \"Off\"\n            }\n    )\n}\n\n// A View that needs lifecycle forwarding\n@Composable\nfun Map(modifier: Modifier = Modifier) {\n    val lifecycleOwner = LocalLifecycleOwner.current\n    val mapView = remember { MapView(/* context */) }\n\n    DisposableEffect(lifecycleOwner) {\n        val observer = LifecycleEventObserver { _, event ->\n            when (event) {\n                Lifecycle.Event.ON_START -> mapView.onStart()\n                Lifecycle.Event.ON_STOP -> mapView.onStop()\n                else -> Unit\n            }\n        }\n        lifecycleOwner.lifecycle.addObserver(observer)\n        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }\n    }\n\n    AndroidView(factory = { mapView }, modifier = modifier, onRelease = { it.onDestroy() })\n}"
+        }
+      ],
+      "followUps": [
+        "Why does `contentDescription = null` exist rather than just omitting it?",
+        "What breaks at 200% font scale, and how do you catch it before users do?",
+        "How would you plan an incremental View → Compose migration for a large app?"
+      ],
+      "traps": [
+        "Putting an `AndroidView` inside every lazy list row. Two layout systems per row will destroy your frame times.",
+        "Forgetting `ViewCompositionStrategy` on a `ComposeView` in a Fragment, leaking the composition when the view is destroyed."
+      ],
+      "refs": [
+        {
+          "title": "Accessibility in Compose",
+          "url": "https://developer.android.com/develop/ui/compose/accessibility",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Compose and View interoperability",
+          "url": "https://developer.android.com/develop/ui/compose/migrate/interoperability-apis",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.5",
+      "updatedIn": "2026.08.10"
+    }
+  ]
+}

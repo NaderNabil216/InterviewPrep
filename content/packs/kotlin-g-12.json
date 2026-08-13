@@ -1,0 +1,77 @@
+{
+  "id": "kotlin-g-12",
+  "title": "Kotlin Language",
+  "track": "kotlin",
+  "items": [
+    {
+      "id": "kt-0069",
+      "track": "kotlin",
+      "topic": "Standard library",
+      "level": 3,
+      "type": "qa",
+      "tags": ["reflection", "kotlin-reflect", "R8"],
+      "q": "What does reflection cost in Kotlin on Android, and how do you avoid it?",
+      "shortAnswer": [
+        "`::class` (KClass) and `javaClass` are cheap wrappers, but `memberProperties`, `primaryConstructor`, `callBy` and annotation reads pull in the separate multi-megabyte `kotlin-reflect` artifact and run orders of magnitude slower than a direct call.",
+        "R8 renames or strips exactly what reflection looks up, so you need keep rules.",
+        "The Android answer is compile-time codegen — KSP (Moshi codegen, Room, Hilt, kotlinx.serialization) — plus sealed + `when` dispatch instead of type lookups, and `typeOf<T>()` when you only need a KType."
+      ],
+      "answer": "Reflection has two separate costs on Android, and they don't move together.\n\n#### The cheap end\n`x::class` (a `KClass`) and `x.javaClass` are thin wrappers over existing runtime type information — near-free, no `kotlin-reflect` needed. Asking for a class *reference* is cheap. The cost explodes when you ask for the *members*.\n\n#### The expensive end\n`memberProperties`, `primaryConstructor`, `callBy`, annotation reads, `isSubtypeOf`, and `KFunction.call` require the **`kotlin-reflect` artifact** — a separate multi-megabyte dependency — and they run **orders of magnitude slower** than a direct call. `constructor.callBy` on a hot path is a per-call price most apps can't pay. On Android specifically, the reflection machinery also needs to walk the class's metadata, which costs both time and dex bytes.\n\n#### The R8 conflict\nR8's whole job is renaming and removing things — exactly what reflection looks up by name. Reflective code therefore requires **keep rules** (`-keep class ... { *; }`), which in turn bloat the app and defeat shrinking. Every reflective call is a bet that your proguard config is correct.\n\n#### The avoidance playbook\n- **Compile-time codegen**: KSP generates the code — Moshi codegen (`moshi-kotlin-codegen`), Room, Hilt, the kotlinx.serialization plugin. No runtime reflection at all.\n- **Sealed + `when` dispatch** instead of type lookups: `when (x) { is A -> ... }` is an instanceof chain, not reflection.\n- **`typeOf<T>()`** when you only need a `KType` (e.g. for a serializer) — it reads the metadata without `kotlin-reflect`'s full machinery.\n- Reserve reflective frameworks for debugging/test-only paths where keep rules are already in place.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Cheap class refs vs expensive member reflection; the KSP alternative",
+          "src": "val k: KClass<*?> = obj::class     // cheap — no kotlin-reflect\nval j: Class<*> = obj.javaClass     // cheap\n\n// expensive — needs kotlin-reflect, keep rules for R8\nval props = obj::class.memberProperties\nval ctor = obj::class.primaryConstructor\nval v = ctor!!.callBy(mapOf(...))\n\n// the Android playbook\n@Serializable data class User(val id: String)   // KSP codegen — no reflection\nval user = json.decodeFromString<User>(jsonStr) // generated serializer\n\nval type: KType = typeOf<List<User>>()          // KType without kotlin-reflect\n\nfun dispatch(x: Any) = when (x) {              // instanceof, not reflection\n    is User -> x.id\n    else -> \"\"\n}"
+        }
+      ],
+      "followUps": [
+        "Which reflection calls require kotlin-reflect?",
+        "How does R8 interact with reflective code?",
+        "What does KSP codegen replace at runtime?"
+      ],
+      "traps": [
+        "Treating all reflection as equally cheap — `::class` is fine, `memberProperties` is the expensive one.",
+        "Forgetting keep rules when adding reflective code under R8."
+      ],
+      "refs": [
+        { "title": "Kotlin docs — Reflection", "url": "https://kotlinlang.org/docs/reflection.html", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0070",
+      "track": "kotlin",
+      "topic": "Multiplatform",
+      "level": 3,
+      "type": "qa",
+      "tags": ["KMP", "expect", "actual"],
+      "q": "What is the multiplatform-safe subset of Kotlin, and how do you keep `commonMain` honest?",
+      "shortAnswer": [
+        "No `java.*` at all — no `String.format`, SimpleDateFormat, Charset, ThreadLocal, `synchronized` or java.util collections; use kotlin.time/kotlinx-datetime, `@Volatile` and kotlin.concurrent.atomics, and kotlinx-io.",
+        "`expect`/`actual` covers functions, properties and classes, with `actual typealias` mapping an expect class onto a platform type.",
+        "JVM annotations are no-ops elsewhere, reflection is largely absent on Native/JS, so prefer an `interface` plus DI over `expect` for anything you want to fake in tests."
+      ],
+      "answer": "Multiplatform-safe Kotlin is the language minus the platform baggage.\n\n#### What you must avoid in `commonMain`\nAnything `java.*` — that's the whole list. Concretely: `String.format`, `SimpleDateFormat`, `java.util` collections and `Optional`, `Charset`, `ThreadLocal`, `synchronized` on arbitrary objects, `System.currentTimeMillis`. The stdlib replacements: kotlin.time, `kotlinx-datetime` (Instant/LocalDate/period parsing), `@Volatile`, `kotlin.concurrent.atomics`, `kotlinx-io` for streams/buffers, and `kotlin.time` for clocks.\n\n#### `expect`/`actual`\nDeclare the shape in `commonMain`, provide the per-platform implementation in `androidMain`/`nativeMain`/`jsMain`:\n- `expect fun currentTime(): Long` / `actual fun currentTime() = System.currentTimeMillis()`\n- `expect class` for full platform types, mapped with **`actual typealias`** onto an existing platform class (`expect class SystemClock` → `actual typealias SystemClock = android.os.SystemClock`). Expect/actual classes are stable since 1.9.20 for most shapes; the finer `actual fun`/property/constructor splits have been stabilizing through the 2.x line — state the current status accurately rather than claiming everything is stable.\n\n#### Keeping `commonMain` honest\nTwo silent hazards:\n- **JVM annotations are no-ops elsewhere**: `@JvmStatic` does nothing on Native/JS. A `commonMain` decorated with JVM-only annotations still compiles everywhere but does nothing off-JVM.\n- **Reflection is largely absent on Native/JS**: `::class` is limited, no `memberProperties`. Anything depending on full reflection has no common implementation.\n\nThe design rule: prefer an **`interface` + DI** over `expect`/`actual` for anything you want to fake in tests — the interface is faked by the DI container; `expect` is fixed at compile time per platform and harder to inject.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "expect/actual, actual typealias, and the avoid-list",
+          "src": "// commonMain\nimport kotlin.concurrent.atomics.AtomicLong\nexpect fun nowEpochMs(): Long\nexpect class Clock\nexpect val threadLocalValue: Int\n\n// androidMain\nactual fun nowEpochMs(): Long = System.currentTimeMillis()\nactual typealias Clock = android.os.SystemClock\n\n// the avoid-list in commonMain:\n//   String.format, SimpleDateFormat, java.util.*, Charset,\n//   ThreadLocal, synchronized on objects\n// use: kotlinx-datetime, kotlin.time, kotlin.concurrent.atomics, kotlinx-io\n\n// prefer interface + DI over expect for testable seams\ninterface TimeSource2 { fun now(): Long }"
+        }
+      ],
+      "followUps": [
+        "Which stdlib replacements exist for the java.* APIs?",
+        "When would you use `actual typealias` instead of `actual class`?",
+        "Why is reflection unreliable in commonMain?"
+      ],
+      "traps": [
+        "Writing `String.format` in commonMain and watching it fail on Native.",
+        "Treating `expect`/`actual` as a substitute for DI — it's a compile-time platform switch, not an injection point."
+      ],
+      "refs": [
+        { "title": "Kotlin docs — Multiplatform (expect/actual)", "url": "https://kotlinlang.org/docs/multiplatform-expect-actual.html", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.9"
+    }
+  ]
+}

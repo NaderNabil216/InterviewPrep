@@ -1,0 +1,316 @@
+{
+  "id": "system-design-g-3",
+  "title": "Mobile System Design",
+  "track": "system-design",
+  "items": [
+    {
+      "id": "sd-0014",
+      "track": "system-design",
+      "topic": "Photo backup",
+      "level": 4,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "backup",
+        "photos",
+        "storage"
+      ],
+      "q": "Design Google-Photos-style background photo backup",
+      "prompt": "Design background photo/video backup: photos taken on a phone are uploaded automatically, deduplicated, organized, and searchable — without breaking the camera or the battery budget.\n\nAssume ~500M MAU, GB-scale uploads, and that 'the user never thinks about it' is the product bar. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "The hard parts are the **media pipeline** (capture → queue → upload with dedupe) and the **storage/query** backend (org by date, search, dedupe at scale). Expect probing on background constraints and dedupe.",
+      "requirements": [
+        "Clarify what to back up: photos, videos, metadata, edits",
+        "Design the capture hook and the pending-queue",
+        "Design upload: network gating, resumability, ordering",
+        "Design deduplication: same photo taken twice, re-sync, EXIF",
+        "Design the storage schema and object layout",
+        "Design organization: date buckets, albums, faces",
+        "Design search: OCR, face clustering, location",
+        "Handle quota, pricing, and the free-tier boundary",
+        "Design the battery/data budget and user control",
+        "Handle the 'delete on device after backup' flow",
+        "Design failures: partial upload, corrupt file, retry policy",
+        "Design how edits sync (original + edit non-destructive)",
+        "Mention storage tiering (hot vs cold)",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### The client pipeline\nA capture-hook (MediaStore observer) moves new items into a **pending queue** (Room table keyed by `mediaId`). A WorkManager chain, running only under `CONNECTED + unmetered` (default), processes: hash → dedupe → upload → mark done — `Capture ──> queue ──> hash/dedupe ──> resumable upload ──> mark done`. The queue is the source of truth; the UI shows 'backing up 12 of 47' from it.\n\n#### Resumable upload\nPhotos are GB-scale only when videos are involved. Upload is chunked (e.g. 4 MB parts), each part acknowledged by the server, so a dead network resumes at the last ack — no restart-from-zero. Ordering: date-ascending, with newest-first optional for the 'recently added' view.\n\n#### Deduplication\nTwo levels. **Client-side**: before upload, compute a perceptual hash (dhash/pHash) and a byte hash; skip if the server reports it already exists. **Server-side**: byte-level dedupe at object storage (same content → one object, many references), plus EXIF-derived checks (same timestamp + camera + size = likely duplicate). The dedupe must not block the queue — it's a fast DB lookup plus an optional server check.\n\n#### Storage schema\nObject storage (blobs) + a metadata DB. `Media { id, ownerId, takenAt, sha256, width, height, size }`. Blobs are immutable and content-addressed; mutations (edits, album adds) write new records, never mutate a blob — this makes dedupe and refs sound.\n\n#### Organization & search\nThe DB is the query layer: date buckets are a projection of `takenAt`, albums are reference tables, faces come from a server-side clustering job that writes `FaceDetection` rows. Search is a separate index (OCR text + tags + face ids) built by an async pipeline; results are ranked by relevance, not file name. Search is explicitly eventual — a photo is searchable within hours, not seconds.\n\n#### Quota & tiering\nFree tier stores 'high-quality compressed' originals; paid stores originals + full res. The client respects the boundary and marks items 'only backup on paid plan'. Storage tiering: recent photos in hot tier, older in cold (archive) — a lifecycle job moves them. This keeps object costs linear instead of super-linear.\n\n#### Battery/data budget\nThe WorkManager constraints are the budget: `unmetered` for video, `metered` for small photos (user opt-in), `charging` for large backlog. A daily cap on upload bytes prevents burning a monthly plan. The user sees per-item and per-session progress, and can pause per-network.\n\n#### Failure modes\nPartial upload → resumable resume. Corrupt file → requeue once then quarantine with a user notice. Deleted photo in queue → reconcile on scan. Server outage → queue holds, backoff retry (ds-0059). The queue must survive app updates and reboots (persisted + WorkManager).\n\n#### Edits\nNon-destructive: the original blob is kept, edits are stored as a small 'edit op' record; clients render original+ops. This is the Google Photos model and it makes 'restore original' trivial. The trade-off: more metadata complexity, less storage duplication.\n\n#### Trade-offs\nContent-addressed immutable blobs cost a mapping table but make dedupe and edits sound. Perceptual dedupe risks false positives at exactly the false-positive cost of a user's trust — so byte-hash first, perceptual only as a hint. Background-only upload costs freshness when the user is on metered data; that's the accepted trade-off for battery/plan sanity.",
+      "rubric": [
+        "Designed the capture-to-queue pipeline",
+        "Designed resumable chunked upload with network gating",
+        "Designed two-level dedupe and made it non-blocking",
+        "Chose immutable content-addressed blobs and justified it",
+        "Designed org and search as query projections, not folders",
+        "Handled quota and storage tiering",
+        "Respected battery/data budgets via WorkManager constraints",
+        "Designed non-destructive edits",
+        "Handled failures with quarantine and retry",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: 'a 4K video at 20 Mbps is 90 MB/min; 500M MAU uploading ~1 GB each a month is ~500 PB/month — the blob layer must be designed as pure object storage with no per-object CPU'",
+        "Designs the perceptual-hash pipeline as a bounded worker with a queue depth metric, never on the camera path",
+        "Plans the offline+queue recovery: what happens when the user returns after a 30-day outage",
+        "Considers storage analytics: dedupe ratio, tier migration rate, quota-exceeded rate",
+        "Defines a 'first photo in a second' latency budget for the recently-added view reading from the pending queue"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Photo backup architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"95.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Capture</text><text x=\"95.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">MediaStore observer</text><rect x=\"220\" y=\"20\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"300.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Pending queue</text><text x=\"300.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">source of truth</text><rect x=\"430\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Uploader</text><text x=\"500.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">chunked resume</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"51.0\" text-anchor=\"middle\" class=\"dg-label\">Object store</text><rect x=\"220\" y=\"160\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"300.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Metadata DB</text><text x=\"300.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">org + search index</text><rect x=\"430\" y=\"160\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Clustering/OCR</text><text x=\"500.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">async pipeline</text><line x1=\"170\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"399.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">hash/dedupe</text><line x1=\"570\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"300\" y1=\"74\" x2=\"300\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"330.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">done</text><line x1=\"430\" y1=\"160\" x2=\"500\" y2=\"76\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"470.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">index</text></svg>",
+      "refs": [
+        {
+          "title": "Android photo picker",
+          "url": "https://developer.android.com/training/data-storage/shared/photopicker",
+          "checked": "2026-08-13"
+        }
+      ],
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "sd-0015",
+      "track": "system-design",
+      "topic": "File sync",
+      "level": 4,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "file-sync",
+        "conflicts",
+        "local-first"
+      ],
+      "q": "Design Dropbox-style file sync",
+      "prompt": "Design a Dropbox-style file sync client: files on the device are mirrored to the cloud and to other devices, with deltas, tombstones for deletes, and conflict detection.\n\nAssume ~100M MAU, GB-scale files, and that 'it just works on a flaky network' is the bar. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "The hard core is **the local journal + reconciliation** — a log-structured store of every mutation with a version vector, plus delta upload. Interviewers probe conflict detection and the sync loop's correctness under failure.",
+      "requirements": [
+        "Clarify the sync contract: full mirror vs selective folders",
+        "Design the local change journal (append-only log of mutations)",
+        "Design the file store: chunks, content-addressing, dedupe",
+        "Design delta sync: block-level vs file-level",
+        "Design deletion: tombstones and garbage collection",
+        "Design conflict detection and the resolution UI",
+        "Design the sync loop: pull-then-push, version vectors, reconciliation",
+        "Handle the flaky-network case: resumable chunked upload",
+        "Design the server model: storage, versioning, snapshots",
+        "Design cross-device propagation latency",
+        "Design the 'two files same content' case (dedupe)",
+        "Handle large-file and quota cases",
+        "Mention the security model (encryption at rest)",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### The local journal\nThe heart: every mutation the client makes is appended to a **journal** `{ path, op, contentHash, version }` before anything else happens. The journal is the source of truth locally (like sd-0010's read-state, but richer). The UI reads the journal, not the filesystem, so 'sync state' is always consistent. On every change (a file written by another app too), the client diffs the FS against the journal and appends the delta — `FS change ──> journal append ──> reconcile (pull) ──> push delta ──> ack`.\n\n#### Content addressing\nFiles are split into fixed-size chunks, each hashed; the store is content-addressed. Upload only sends chunks the server lacks. Same file on two devices = one chunk set. Block-level delta: editing a 50 MB file's last block uploads one block, not 50 MB. This is the main bandwidth win and the main complexity cost.\n\n#### Tombstones & GC\nA delete is a tombstone `{ path, op: delete, version }`, synced like any op. GC is a separate job: the server keeps a chunk while *any* live file references it; orphaned chunks are swept with a TTL. Tombstones let the delete propagate to other devices before the garbage collector runs.\n\n#### Conflict detection\nThe client tags each file with a **version vector** (device → counter). When device B sees a file changed by both A and B since the last common sync, it's a conflict. Resolution: server stores both versions ('conflicted copy') and the UI shows a resolution screen once. Auto-resolution for the common case: identical content → dedupe and no conflict; pure-metadata conflict → merge metadata. The rule 'same content, no conflict' is what makes it feel magical.\n\n#### The sync loop\nA reconciler, single instance per client: pull (fetch the server journal since last cursor) → apply to local journal → diff FS → push (my new ops) → ack. Run to a fixpoint, then wait for the next event (FS change or server push). Version vectors guarantee convergence: after both sides exchange journals, both have the same logical state. On any failure the loop restarts from the last cursor — the design is *restart-safe by construction*.\n\n#### Server model\nA journal of ops per namespace + object storage for chunks. Snapshots/versioning: the journal IS the version history (each op is an edit), so 'restore yesterday' is a query, not a copy. Cross-device latency is journal-apply latency, typically seconds via push.\n\n#### Flaky network\nChunked upload with per-chunk ack and resume; the client maintains a checkpointer so a 2 GB file resumes mid-way across sessions. Backoff with jitter on errors (ds-0059). Selective-sync folders let a quota-bound device mirror only a subset — the journal still records the whole tree, so toggling a folder on downloads the right chunks.\n\n#### Trade-offs\nContent-addressing + block deltas cost chunk plumbing but pay back on bandwidth and dedupe. Version-vector conflict detection is correct but gives the user a resolution screen that a single-file LWW would avoid — the choice is correctness vs simplicity. The journal model means every device carries the full mutation history; that's the price of restart-safe convergence.",
+      "rubric": [
+        "Designed the append-only journal as the local source of truth",
+        "Used content-addressed chunks with block-level delta",
+        "Designed tombstones and garbage collection separately",
+        "Designed version-vector conflict detection with a resolution UI",
+        "Auto-resolved the identical-content case",
+        "Designed a restart-safe pull/push reconcile loop",
+        "Made the server journal the version history",
+        "Handled flaky networks with resumable chunked upload",
+        "Designed selective sync with a consistent journal",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: 'editing the last block of a 50 MB file uploads one 4 MB chunk — block-level delta turns a 50 MB transfer into ~4 MB, which is why it's worth the chunk plumbing'",
+        "Designs the reconcile loop's fixpoint check: both directions applied until no new ops, with a max-round guard",
+        "Plans the offline-prolonged case: a device returning after 30 days replays its journal and reconciles with the server's cursor",
+        "Considers multi-device conflicts beyond two-way: N-way version vectors and the 'conflicted copy' fan-out",
+        "Defines sync telemetry: converge time, chunk-dedup ratio, conflicted-file rate, resumable-upload resume rate"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"File sync architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"95.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Filesystem</text><text x=\"95.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">watch + diff</text><rect x=\"220\" y=\"20\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"300.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Local journal</text><text x=\"300.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">append-only ops</text><rect x=\"430\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Reconciler</text><text x=\"500.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">pull → apply → push</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Server</text><text x=\"655.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">journal + chunks</text><rect x=\"220\" y=\"160\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"300.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Chunk store</text><text x=\"300.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">content-addressed</text><rect x=\"430\" y=\"160\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Conflicts</text><text x=\"500.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">version vectors</text><line x1=\"170\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"570\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"589.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">deltas</text><line x1=\"300\" y1=\"74\" x2=\"300\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"330.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">hash</text><line x1=\"430\" y1=\"160\" x2=\"500\" y2=\"76\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"470.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">flag</text></svg>",
+      "refs": [
+        {
+          "title": "FileProvider — scoped file access",
+          "url": "https://developer.android.com/reference/androidx/core/content/FileProvider",
+          "checked": "2026-08-13"
+        }
+      ],
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "sd-0016",
+      "track": "system-design",
+      "topic": "Video streaming",
+      "level": 4,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "video",
+        "streaming",
+        "abr"
+      ],
+      "q": "Design a video streaming client",
+      "prompt": "Design a mobile video streaming client (Netflix-class): adaptive bitrate playback, prefetch for the next episode, DRM, resume across devices, and offline downloads — on a phone that is also on a cellular network.\n\nAssume ~100M MAU and a catalog of high-quality content. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "The player pipeline (adaptive streaming, buffering policy) is the center; the interviewer also wants the **prefetch/download** planning and **DRM** path. Expect probing on the buffer and the 'first frame fast' budget.",
+      "requirements": [
+        "Clarify the formats and the delivery pipeline (HLS/DASH segments)",
+        "Design the player pipeline: manifest, segments, demux, decode, render",
+        "Design adaptive bitrate: selection policy, bandwidth estimation",
+        "Design the buffer strategy: start budget, underflow, pause-on-buffer",
+        "Design prefetch for the next episode",
+        "Design offline downloads with DRM",
+        "Design resume across devices",
+        "Design playback analytics (rebuffer rate, startup time)",
+        "Handle the cellular/WiFi switch and data budgets",
+        "Design the audio-only path and background playback",
+        "Design error handling: manifest failures, segment 404, license failures",
+        "Mention codec/hardware decode selection",
+        "Cover the first-frame budget (cold start to playing)",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### Delivery\nMPEG-DASH/HLS with **short segments** (4–6 s) encoded at multiple bitrates (e.g. 480p → 4K). A manifest lists segments per quality. The player requests segments over HTTPS/CDN; the format decision (DASH vs HLS) is about device/DRM support, and the player abstracts both behind one API: `Manifest ──> segment fetcher ──> demux ──> decode (HW) ──> render`.\n\n#### Adaptive bitrate\nThe player measures throughput from recent segment downloads (smoothed, not last-sample) and picks the highest quality that fits with headroom. Key rule: **the bitrate ladder should be sparser at the top** (the quality-per-byte gain above 1080p is tiny). Never upshift during a scene change; downshift aggressively to avoid rebuffer. The quality decision is per-segment-window, not per-segment (prevents oscillation).\n\n#### Buffer policy\nThe contract: **start fast, then stay ahead.** Initial buffer: fill ~2–4 s then start playing (the 'first frame' budget drives sign-ups). After start, buffer to ~20–30 s. Underflow → pause with a buffering overlay, and pick a *lower* bitrate for the next segment to avoid recurrence. A rebuffer is the worst UX event; the policy is 'choose quality to prevent rebuffer, spend bandwidth on stability'.\n\n#### Prefetch\nDuring the end credits of episode N, the client preloads the first N seconds of episode N+1 (manifest + a few start segments) into the media cache. This turns 'next episode' into an instant start. The cache is bounded; prefetch is cancelled if the user navigates away.\n\n#### Offline downloads\nExplicit downloads (user picks) at a chosen quality. DRM: licenses are bound to the *device*, downloaded with a limited lifetime and checked periodically — a 30-day watch window. Downloaded content is encrypted at rest with the device key. The manifest + segments are stored in app-private storage; the player plays them through the same pipeline with `file://` sources. This shares one player code path for online/offline.\n\n#### Resume across devices\nPlayback position is synced via the server every few seconds (position + segment id). On a new device, the client fetches the last position, maps it to a segment, and seeks. Clock skew and segment-boundary mapping are handled by seeking to the segment floor.\n\n#### Analytics\nThe two numbers that drive everything: **startup time p95** and **rebuffer rate** (rebuffer seconds / playtime). Segment-level error rates and per-bitrate switch counts surface codec/CDN issues. All analytics are sampled and batched (never on the play path).\n\n#### Cellular/data\nOn cellular, the client clamps the bitrate ladder (e.g. max 720p) unless the user opts out, and defers downloads/prefetch to WiFi. The buffer target shrinks on cellular to save data. A per-title data estimate ('this episode ~350 MB at HD') is shown pre-play.\n\n#### Failure handling\nManifest 404 → fall back to CDN failover. Segment 404 → skip and request the next (a stutter is better than a stuck spinner), but count it. License failure → DRM-specific error with a re-request after re-auth. Network loss mid-play → pause with resume-on-reconnect at the last buffered position.",
+      "rubric": [
+        "Designed the segment-based delivery pipeline",
+        "Designed ABR with smoothed throughput and anti-oscillation",
+        "Designed a start-fast-then-stay-ahead buffer policy",
+        "Used quality choice to prevent rebuffers",
+        "Designed episode prefetch with a bounded cache",
+        "Designed offline downloads with DRM lifetime and at-rest encryption",
+        "Designed cross-device resume with segment mapping",
+        "Tracked startup time and rebuffer rate",
+        "Handled cellular budgets explicitly",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: '4 s of 1080p at 4 Mbps is ~2 MB per segment; a 90-min film is ~1.3 GB — the bandwidth math is why ABR and prefetch matter more than codec tweaks'",
+        "Designs the player lifecycle under OS audio focus and background/foreground transitions",
+        "Plans the manifest-caching strategy to serve cold start from cache when the network is slow",
+        "Considers the battery cost of decode: hardware decode is a requirement, and the player must select the hardware decoder path by codec support",
+        "Defines a rollback story: server-side manifest changes must be versioned so old players don't break"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Video streaming architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"95.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Player</text><text x=\"95.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">start fast, stay ahead</text><rect x=\"220\" y=\"20\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"300.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">ABR engine</text><text x=\"300.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">smoothed throughput</text><rect x=\"430\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Segment fetch</text><text x=\"500.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">CDN + cache</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"51.0\" text-anchor=\"middle\" class=\"dg-label\">DRM</text><rect x=\"220\" y=\"160\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"300.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Prefetch</text><text x=\"300.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">next episode</text><rect x=\"430\" y=\"160\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Downloads</text><text x=\"500.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">offline, encrypted</text><line x1=\"170\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"399.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">pick</text><line x1=\"570\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"300\" y1=\"74\" x2=\"300\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"330.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">credits trigger</text><line x1=\"430\" y1=\"160\" x2=\"500\" y2=\"76\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"470.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">license</text></svg>",
+      "refs": [
+        {
+          "title": "Media3 / ExoPlayer",
+          "url": "https://developer.android.com/media/media3",
+          "checked": "2026-08-13"
+        }
+      ],
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "sd-0017",
+      "track": "system-design",
+      "topic": "Checkout",
+      "level": 4,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "payments",
+        "checkout",
+        "reliability"
+      ],
+      "q": "Design a checkout and payment flow",
+      "prompt": "Design the mobile checkout and payment flow: add a payment method, place an order, handle the network dying mid-payment, and make sure a user is never charged twice and never told 'failed' when it actually succeeded.\n\nAssume ~10M daily checkouts, high-stakes correctness, and a fraud constraint. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "A reliability-and-consistency design. The interviewer wants **idempotency** (the order id), the **payment-state machine** with a clear terminal 'confirm' step, and the retry/fraud story. Runtime design is secondary.",
+      "requirements": [
+        "Clarify the payment methods and flows (card, wallet, BNPL)",
+        "Design the order creation with idempotency",
+        "Design the payment state machine and its transitions",
+        "Design the confirmation step — the only point of truth",
+        "Handle network loss at every state, especially mid-charge",
+        "Design retries: what is safe to retry, with what policy",
+        "Design the webhook/verification path from the PSP",
+        "Design the 'payment pending' UX and reconciliation",
+        "Design tokenization of card data",
+        "Design the fraud checks and their placement",
+        "Design refund and partial-refund flows",
+        "Handle the double-charge failure mode explicitly",
+        "Design observability: the success/fail/pending dashboard",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### Idempotency first\nThe client creates the order with a client-generated `orderId` (UUID) and a **request id** per payment attempt. The server is keyed on these: retrying the same request id returns the same result, never a second charge. This is the single most important rule — the entire design exists to make 'retry is always safe' true:\n\n- `POST /orders {orderId, amount} → 200 {status: CREATED}`\n- `POST /orders/{orderId}/payment {requestId, method} → PENDING`\n- `GET /orders/{orderId} → CONFIRMED | FAILED`\n\n#### State machine\n`CREATED → AUTHORIZATION → PENDING → CONFIRMED` (or `FAILED → REFUNDED`). A payment has exactly **one** terminal success state (CONFIRMED) and the order screen renders only from it. The PSP gives us an `authorization` (hold) and later a `capture`; the app should treat 'authorized but not captured' as PENDING and reconcile it with the webhook. A user who sees CONFIRMED has a payment; a user who sees PENDING has an unresolved order — the UI must never blur the two.\n\n#### The confirmation step\nWhen the app receives 'success' from the PSP's redirect/3DS callback, it **does not** show success — it queries `GET /orders/{id}` and shows success only when the server says CONFIRMED. This one decision eliminates the 'told success but it failed' and 'told failed but it succeeded' lies. The server, in turn, only CONFIRMs after the PSP webhook verifies.\n\n#### Network loss at each state\n- Before creating the order → user just retries, nothing happened.\n- After order, before payment → retry payment with the same request id — safe.\n- After PSP response, before confirm query → the app shows 'processing', then polls the order status (with backoff). The server reconciles the PSP webhook and the poll converges.\n- A killed app → on relaunch, the app shows the in-flight order's status from the server, not from a local guess.\n\n#### Retry policy\nSafe-to-retry: order creation, payment with same requestId (idempotent), status polling. Not-safe: capturing a PSP authorization twice — the capture step is guarded server-side by the requestId too. Timeouts: a PSP call has a strict timeout and the result is marked UNKNOWN, then resolved by webhook — never resolved by guesswork.\n\n#### Tokenization\nCard data is tokenized client-side via the PSP's SDK (never touches our servers), and we store only a token + fingerprint. PCI scope stays minimal. Fraud checks (velocity, geo, device fingerprint) run server-side at authorization; declining mid-checkout is better than declining later but the UX must be graceful.\n\n#### Refunds\nA refund is a separate operation with its own idempotent request; partial refunds are allowed and each is recorded. The dashboard shows the money movement (authorize → capture → refund) so ops can answer 'where's my money' without code.\n\n#### Reconciliation\nThe daily job compares PSP settlement records vs our order DB; a mismatch (a PENDING that settled, a CONFIRMED that didn't) is paged to on-call — the money-accuracy metric is 'settlement-to-ledger match rate = 100%'. This is the correctness backstop behind every client improvement.\n\n#### Trade-offs\nThe confirm-by-query step adds latency and a polling loop but kills the worst failure modes. Strict idempotency means every mutation carries an id — boilerplate but non-negotiable. You accept that a minority of payments end in 'pending' UX (better than wrong)",
+      "rubric": [
+        "Made order creation idempotent and explained why",
+        "Designed a clear state machine with one terminal success",
+        "Added the server-confirm-before-success step",
+        "Handled network loss at each state with safe retries",
+        "Resolved UNKNOWN via webhook, never guesswork",
+        "Tokenized card data and minimized PCI scope",
+        "Designed refunds as idempotent operations",
+        "Designed a daily reconciliation with a 100% match metric",
+        "Designed the fraud checks with graceful UX",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies the traffic: '10M daily checkouts peak ~1.2k/s order creates; the PSP integration must be isolated behind a timeout and circuit breaker (bt-00xx)'",
+        "Designs the 3DS2 flow as a state the state machine knows about, with a timeout to return to CREATED",
+        "Plans the ops playbook: a PENDING-for-2h alert, a mismatch page, and a one-click 'mark settled' tool that only touches the ledger, never the PSP",
+        "Considers the regional payment-method matrix (UPI, iDEAL, wallets) as plugins behind one order state machine",
+        "Defines the metric tree: conversion by step, PSP error rate, double-charge count (should be 0), settle-to-ledger match"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Checkout state machine\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"95.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">CREATED</text><text x=\"95.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">orderId idempotent</text><rect x=\"220\" y=\"20\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"300.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">AUTHORIZATION</text><text x=\"300.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">tokenize + hold</text><rect x=\"430\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">PENDING</text><text x=\"500.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">webhook reconcile</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"655.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">CONFIRMED</text><text x=\"655.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">only truth</text><rect x=\"430\" y=\"160\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">FAILED</text><text x=\"500.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">refund path</text><line x1=\"170\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"570\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"570\" y1=\"47\" x2=\"500\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"540.0\" y=\"110.0\" text-anchor=\"middle\" class=\"dg-edge-label\">declined</text><line x1=\"220\" y1=\"74\" x2=\"90\" y2=\"74\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"150.0\" y=\"68.0\" text-anchor=\"middle\" class=\"dg-edge-label\">retry safe</text><line x1=\"655\" y1=\"74\" x2=\"655\" y2=\"160\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"685.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">dispute</text></svg>",
+      "refs": [
+        {
+          "title": "Data safety — payment info",
+          "url": "https://developer.android.com/google/play/billing",
+          "checked": "2026-08-13"
+        }
+      ],
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "sd-0018",
+      "track": "system-design",
+      "topic": "Collaborative editing",
+      "level": 4,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "collaboration",
+        "crdt",
+        "realtime"
+      ],
+      "q": "Design a real-time collaborative editor on mobile",
+      "prompt": "Design a real-time collaborative text editor for mobile (Google-Docs-class): multiple users edit the same document with live presence cursors, working offline and converging when they reconnect.\n\nAssume a mobile-first client with flaky networks, ~5M concurrent editors, and latency under ~1 s for a cursor to appear. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "The core is **concurrency control** (CRDT vs OT), the client-server topology (presence + auth + persistence), and the mobile-specific constraints (battery, offline, keyboard latency). Expect a debate about OT vs CRDT — know the trade-offs.",
+      "requirements": [
+        "Clarify the concurrency model: OT vs CRDT and why",
+        "Design the document model (sequence of characters with stable ids)",
+        "Design the local editing latency budget",
+        "Design the sync loop and the offline buffer",
+        "Design presence (cursors, online/offline, typing) separately from content",
+        "Design the server: document store, collaboration service, persistence",
+        "Design the network transport and reconnection",
+        "Design access control and who-can-edit",
+        "Handle document size limits and huge documents",
+        "Design the mobile constraints: keyboard, undo/redo, battery",
+        "Design the undo model under concurrency",
+        "Design the conflict-merge correctness proof sketch",
+        "Mention the analytics that would catch a convergence bug",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### Concurrency model — CRDT vs OT\nThe answer is CRDT-based (specifically a sequence CRDT like Yjs's YATA) for this scenario, and you should be able to say *why*: CRDTs are **commutative by construction** — any two users' edits applied in either order converge, which makes offline editing and reconnection trivial. OT requires a central server to transform operations and falls apart without it. The CRDT's cost is space (every character carries stable ids + tombstones) and a more complex undo — you trade space for correctness. If the interviewer pushes OT: OT wins when a single authoritative server always has the connection (low latency), CRDT wins for offline-first mobile.\n\n#### The document model\nA Yjs-like document is a **sequence of characters, each with a stable unique id** and a timestamped insert position. Deletes leave a tombstone (or are garbage-collected periodically — but GC must not break convergence). Each character carries a lamport-timestamp-ish origin so insertions between two characters are deterministic. The edit op is `insert(pos, charId, origin)` or `delete(charId)`.\n\n#### Local latency\nLocal edits are applied to the local CRDT **immediately** and optimistically — the keystroke-to-character latency budget is ~16 ms (a frame), never waiting on the network. The op is queued to the outbox and synced. This is the mobile-critical part: on a phone, typing feel IS the product.\n\n#### Sync loop and offline\nThe outbox is an append-only log (compare sd-0015). On reconnect, pull the server's state + push the outbox; because CRDT ops commute, merging is apply-all-ops in id order. Reconnection is a state machine: reconnect → resync state → resume presence. There is no 'conflict resolution screen' in the CRDT world — convergence is automatic; what remains is only 'whose version of the paragraph survives' (LWW per the document-level, not per character).\n\n#### Presence\nPresence is **separate from content**: a cursor = `{ userId, docVersion, position }`, ephemeral, TTL ~30 s, broadcast on a side channel (same socket, different message type). It is allowed to be eventually consistent and lossy — a dropped cursor is a non-event. Selection highlights follow the same path. Typing indicators ride on presence, not content.\n\n#### Server\nA collaboration service that keeps the document state in memory (with periodic persistence to durable storage — the write path is 'apply op → snapshot every N ops / M seconds'). The server is a **passive** applier in CRDT-land (it just applies and broadcasts), unlike OT where it transforms — which is exactly why CRDT scales out horizontally without a single-point coordination.\n\n#### Transport\nWebSocket for the live session, with exponential backoff reconnect (ds-0059) and a full resync on reconnect (cheap because docs are small text). A versioned binary protocol; ops are tiny so the wire stays lean on mobile networks.\n\n#### Undo\nUndo under concurrency is the genuinely hard part: naive per-user undo breaks. The standard approach: undo as its own op that reverts a *selection range* by inserting a new 'negative' change (the version that deletes the offending characters) rather than physically reverting. It is not always 'the thing I typed' — it is 'the state before my last change'. Accepting this is what makes concurrency-safe undo tractable.\n\n#### Correctness metric\nThe scary failure is silent divergence. The metric: a **checksum of the full document state** broadcast with each sync — if two users' checksums differ for the same version, alert immediately. Convergence tests run in CI: two offline clients editing divergently, then merging, must match the oracle.\n\n#### Trade-offs\nCRDT space overhead (ids + tombstones ~2–3x text size) is the cost of offline-first correctness. Presence is engineered to be lossy so it never risks the content path. Undo is range-based, not user-history-based, which is a UX compromise the product must accept.",
+      "rubric": [
+        "Chose CRDT over OT with a correct, specific justification",
+        "Designed the character-id sequence model and tombstoning",
+        "Kept local editing at frame latency, optimistic",
+        "Designed the outbox + resync reconnect loop",
+        "Separated presence (lossy) from content (lossless)",
+        "Made the server a passive applier for horizontal scale",
+        "Designed a concurrency-safe range-based undo",
+        "Added a convergence checksum and CI oracle test",
+        "Handled huge documents and size limits",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: 'a 10k-word doc has ~60k characters × ~40 bytes of CRDT metadata ≈ 2.4 MB in memory — acceptable; a 1M-char novel needs chunking into a tree-based structure'",
+        "Designs the offline-buffer capacity and the 'coming back after 3 days offline' replay path",
+        "Plans the GC of tombstones without breaking convergence (only after quorum of clients acknowledge)",
+        "Considers rich text: an element tree on top of the character sequence, and how formatting ops commute",
+        "Defines the degradation story: presence shuts off first when the connection degrades, content never does"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Collaborative editing architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"95.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Editor UI</text><text x=\"95.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">optimistic typing</text><rect x=\"220\" y=\"20\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"300.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Local CRDT</text><text x=\"300.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">YATA + tombstones</text><rect x=\"430\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Outbox</text><text x=\"500.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">append-only ops</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Server</text><text x=\"655.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">passive apply</text><rect x=\"220\" y=\"160\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"300.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Presence</text><text x=\"300.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">cursors, lossy TTL</text><rect x=\"430\" y=\"160\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Checksum</text><text x=\"500.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">convergence alert</text><line x1=\"170\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"399.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">ops</text><line x1=\"570\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"589.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">sync</text><line x1=\"300\" y1=\"74\" x2=\"300\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"330.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">separate path</text><line x1=\"430\" y1=\"160\" x2=\"500\" y2=\"76\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"470.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">version</text></svg>",
+      "refs": [
+        {
+          "title": "Build state-driven UI",
+          "url": "https://developer.android.com/jetpack/compose/state",
+          "checked": "2026-08-13"
+        }
+      ]
+    }
+  ]
+}

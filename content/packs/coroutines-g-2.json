@@ -1,0 +1,437 @@
+{
+  "id": "coroutines-g-2",
+  "title": "Coroutines & Flow",
+  "track": "coroutines-flow",
+  "items": [
+    {
+      "id": "co-0019",
+      "track": "coroutines-flow",
+      "topic": "Structured concurrency",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "global-scope",
+        "structured-concurrency",
+        "anti-pattern"
+      ],
+      "q": "Why is `GlobalScope` effectively banned, and what replaces it?",
+      "shortAnswer": [
+        "It has no parent, no `Job` you can cancel, and uncaught exceptions go straight to the thread's default handler.",
+        "A `GlobalScope` coroutine outlives the screen while holding whatever it captured.",
+        "Replacements: an injected application-scoped scope, or WorkManager when work must survive process death."
+      ],
+      "answer": "`GlobalScope` is a scope with no parent. That single fact produces every problem. There is no `Job` that lives with the caller, so nothing in your code can cancel the coroutine — it keeps running after the screen, the ViewModel, or even the app process's UI context is gone, holding whatever it captured (an Activity, a Context) and leaking it.\n\nSecond, exception handling is broken. A coroutine launched in `GlobalScope` is a root coroutine with no supervisor, so an uncaught exception goes straight to the `Thread.uncaughtExceptionHandler` — in an Android app that usually means a crash, exactly where the framework would otherwise route it to your handler. The `@DelicateCoroutinesApi` opt-in annotation is the library telling you the same thing: this is an escape hatch, not a tool.\n\n#### Replacements\n- Fire-and-forget work that should die with the app: an injected `@ApplicationScope`-style `CoroutineScope(SupervisorJob() + Dispatchers.Default)` owned by the application or a repository.\n- Work that must survive even process death — uploads, sync — belongs in WorkManager, not in any in-memory scope.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "GlobalScope vs an owned scope",
+          "src": "// Leaks: no cancel path, uncaught exceptions crash\nGlobalScope.launch {\n    while (isActive) { poll() }   // survives the screen forever\n}\n\n// Owned by the app, cancelled with it:\nclass AppScope(application: Application) {\n    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)\n}\n\n// Must survive process death:\nWorkManager.enqueue(UploadWork())"
+        }
+      ],
+      "followUps": [
+        "What does `@DelicateCoroutinesApi` signal?",
+        "When would you genuinely choose an app-scoped coroutine over WorkManager?",
+        "Where do uncaught exceptions from `GlobalScope` go?"
+      ],
+      "traps": [
+        "Defending `GlobalScope` for 'one-off' work. The capture and crash risks apply to all of it.",
+        "Claiming `GlobalScope` is only a testing convenience."
+      ],
+      "refs": [
+        {
+          "title": "kotlinx.coroutines — GlobalScope",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines/-global-scope/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0020",
+      "track": "coroutines-flow",
+      "topic": "Structured concurrency",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "viewmodel-scope",
+        "process-death",
+        "workmanager"
+      ],
+      "q": "The user taps Save and immediately backs out. `viewModelScope` is cancelled and the POST dies. Fix it, and defend the design.",
+      "shortAnswer": [
+        "This is structured concurrency working as specified — no work outlives its scope.",
+        "Give the work a scope whose lifetime matches the *work*: an application-scoped repository scope, or WorkManager.",
+        "The three wrong answers are `NonCancellable`, `GlobalScope`, and launching in the ViewModel and hoping."
+      ],
+      "answer": "Cancelling on `onCleared` is the contract, not a bug: a ViewModel's coroutines must never outlive it, or the app leaks the screen's resources. So the fix is to move the save into a scope that matches the work's true lifetime.\n\n#### Option 1 — an application-scoped repository scope\n`@ApplicationScope` `CoroutineScope(SupervisorJob() + Dispatchers.IO)` owned by the repository. The save runs to completion regardless of the screen leaving, and the app-level scope's lifecycle is the process's — acceptable for a fast write. The trade-off: work can outlive the user's context, so you must confirm the result is still wanted when it lands, and a process kill mid-save still loses it.\n\n#### Option 2 — WorkManager\nFor anything that must survive even process death — a large upload, a sync — enqueue unique work. WorkManager owns retry, constraints and survival. This is the answer when losing the write is unacceptable.\n\n#### Defend the design\nThe interviewer wants to hear both sides: an app-scoped write can leak user-intended side effects, but losing a user edit is worse. The decision rule is about who owns the outcome — UI transient work dies with the UI; user-meaningful writes get a durable owner.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Move the write to a work-scoped owner",
+          "src": "class SaveRepository(\n    @ApplicationScope private val appScope: CoroutineScope,\n    private val api: Api\n) {\n    fun save(draft: Draft) {\n        appScope.launch {\n            api.post(draft)   // survives the ViewModel being cleared\n        }\n    }\n}\n\n// Or, when it must survive process death:\nWorkManager.getInstance(context).enqueueUniqueWork(\n    \"save-\" + draft.id, ExistingWorkPolicy.REPLACE, SaveWorker(...))"
+        }
+      ],
+      "followUps": [
+        "Why is `NonCancellable` the wrong tool here?",
+        "What is the failure mode of a leaked app-scoped write?",
+        "How does unique work interact with a retry?"
+      ],
+      "traps": [
+        "Answering 'wrap it in `NonCancellable`' — that just prolongs the doomed coroutine.",
+        "Not arguing the trade-off between durability and leaking side effects."
+      ],
+      "refs": [
+        {
+          "title": "Android docs — WorkManager basics",
+          "url": "https://developer.android.com/topic/libraries/architecture/workmanager/basics",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0021",
+      "track": "coroutines-flow",
+      "topic": "Exception handling",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "exception-handler",
+        "propagation",
+        "root-coroutine"
+      ],
+      "q": "Where exactly does a `CoroutineExceptionHandler` fire, and where does it silently do nothing?",
+      "shortAnswer": [
+        "It is consulted only by the *root* coroutine of a scope.",
+        "Installed on a child `launch` it is ignored — the exception goes to the parent; it never applies to `async`.",
+        "Direct children of `supervisorScope` behave as roots, so a handler there does fire."
+      ],
+      "answer": "A `CoroutineExceptionHandler` is a context element that handles uncaught exceptions *for the coroutine it is installed on* — and only if that coroutine is a **root** coroutine of its scope. The propagation rule: an exception in a child `launch` is delivered to the parent job, not to anything the child itself carries, so putting the handler on the child does nothing. It must ride on the scope's context, e.g. `CoroutineScope(SupervisorJob() + Dispatchers.Main + handler)`.\n\n#### The `async` exclusion\n`async` never reaches a handler. Its exception is stored inside the `Deferred` and surfaces only when someone calls `await()`. If the `Deferred` is never awaited, the exception is simply lost. That is by design — `async` hands the error to its consumer, not to a global handler.\n\n#### Where it does fire\nDirect children of `supervisorScope` (or of a supervisor root job) are treated as root coroutines, so a handler present in the context *does* catch their failures. With no handler anywhere, an uncaught exception reaches the thread's default handler — on Android, an app crash.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Handler placement is everything",
+          "src": "val handler = CoroutineExceptionHandler { _, t ->\n    log(\"caught: ${t.message}\")\n}\n\n// Fires: the handler is on the scope's root context\nval scope = CoroutineScope(SupervisorJob() + handler)\nscope.launch { throw RuntimeException(\"boom\") }\n\n// Ignored: installed on a child, exception goes to the parent\nscope.launch(handler) { throw RuntimeException(\"also boom\") }\n\n// Never fires for async: the error sits in the Deferred\nval d = scope.async { throw RuntimeException(\"async boom\") }\n// ... until await() throws it"
+        }
+      ],
+      "followUps": [
+        "Where does the exception go when the handler is on a child?",
+        "What happens to an `async` exception nobody awaits?",
+        "When does a handler under `supervisorScope` actually catch?"
+      ],
+      "traps": [
+        "Installing the handler on every `launch` — it only works at the root.",
+        "Expecting `async` failures to reach a handler. They wait for `await`."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — exception handling in coroutines",
+          "url": "https://kotlinlang.org/docs/exception-handling.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0022",
+      "track": "coroutines-flow",
+      "topic": "Exception handling",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "async",
+        "awaitall",
+        "fail-fast"
+      ],
+      "q": "Fetch profile, settings and feed in parallel. Show the code, then explain exactly what happens when one of them fails.",
+      "shortAnswer": [
+        "`coroutineScope { async {} ... awaitAll(...) }` is fail-fast: the failing child cancels its siblings and rethrows at the first await.",
+        "For partial results, use `supervisorScope` plus per-branch `runCatching`.",
+        "A `LAZY` `async` that is never awaited can hang `coroutineScope` forever."
+      ],
+      "answer": "The parallel fetch is `coroutineScope { val p = async { repo.profile() }; val s = async { repo.settings() }; val f = async { repo.feed() }; Result(p.await(), s.await(), f.await()) }`.\n\n#### The fail-fast contract\nInside `coroutineScope`, when one child throws, the scope cancels every other child and rethrows the exception from the enclosing builder — you see the first failure, and the siblings are torn down. That is usually what you want for a screen whose three pieces arrive together: no point rendering two-thirds.\n\n#### Partial results\nIf the screen can render with what succeeded, swap to `supervisorScope` so a failing child does not cancel its siblings, and guard each branch with `runCatching`. Two subtleties: an `async` under a supervisor still holds its exception until `await()`, and if you never `await` it, the exception is silently lost; and `runCatching` catches `Throwable`, so rethrow a `CancellationException` to avoid swallowing cancellation.\n\n#### The LAZY trap\n`async(start = LAZY)` does not begin until awaited. `awaitAll` on a lazy deferred that never started can leave `coroutineScope` hanging forever waiting on a child that will never run. Start it explicitly with `start()` or drop LAZY for parallel fetches.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Fail-fast parallel fetch vs partial results",
+          "src": "suspend fun loadAll(): Triple<Profile, Settings, Feed> =\n    coroutineScope {\n        val p = async { repo.profile() }\n        val s = async { repo.settings() }\n        val f = async { repo.feed() }\n        Triple(p.await(), s.await(), f.await())  // fail-fast: any throw cancels all\n    }\n\nsuspend fun loadBestEffort(): Loaded =\n    supervisorScope {\n        val p = async { runCatching { repo.profile() } }\n        val s = async { runCatching { repo.settings() } }\n        val f = async { runCatching { repo.feed() } }\n        Loaded(p.await().getOrNull(), s.await().getOrNull(), f.await().getOrNull())\n    }"
+        }
+      ],
+      "followUps": [
+        "What exactly does `coroutineScope` do when a child fails?",
+        "How does `supervisorScope` change sibling behaviour?",
+        "What is the `LAZY` async hang?"
+      ],
+      "traps": [
+        "Using `coroutineScope` for partial-results UI and being surprised everything dies.",
+        "Forgetting `runCatching` swallows `CancellationException`."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — async-style functions and structured concurrency",
+          "url": "https://kotlinlang.org/docs/composing-suspending-functions.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0023",
+      "track": "coroutines-flow",
+      "topic": "Coroutine builders",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "select",
+        "racing",
+        "cancellation"
+      ],
+      "q": "Race a cache read against a network call and take whichever answers first. What are the options, and what leaks?",
+      "shortAnswer": [
+        "`select { cacheDeferred.onAwait { }; networkDeferred.onAwait { } }` returns the first branch.",
+        "But the losing coroutine keeps running unless you cancel it — you leak the request and its callback.",
+        "Often the simpler `withTimeoutOrNull` or `merge(...).first()` wins the code review."
+      ],
+      "answer": "The direct tool is `select`: `select { cache.onAwait { it }; network.onAwait { it } }` returns whichever resumes first. Its catch is that the loser is **not cancelled automatically** — the losing coroutine keeps running to completion. A lost network request can still deliver a response, a callback, or hold a connection, so you must cancel it: wrap the race in a `coroutineScope`, capture both deferreds, and `loser.cancel()` once the winner arrives.\n\n#### The alternatives that usually win\n- `withTimeoutOrNull(timeout) { network() } ?: cache()` — a timeout race with a clean cancellation of the network leg and no `select` machinery.\n- `merge(cache, network).first()` — a flow race; `first()` cancels the upstream after one value, which is exactly the teardown `select` makes you do by hand.\n\n#### What leaks in each\nIn `select`, the un-cancelled deferred and anything it captured. In `withTimeoutOrNull`, the timeout itself fires only at a suspension point. In `merge().first()`, the cancellation is automatic — that is the argument for it. Also note parts of `select` remain experimental; a codebase may deliberately avoid it.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "select vs the simpler race",
+          "src": "// select: you must cancel the loser yourself\ncoroutineScope {\n    val cache = async { cache.read() }\n    val net = async { api.fetch() }\n    val winner = select<Data> {\n        cache.onAwait { it }\n        net.onAwait { it }\n    }\n    if (!cache.isCompleted) cache.cancel()\n    if (!net.isCompleted) net.cancel()\n    winner\n}\n\n// Simpler, automatic teardown:\nwithTimeoutOrNull(2_000) { api.fetch() } ?: cache.read()\n// or\nmerge(cacheFlow(), networkFlow()).first()"
+        }
+      ],
+      "followUps": [
+        "What exactly is left running when `select` returns?",
+        "When would you choose `select` over `withTimeoutOrNull`?",
+        "What does `merge(...).first()` do to the losing flow?"
+      ],
+      "traps": [
+        "Claiming `select` cancels the loser. It does not — you must.",
+        "Missing that `withTimeoutOrNull`'s timeout only fires at a suspension point."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — select expression",
+          "url": "https://kotlinlang.org/docs/select-expression.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0024",
+      "track": "coroutines-flow",
+      "topic": "Cancellation",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "cooperative-cancellation",
+        "ensure-active",
+        "cancel-and-join"
+      ],
+      "q": "Cancellation is cooperative. What does that mean, and how do you make a CPU-bound loop cancellable?",
+      "shortAnswer": [
+        "`cancel()` only moves the Job to Cancelling and arms the *next suspension point* to throw.",
+        "A loop with no suspension runs to completion regardless — add `ensureActive()` or check `isActive`.",
+        "`cancel()` returns immediately, so use `cancelAndJoin()` when you need it actually finished."
+      ],
+      "answer": "Cancellation never stops code mid-instruction. `cancel()` transitions the Job to `Cancelling` and arranges for the *next suspension point* to throw a `CancellationException`. A coroutine that never suspends — `while (true) { crunch() }` — simply never notices; it runs to the end of its block.\n\n#### Making a hot loop cooperative\n- `ensureActive()` — a suspend call (usable inside a `suspend` context) that throws `CancellationException` immediately if the job is cancelled. Best for a tight loop.\n- `isActive` — a plain check returning `false` after cancellation; clean way to exit a loop: `while (isActive) { ... }`.\n- `yield()` — additionally hands the dispatcher a chance to run other coroutines; use it when the loop is long enough to starve siblings.\n\n#### The finishing trap\n`cancel()` returns instantly; it does not wait for the coroutine to reach its next suspension point. Code that needs to know the work really ended — tests, resource release — must call `cancelAndJoin()`. A test that calls `cancel()` and immediately asserts completion is the classic flaky test.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Cooperative cancellation in a hot loop",
+          "src": "// Not cancellable: no suspension point anywhere\nlaunch {\n    while (true) { crunch() }\n}\n\n// Cancellable: throws on cancellation\nlaunch {\n    while (true) {\n        ensureActive()\n        crunch()\n    }\n}\n\n// Clean exit + join so the test waits for it\nval job = scope.launch { while (isActive) { work() } }\njob.cancel()\njob.join()      // actually finished"
+        }
+      ],
+      "followUps": [
+        "What throws when a suspended coroutine is cancelled?",
+        "When is `yield()` better than `ensureActive()`?",
+        "Why does `cancel()` not guarantee the block finished?"
+      ],
+      "traps": [
+        "Claiming `cancel()` stops the coroutine immediately.",
+        "Writing a test that calls `cancel()` and expects the block to have finished."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — cancellation and timeouts",
+          "url": "https://kotlinlang.org/docs/cancellation-and-timeouts.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0025",
+      "track": "coroutines-flow",
+      "topic": "Cancellation",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "cancellation-exception",
+        "try-catch",
+        "run-catching"
+      ],
+      "q": "Why does `try { api.load() } catch (e: Exception) { showError() }` break cancellation?",
+      "shortAnswer": [
+        "Cancellation is delivered as a `CancellationException` thrown from the suspension point.",
+        "A catch-all swallows the signal, so the coroutine 'recovers' and keeps running while its Job is Cancelling.",
+        "Rethrow `CancellationException`, or call `ensureActive()` in the catch."
+      ],
+      "answer": "When a coroutine is cancelled, the *next suspension point* throws `CancellationException`. That is not a normal error — it is the cancellation signal. A `catch (e: Exception)` block catches it like anything else, and because it does not rethrow, the coroutine carries on executing as if nothing happened, while its `Job` is already in the `Cancelling` state.\n\n#### What the candidate should say\n1. **Rethrow** — check `if (e is CancellationException) throw e` first, or catch only the specific exception you meant to handle.\n2. **`ensureActive()`** — call `currentCoroutineContext().ensureActive()` at the top of the catch so a swallowed cancellation throws there and stops the recovery.\n3. **Never `runCatching` around a suspend call** — it catches `Throwable`, and `CancellationException` is a `Throwable`. Wrapping `api.load()` in `runCatching { }` silently eats cancellation exactly like the bare catch does.\n\nThe visible symptom: the user backs out of the screen, the coroutine should die, but the error path runs and shows a toast on a screen they already left — plus the underlying work keeps executing against a cancelled job.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Preserving the cancellation signal",
+          "src": "try {\n    api.load()\n} catch (e: Exception) {\n    if (e is CancellationException) throw e   // never swallow the signal\n    showError(e)\n}\n\n// runCatching is the same trap — it catches Throwable:\nval result = runCatching { api.load() }   // cancellation eaten"
+        }
+      ],
+      "followUps": [
+        "What type is thrown at a cancelled suspension point?",
+        "Why is catching `Throwable` worse than catching `Exception`?",
+        "What is the visible symptom of a swallowed cancellation?"
+      ],
+      "traps": [
+        "Answering 'catch the exception and move on'. Cancellation is not an error to recover from.",
+        "Defending `runCatching` around suspend code."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — cancellation and timeouts (exceptions)",
+          "url": "https://kotlinlang.org/docs/cancellation-and-timeouts.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0026",
+      "track": "coroutines-flow",
+      "topic": "Cancellation",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "finally",
+        "non-cancellable",
+        "cleanup"
+      ],
+      "q": "How do you release a resource in a `finally` block when the coroutine has already been cancelled?",
+      "shortAnswer": [
+        "In a cancelled coroutine every suspension point throws immediately, so a suspending `finally` never completes.",
+        "Wrap only the cleanup in `withContext(NonCancellable)`.",
+        "Keep it to a few bounded lines — `NonCancellable` makes the block genuinely uninterruptible."
+      ],
+      "answer": "A `finally` block runs after cancellation, but it runs in a context where every suspension point throws `CancellationException` immediately. So `finally { session.close() }` where `close()` suspends — flushing analytics, closing a socket, committing a write — throws at the first suspend call and the cleanup never finishes.\n\n#### The fix\nWrap *only the cleanup* in `withContext(NonCancellable)`: `finally { withContext(NonCancellable) { session.close() } }`. `NonCancellable` is a `Job` that ignores cancellation, so suspension points inside it complete normally. The keyword is *only the cleanup*: a bounded, few-line operation. Wrapping the real work in `NonCancellable` makes it genuinely uninterruptible — a file upload or a network call that can never be stopped — which is almost always wrong.\n\n#### The non-suspending cases\nFor plain resource release there is no problem: `file.close()` in a `finally` works fine after cancellation because it does not suspend. Use `job.invokeOnCompletion { }` for cleanup you want tied to the job's terminal state, and `Closeable.use` for the idiomatic scoped variant. The interview signal is knowing exactly when `NonCancellable` is required: only when the cleanup itself suspends.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "NonCancellable cleanup, bounded to the resource",
+          "src": "suspend fun upload() {\n    val stream = openStream()\n    try {\n        stream.write(data)          // can be cancelled\n    } finally {\n        withContext(NonCancellable) {\n            stream.close()          // suspending cleanup MUST complete\n        }\n    }\n}\n\n// Non-suspending cleanup needs no NonCancellable:\nfun read() = file.inputStream().use { it.readBytes() }"
+        }
+      ],
+      "followUps": [
+        "What happens to a suspending call in `finally` after cancellation?",
+        "Why must `NonCancellable` be limited to the cleanup?",
+        "When is `invokeOnCompletion` the better shape?"
+      ],
+      "traps": [
+        "Wrapping the whole body in `NonCancellable` — now nothing can stop it.",
+        "Assuming a `finally` with a suspend call just works after cancellation."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — cancellation and timeouts: runNonCancellable cleanup",
+          "url": "https://kotlinlang.org/docs/cancellation-and-timeouts.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0027",
+      "track": "coroutines-flow",
+      "topic": "Cancellation",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "with-timeout",
+        "timeout",
+        "cancellation"
+      ],
+      "q": "`withTimeout` vs `withTimeoutOrNull` — and what do people get wrong about both?",
+      "shortAnswer": [
+        "`withTimeout` throws `TimeoutCancellationException`; `withTimeoutOrNull` returns null.",
+        "That exception *is* a `CancellationException`, so an outer catch-all swallows it.",
+        "A timeout only fires at a suspension point, and a result produced right at the deadline is discarded."
+      ],
+      "answer": "`withTimeout(timeout) { ... }` runs the block and throws `TimeoutCancellationException` if it does not finish in time; `withTimeoutOrNull` runs the same block and returns `null` instead. The behavioural core is identical — both cancel the block at the deadline.\n\n#### Trap one — the exception's type\n`TimeoutCancellationException` **is** a `CancellationException`. Code that does `try { withTimeout(...) } catch (e: Exception) { ... }` swallows it as a routine error, and worse, an enclosing coroutine can be fooled into believing *it* was cancelled. Recheck the rethrow rule: `if (e is CancellationException) throw e`.\n\n#### Trap two — the deadline is cooperative\nA timeout can only fire at a suspension point. `Thread.sleep(5000)` or a blocking JNI call inside the block is never interrupted; the timeout waits until control returns to a suspend call, by which point the deadline has passed. The block completes, then the timeout wins.\n\n#### Trap three — the value at the boundary\nIf the block returns a value exactly at the deadline, `withTimeout` discards it — a `Response` or stream produced but abandoned, which is a resource leak if it owned a handle.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The two timeout forms and the swallow trap",
+          "src": "// Throws TimeoutCancellationException\nval a = withTimeout(1_000) { slowApi() }\n\n// Returns null instead\nval b = withTimeoutOrNull(1_000) { slowApi() } ?: fallback()\n\n// WRONG: swallowing the signal\nval c = try { withTimeout(1_000) { slowApi() } }\n       catch (e: Exception) { fallback() }      // eats cancellation\n\n// RIGHT:\nval c2 = try { withTimeout(1_000) { slowApi() } }\n        catch (e: TimeoutCancellationException) { fallback() }\n        catch (e: CancellationException) { throw e }"
+        }
+      ],
+      "followUps": [
+        "What type does `withTimeout` throw, and why does that matter?",
+        "What can a timeout not interrupt?",
+        "What happens to a value produced right at the deadline?"
+      ],
+      "traps": [
+        "Catching `Exception` around `withTimeout` and eating cancellation.",
+        "Believing the timeout interrupts blocking work."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — cancellation and timeouts: withTimeout",
+          "url": "https://kotlinlang.org/docs/cancellation-and-timeouts.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0028",
+      "track": "coroutines-flow",
+      "topic": "Cancellation",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "suspend-cancellable-coroutine",
+        "race",
+        "resource-leak"
+      ],
+      "q": "A `suspendCancellableCoroutine` wrapping a download is cancelled at the exact instant the response arrives. Who closes the response body?",
+      "shortAnswer": [
+        "Nobody — the resume/cancel race means the value passed to `resume()` is dropped when the continuation is already cancelled.",
+        "Use the `resume(value) { }` onCancellation overload so you get the resource back to close.",
+        "For channels, `onUndeliveredElement` covers the same leak."
+      ],
+      "answer": "This is the resume/cancellation race. The coroutine is cancelled; the callback fires and calls `resume(response)`. Because the continuation is already cancelled, the value is discarded — the `Response`, the `Cursor`, the file descriptor is never handed to anyone, and nobody closes it. A hand-rolled `try/finally` around the *suspension point* cannot close this window either: the suspension is abandoned the instant cancellation lands, before the finally can run, and the value arrives on the callback thread outside your try block.\n\n#### The fix\n- The `onCancellation` overload: `cont.resume(response) { r -> r.close() }`. If cancellation beats the resume, the lambda runs with the resource so you can release it.\n- For a `Channel` carrying such values, use `Channel(onUndeliveredElement = { it.close() })` — the same idea for the buffered case.\n- `CoroutineStart.ATOMIC` addresses the *start* race: the coroutine begins even if cancellation arrived in the window, so its setup can register proper cancellation hooks.\n\nName the general principle: every resource whose ownership crosses a suspension or a channel boundary needs an explicit teardown path that runs when nobody consumes it.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Closing the race with onCancellation",
+          "src": "suspend fun download(url: String): Response =\n    suspendCancellableCoroutine { cont ->\n        val call = client.newCall(Request(url))\n        call.enqueue { resp ->\n            // If the continuation is already cancelled,\n            // the lambda receives the value and closes it:\n            cont.resume(resp) { r -> r.close() }\n        }\n        cont.invokeOnCancellation { call.cancel() }\n    }\n\n// Channel equivalent:\nval results = Channel<Response>(onUndeliveredElement = { it.close() })"
+        }
+      ],
+      "followUps": [
+        "Why can't a try/finally across the suspension point fix this?",
+        "When is `CoroutineStart.ATOMIC` the relevant tool?",
+        "How does `onUndeliveredElement` extend the idea to channels?"
+      ],
+      "traps": [
+        "Claiming 'the callback checks `isActive` and skips the resume' — the value is already produced and owned.",
+        "Assuming the finally runs for a cancelled suspension. It does not, in time."
+      ],
+      "refs": [
+        {
+          "title": "kotlinx.coroutines — continuation resume with onCancellation",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines/suspend-cancellable-coroutine.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    }
+  ]
+}

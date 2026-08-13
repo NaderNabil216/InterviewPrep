@@ -1,0 +1,397 @@
+{
+  "id": "dsa-b",
+  "title": "Problem Solving",
+  "track": "dsa",
+  "items": [
+    {
+      "id": "ds-0007",
+      "track": "dsa",
+      "topic": "Two pointers",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Two pointers",
+      "tags": [
+        "array",
+        "two-pointers",
+        "sorting"
+      ],
+      "q": "3Sum — all unique triplets summing to zero",
+      "prompt": "Given an integer array, return all **unique** triplets `[a, b, c]` such that `a + b + c == 0`. The solution set must not contain duplicate triplets.\n\nThe interviewer is watching for two things: that you reduce this to a known subproblem, and that you handle deduplication without a `HashSet` of sorted triplets (which works but signals you didn't find the clean way).",
+      "hints": [
+        "The brute force is three nested loops, O(n³). If you fix one element, what does the remaining problem become?",
+        "Fixing `nums[i]` leaves 'find two numbers summing to `-nums[i]`'. On a **sorted** array, two pointers solves that in O(n) with O(1) space.",
+        "Deduplication: after sorting, skip `i` when `nums[i] == nums[i-1]`, and after finding a hit, advance `left`/`right` past their duplicates. Also break early once `nums[i] > 0` — three sorted positives can't sum to zero."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Sort + fix one + two pointers — O(n²)",
+          "src": "fun threeSum(nums: IntArray): List<List<Int>> {\n    nums.sort()\n    val result = mutableListOf<List<Int>>()\n\n    for (i in nums.indices) {\n        if (nums[i] > 0) break                      // sorted: no triplet can reach 0\n        if (i > 0 && nums[i] == nums[i - 1]) continue   // skip duplicate anchors\n\n        var left = i + 1\n        var right = nums.lastIndex\n\n        while (left < right) {\n            val sum = nums[i] + nums[left] + nums[right]\n            when {\n                sum < 0 -> left++\n                sum > 0 -> right--\n                else -> {\n                    result.add(listOf(nums[i], nums[left], nums[right]))\n                    // move past duplicates on BOTH sides\n                    while (left < right && nums[left] == nums[left + 1]) left++\n                    while (left < right && nums[right] == nums[right - 1]) right--\n                    left++; right--\n                }\n            }\n        }\n    }\n    return result\n}"
+        }
+      ],
+      "complexity": "Time O(n²) — O(n log n) sort plus an O(n) two-pointer scan per anchor. Space O(1) beyond the output (or O(n) depending on the sort implementation). Brute force is O(n³).",
+      "followUps": [
+        "3Sum Closest — return the triplet nearest to a target. What changes?",
+        "4Sum — how does the pattern generalize, and what's the complexity?",
+        "What if you couldn't sort the input (say it's a stream)?"
+      ],
+      "starter": "fun threeSum(nums: IntArray): List<List<Int>> {\n    // your solution\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Kotlin collection ordering",
+          "url": "https://kotlinlang.org/docs/collection-ordering.html",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0008",
+      "track": "dsa",
+      "topic": "Binary search",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Binary search on the answer",
+      "tags": [
+        "binary-search",
+        "optimization"
+      ],
+      "q": "Koko eating bananas — minimum speed to finish in H hours",
+      "prompt": "Koko has `piles` of bananas and `h` hours. She picks an eating speed `k` (bananas/hour); each hour she eats from one pile, and if that pile has fewer than `k` left she finishes it and waits. Return the **minimum** `k` that lets her finish all piles within `h` hours.\n\nThis is the canonical \"binary search on the answer\" problem. Recognizing that the search space is the *answer range* rather than the input array is the whole insight, and it generalizes to a large family of questions.",
+      "hints": [
+        "You're not searching the array — you're searching the possible values of `k`. What's the valid range for `k`?",
+        "`k` ranges from 1 to `max(piles)`. Is the predicate 'can she finish at speed k?' monotonic in k?",
+        "Yes: if speed `k` works, every speed above it works too. That monotonic boundary is exactly what binary search finds — search for the leftmost `k` where `canFinish(k)` is true."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Binary search over the answer space",
+          "src": "fun minEatingSpeed(piles: IntArray, h: Int): Int {\n    // hours needed at speed k — ceil division without floating point\n    fun hoursAt(k: Int): Long =\n        piles.sumOf { pile -> ((pile + k - 1) / k).toLong() }\n\n    var low = 1\n    var high = piles.max()\n\n    while (low < high) {\n        val mid = low + (high - low) / 2      // avoids overflow vs (low + high) / 2\n        if (hoursAt(mid) <= h) {\n            high = mid                         // mid works; it may still be beatable\n        } else {\n            low = mid + 1                      // too slow\n        }\n    }\n    return low                                 // low == high == smallest workable speed\n}"
+        }
+      ],
+      "complexity": "Time O(n log m) where n = piles.size and m = max(piles) — each of the log m candidate speeds costs an O(n) feasibility check. Space O(1).",
+      "followUps": [
+        "How do you recognize a 'binary search on the answer' problem in general?",
+        "Capacity to ship packages in D days — same pattern, what changes in the predicate?",
+        "Why `low + (high - low) / 2` instead of `(low + high) / 2`?",
+        "Why does the sum need to be `Long`?"
+      ],
+      "starter": "fun minEatingSpeed(piles: IntArray, h: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Kotlin binarySearch",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/binary-search.html",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0009",
+      "track": "dsa",
+      "topic": "Stack",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Monotonic stack",
+      "tags": [
+        "stack",
+        "array"
+      ],
+      "q": "Daily temperatures — days until a warmer day",
+      "prompt": "Given daily temperatures, return an array where `answer[i]` is the number of days you must wait after day `i` for a warmer temperature. If there is none, put `0`.\n\nThe monotonic stack is one of the highest-leverage patterns to recognize: next-greater-element, largest rectangle in a histogram, trapping rain water, and stock spans are all the same machine.",
+      "hints": [
+        "Brute force is O(n²): for each day scan forward. What work is being repeated across those scans?",
+        "You're repeatedly asking 'what is the next element greater than this one?'. Keep a stack of indices whose answers are still unresolved.",
+        "Maintain the stack in decreasing temperature order. When a warmer day arrives, it resolves everything on the stack that's colder — pop them and record the distance."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Monotonic decreasing stack of indices — O(n)",
+          "src": "fun dailyTemperatures(temps: IntArray): IntArray {\n    val answer = IntArray(temps.size)\n    val stack = ArrayDeque<Int>()          // indices, temperatures decreasing bottom -> top\n\n    for (i in temps.indices) {\n        // today resolves every colder unresolved day on the stack\n        while (stack.isNotEmpty() && temps[i] > temps[stack.last()]) {\n            val prev = stack.removeLast()\n            answer[prev] = i - prev\n        }\n        stack.addLast(i)\n    }\n    return answer                          // anything left on the stack keeps its 0\n}"
+        }
+      ],
+      "complexity": "Time O(n) — each index is pushed once and popped at most once, so the inner while loop is amortized O(1). Space O(n) for the stack. This amortized argument is the part to say out loud; interviewers often ask 'but isn't that nested loop O(n²)?'",
+      "followUps": [
+        "Next Greater Element II, where the array is circular — what's the trick? (Iterate twice, mod n.)",
+        "Largest rectangle in a histogram — how is it the same pattern?",
+        "Trapping rain water — solve it with a monotonic stack, then with two pointers. Which is clearer?"
+      ],
+      "starter": "fun dailyTemperatures(temps: IntArray): IntArray {\n    // your solution\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Kotlin ArrayDeque",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0010",
+      "track": "dsa",
+      "topic": "Heap",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Heap / top-K",
+      "tags": [
+        "heap",
+        "priority-queue",
+        "sorting"
+      ],
+      "q": "Top K frequent elements",
+      "prompt": "Given an integer array and an integer `k`, return the `k` most frequent elements, in any order.\n\nThe interviewer wants the frequency-map insight, then a considered choice between sorting, a heap, and bucket sort — and an honest complexity statement for each.",
+      "hints": [
+        "First step is always the same: count frequencies with a hash map. Now the question is how to pick the top k from those counts.",
+        "Sorting all distinct values is O(m log m). A min-heap of size k gets you O(m log k), which is better when k is small.",
+        "Can you do O(n)? Frequencies are bounded by n, so you can bucket by frequency — index = count, value = list of numbers with that count. Walk the buckets from the top."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Min-heap of size k — O(m log k)",
+          "src": "fun topKFrequent(nums: IntArray, k: Int): IntArray {\n    val counts = nums.toList().groupingBy { it }.eachCount()\n\n    // Min-heap on frequency: the smallest frequency sits on top and gets evicted\n    val heap = PriorityQueue<Map.Entry<Int, Int>>(compareBy { it.value })\n    for (entry in counts.entries) {\n        heap.offer(entry)\n        if (heap.size > k) heap.poll()\n    }\n    return heap.map { it.key }.toIntArray()\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "Bucket sort — O(n), the answer that impresses",
+          "src": "fun topKFrequentBuckets(nums: IntArray, k: Int): IntArray {\n    val counts = nums.toList().groupingBy { it }.eachCount()\n\n    // A value can appear at most nums.size times, so frequency is a bounded index\n    val buckets = Array(nums.size + 1) { mutableListOf<Int>() }\n    for ((value, freq) in counts) buckets[freq].add(value)\n\n    val result = ArrayList<Int>(k)\n    for (freq in buckets.indices.reversed()) {\n        for (value in buckets[freq]) {\n            result.add(value)\n            if (result.size == k) return result.toIntArray()\n        }\n    }\n    return result.toIntArray()\n}"
+        }
+      ],
+      "complexity": "Counting is O(n). Heap approach O(m log k) time / O(m) space, where m = distinct values. Bucket approach O(n) time / O(n) space. Full sort is O(m log m). Say which you'd ship and why — the heap generalizes to streams, the buckets are faster but need bounded frequencies.",
+      "followUps": [
+        "Which approach works if the data arrives as an unbounded stream?",
+        "Why is the heap a **min**-heap when you want the most frequent elements?",
+        "K closest points to the origin — same pattern, what's the comparator?"
+      ],
+      "starter": "fun topKFrequent(nums: IntArray, k: Int): IntArray {\n    // your solution\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "java.util.PriorityQueue (Android API reference)",
+          "url": "https://developer.android.com/reference/java/util/PriorityQueue",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0011",
+      "track": "dsa",
+      "topic": "Graphs",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Graph — topological sort",
+      "tags": [
+        "graph",
+        "topological-sort",
+        "bfs"
+      ],
+      "q": "Course schedule — can you finish all courses?",
+      "prompt": "There are `numCourses` courses labelled `0..numCourses-1` and a list of prerequisite pairs `[a, b]` meaning you must take `b` before `a`. Return whether it's possible to finish every course.\n\nThis is cycle detection in a directed graph, dressed up. The follow-up (\"return a valid order\") is a two-line change, so be ready for it.",
+      "hints": [
+        "Model it as a graph. What does a prerequisite pair mean as an edge, and what makes the schedule impossible?",
+        "It's impossible exactly when the directed graph has a cycle. Two standard approaches: DFS with three-colour marking, or BFS on in-degrees (Kahn's algorithm).",
+        "Kahn's: repeatedly take nodes with in-degree 0, remove their outgoing edges. If you process fewer than `numCourses` nodes, the remainder is a cycle."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Kahn's algorithm — also yields the order for free",
+          "src": "fun canFinish(numCourses: Int, prerequisites: Array<IntArray>): Boolean {\n    val graph = Array(numCourses) { mutableListOf<Int>() }\n    val inDegree = IntArray(numCourses)\n\n    for ((course, prereq) in prerequisites.map { it[0] to it[1] }) {\n        graph[prereq].add(course)      // edge prereq -> course\n        inDegree[course]++\n    }\n\n    val queue = ArrayDeque<Int>()\n    for (c in 0 until numCourses) if (inDegree[c] == 0) queue.add(c)\n\n    val order = mutableListOf<Int>()   // the follow-up answer, free\n    while (queue.isNotEmpty()) {\n        val node = queue.removeFirst()\n        order.add(node)\n        for (next in graph[node]) {\n            if (--inDegree[next] == 0) queue.add(next)\n        }\n    }\n    return order.size == numCourses    // shortfall => a cycle blocked the rest\n}"
+        }
+      ],
+      "complexity": "Time O(V + E) — every node enqueued once, every edge relaxed once. Space O(V + E) for the adjacency list plus O(V) for the queue and in-degree array.",
+      "followUps": [
+        "Course Schedule II — return a valid ordering. (It's `order` above.)",
+        "How would you detect the cycle with DFS instead, and what do the three colours mean?",
+        "What if there were multiple valid orders and you needed the lexicographically smallest? (Use a min-heap instead of a queue.)"
+      ],
+      "starter": "fun canFinish(numCourses: Int, prerequisites: Array<IntArray>): Boolean {\n    // your solution\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Kotlin ArrayDeque",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0012",
+      "track": "dsa",
+      "topic": "Graphs",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Graph — union-find / DFS on grid",
+      "tags": [
+        "graph",
+        "union-find",
+        "dfs",
+        "matrix"
+      ],
+      "q": "Number of islands",
+      "prompt": "Given an `m x n` grid of `'1'` (land) and `'0'` (water), count the islands. An island is land connected horizontally or vertically, surrounded by water.\n\nThe most common grid-traversal question. Solve it with DFS/BFS flood fill, then be ready to discuss union-find — the follow-up is usually a streaming variant where union-find wins.",
+      "hints": [
+        "Each island is a connected component. How do you count connected components in a graph?",
+        "Walk every cell. When you hit unvisited land, that's a new island — then flood-fill everything reachable from it so you never count it twice.",
+        "You can mark visited by mutating the grid to '0'. Ask the interviewer whether mutating the input is acceptable; if not, use a separate visited array."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Iterative BFS flood fill — no stack-overflow risk on large grids",
+          "src": "fun numIslands(grid: Array<CharArray>): Int {\n    if (grid.isEmpty()) return 0\n    val rows = grid.size\n    val cols = grid[0].size\n    val directions = arrayOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)\n    var islands = 0\n\n    for (r in 0 until rows) {\n        for (c in 0 until cols) {\n            if (grid[r][c] != '1') continue\n\n            islands++\n            // BFS flood fill — iterative avoids blowing the stack on a 1000x1000 grid\n            val queue = ArrayDeque<Pair<Int, Int>>()\n            queue.add(r to c)\n            grid[r][c] = '0'                       // mark visited immediately\n\n            while (queue.isNotEmpty()) {\n                val (cr, cc) = queue.removeFirst()\n                for ((dr, dc) in directions) {\n                    val nr = cr + dr\n                    val nc = cc + dc\n                    if (nr in 0 until rows && nc in 0 until cols && grid[nr][nc] == '1') {\n                        grid[nr][nc] = '0'\n                        queue.add(nr to nc)\n                    }\n                }\n            }\n        }\n    }\n    return islands\n}"
+        }
+      ],
+      "complexity": "Time O(m·n) — every cell is visited a constant number of times. Space O(min(m,n)) for the BFS queue in the worst case (O(m·n) for DFS recursion, which is why iterative BFS is safer on big grids).",
+      "followUps": [
+        "Number of Islands II — land is added one cell at a time and you must report the count after each addition. Why does union-find win here?",
+        "What if diagonal connections counted?",
+        "Max area of island / surrounded regions — same machine, different bookkeeping.",
+        "Why prefer iterative BFS over recursive DFS in production code?"
+      ],
+      "starter": "fun numIslands(grid: Array<CharArray>): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Kotlin ArrayDeque",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0013",
+      "track": "dsa",
+      "topic": "Backtracking",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Backtracking",
+      "tags": [
+        "backtracking",
+        "recursion"
+      ],
+      "q": "Subsets and combination sum — the backtracking template",
+      "prompt": "Two problems that share one template:\n\n1. **Subsets** — return all possible subsets (the power set) of a set of distinct integers.\n2. **Combination Sum** — given distinct candidates and a target, return all unique combinations summing to the target. The same candidate may be reused unlimited times.\n\nLearn the template once and most backtracking questions become bookkeeping.",
+      "hints": [
+        "Backtracking is: choose → explore → un-choose. Write those three lines and the structure follows.",
+        "For subsets, the choice at each index is binary: include it or don't. The recursion tree has 2ⁿ leaves, which matches the output size.",
+        "For combination sum with reuse, recurse on the **same** index after choosing an element. To forbid reuse, recurse on `index + 1`. That one character is the entire difference."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The template, applied twice",
+          "src": "// 1. Subsets — power set\nfun subsets(nums: IntArray): List<List<Int>> {\n    val result = mutableListOf<List<Int>>()\n    val current = mutableListOf<Int>()\n\n    fun backtrack(start: Int) {\n        result.add(current.toList())          // every node is a valid subset\n        for (i in start until nums.size) {\n            current.add(nums[i])              // choose\n            backtrack(i + 1)                  // explore (i+1 => no reuse)\n            current.removeAt(current.lastIndex)  // un-choose\n        }\n    }\n    backtrack(0)\n    return result\n}\n\n// 2. Combination Sum — unlimited reuse\nfun combinationSum(candidates: IntArray, target: Int): List<List<Int>> {\n    val result = mutableListOf<List<Int>>()\n    val current = mutableListOf<Int>()\n    candidates.sort()                          // enables the early break\n\n    fun backtrack(start: Int, remaining: Int) {\n        if (remaining == 0) { result.add(current.toList()); return }\n\n        for (i in start until candidates.size) {\n            if (candidates[i] > remaining) break    // sorted: everything after is worse\n            current.add(candidates[i])             // choose\n            backtrack(i, remaining - candidates[i]) // explore — `i`, not `i + 1`, allows reuse\n            current.removeAt(current.lastIndex)     // un-choose\n        }\n    }\n    backtrack(0, target)\n    return result\n}"
+        }
+      ],
+      "complexity": "Subsets: O(n · 2ⁿ) time — 2ⁿ subsets, each costing O(n) to copy — and O(n) recursion depth. Combination Sum: exponential, bounded by O(n^(target/min)); the sort plus early break prunes heavily in practice. Always note that the output size itself is exponential, so you cannot beat it asymptotically.",
+      "followUps": [
+        "Subsets II / Combination Sum II — the input has duplicates. How do you dedupe? (Sort, then skip `i > start && nums[i] == nums[i-1]`.)",
+        "Permutations — why does the template need a `used` array instead of a `start` index?",
+        "Word search on a grid — how does backtracking apply, and what must you restore?",
+        "N-Queens — what's the pruning that makes it tractable?"
+      ],
+      "starter": "fun subsets(nums: IntArray): List<List<Int>> {\n    // your solution\n}\n\nfun combinationSum(candidates: IntArray, target: Int): List<List<Int>> {\n    // your solution\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin sequences",
+          "url": "https://kotlinlang.org/docs/sequences.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0014",
+      "track": "dsa",
+      "topic": "Linked list",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Linked list — fast/slow pointers",
+      "tags": [
+        "linked-list",
+        "two-pointers"
+      ],
+      "q": "Linked list toolkit — reverse, detect a cycle, find the middle",
+      "prompt": "Three linked-list primitives that compose into most list questions:\n\n1. **Reverse** a singly linked list, iteratively.\n2. **Detect a cycle** and return the node where it begins.\n3. **Find the middle** node in one pass.\n\nIf you can write all three without hesitation, you can build reorder-list, palindrome-list, and merge-k-lists from them on the spot.",
+      "hints": [
+        "Reversal: you need three pointers — previous, current, and a saved next. Losing `next` before you overwrite `current.next` is the classic bug.",
+        "Cycle detection: Floyd's tortoise and hare. Slow moves one step, fast moves two. If they meet, there's a cycle.",
+        "To find the cycle's *start*: after they meet, reset one pointer to the head and advance both one step at a time. They meet at the entry — that falls out of the algebra of the loop lengths."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "All three primitives",
+          "src": "class ListNode(var v: Int) { var next: ListNode? = null }\n\n// 1. Reverse — O(n) time, O(1) space\nfun reverse(head: ListNode?): ListNode? {\n    var prev: ListNode? = null\n    var current = head\n    while (current != null) {\n        val next = current.next     // save BEFORE overwriting\n        current.next = prev\n        prev = current\n        current = next\n    }\n    return prev\n}\n\n// 2. Cycle detection + entry point (Floyd)\nfun detectCycle(head: ListNode?): ListNode? {\n    var slow = head\n    var fast = head\n    while (fast?.next != null) {\n        slow = slow?.next\n        fast = fast.next?.next\n        if (slow === fast) {                 // reference equality, not ==\n            var entry = head\n            while (entry !== slow) {\n                entry = entry?.next\n                slow = slow?.next\n            }\n            return entry\n        }\n    }\n    return null\n}\n\n// 3. Middle node — for even length this returns the second middle\nfun middle(head: ListNode?): ListNode? {\n    var slow = head\n    var fast = head\n    while (fast?.next != null) {\n        slow = slow?.next\n        fast = fast.next?.next\n    }\n    return slow\n}"
+        }
+      ],
+      "complexity": "All three are O(n) time and O(1) space. Note that recursive reversal is also O(n) time but O(n) stack space — mention that trade-off, and that a long list can overflow the stack.",
+      "followUps": [
+        "Prove why resetting to the head finds the cycle entry.",
+        "Palindrome linked list in O(1) space — which two primitives do you combine?",
+        "Reorder list (L0 → Ln → L1 → Ln-1 …) — same building blocks.",
+        "Why `===` rather than `==` when comparing nodes in Kotlin?"
+      ],
+      "starter": "class ListNode(var v: Int) { var next: ListNode? = null }\n\nfun reverse(head: ListNode?): ListNode? {\n    // your solution\n}\n\nfun detectCycle(head: ListNode?): ListNode? {\n    // your solution\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin sequences",
+          "url": "https://kotlinlang.org/docs/sequences.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    }
+  ]
+}

@@ -1,0 +1,488 @@
+{
+  "specs": [
+    {
+      "topic": "Suspend mechanics",
+      "level": 1,
+      "type": "qa",
+      "q": "How is a coroutine different from a thread?",
+      "angle": "A coroutine is a heap object scheduled onto a thread pool, not an OS thread: a few hundred bytes versus a ~512KB-1MB thread stack, so 100k coroutines are routine and 100k threads OOM. Must land the corollary a weak candidate misses: coroutines do not make blocking code non-blocking — a coroutine calling a blocking API occupies its carrier thread exactly like any other code."
+    },
+    {
+      "topic": "Suspend mechanics",
+      "level": 1,
+      "type": "qa",
+      "q": "Does marking a function `suspend` make it run off the main thread?",
+      "angle": "No. `suspend` is a compiler contract (it adds a Continuation parameter), not a threading keyword; the function runs on whatever dispatcher the caller was on. Main-safety is the callee's responsibility via an internal `withContext(ioDispatcher)`, so `suspend fun` + Room/Retrofit is safe only because those libraries dispatch internally."
+    },
+    {
+      "topic": "Suspend mechanics",
+      "level": 1,
+      "type": "qa",
+      "q": "What is the difference between `delay(1000)` and `Thread.sleep(1000)` inside a coroutine?",
+      "angle": "`delay` suspends: it schedules a resume on the dispatcher's timer and hands the thread back. `Thread.sleep` parks the OS thread, so four sleeping coroutines on a 4-core `Dispatchers.Default` wedge the entire pool. Add the test angle: `delay` is skipped by `runTest`'s virtual clock, `Thread.sleep` genuinely sleeps and makes the suite slow and flaky."
+    },
+    {
+      "topic": "Suspend mechanics",
+      "level": 3,
+      "type": "qa",
+      "q": "What does a single suspension point actually cost at runtime?",
+      "angle": "The fast path is nearly free: if the callee returns without suspending it returns the value directly instead of `COROUTINE_SUSPENDED`, and one state-machine object is reused for the whole call chain — single-digit nanoseconds. The cost shows up when it really suspends: spilling every live local into a field, the `switch (label)` re-entry, and possibly a dispatch (a Handler post or a scheduler task, ~microseconds) — which is precisely why `withContext` inside a hot loop is a measurable regression."
+    },
+    {
+      "topic": "Suspend mechanics",
+      "level": 3,
+      "type": "qa",
+      "q": "Turn a callback-based API into a suspend function.",
+      "angle": "`suspendCancellableCoroutine` plus `invokeOnCancellation { call.cancel() }`; the continuation must be resumed exactly once (a second `resume` throws IllegalStateException). Explain why `suspendCoroutine` is the wrong tool: it has no cancellation hook, so a cancelled coroutine leaves the callback registered and the caller waits forever. Show the resource-carrying case with the `resume(value) { ... }` onCancellation overload."
+    },
+    {
+      "topic": "Suspend mechanics",
+      "level": 4,
+      "type": "qa",
+      "q": "A callback resumes your continuation from a random OkHttp thread. How does the coroutine get back onto the main thread?",
+      "angle": "`ContinuationInterceptor` is a context element: the dispatcher wraps your continuation in a `DispatchedContinuation`, and `resumeWith` consults `isDispatchNeeded`/`dispatch` to re-post onto the target. That is exactly why `Dispatchers.Main.immediate` returns false from `isDispatchNeeded` when already on Main and skips a Handler round trip, and why `Unconfined` never re-posts. Tie it to `CoroutineStart.DEFAULT` vs `UNDISPATCHED` vs `ATOMIC` and the ordering surprise that a `launch` body has not started yet when the next line executes."
+    },
+    {
+      "topic": "Structured concurrency",
+      "level": 1,
+      "type": "qa",
+      "q": "Why can't you call a suspend function directly from `onCreate()` or a click listener, and what do you do instead?",
+      "angle": "A suspend function needs a Continuation, so it can only be called from inside a coroutine — you need a `CoroutineScope`, and Android hands you `viewModelScope` / `lifecycleScope`. Explicitly reject the two wrong fixes a junior offers: wrapping it in `runBlocking`, and making the framework callback itself suspend. The point of the scope is that it binds the work's lifetime to the component's."
+    },
+    {
+      "topic": "Coroutine context",
+      "level": 2,
+      "type": "qa",
+      "q": "What is a `CoroutineContext`, and what does the `+` operator actually do?",
+      "angle": "It is an immutable, type-indexed set — a map from `Key` to `Element` — and the four elements you meet are `Job`, `ContinuationInterceptor` (the dispatcher), `CoroutineName` and `CoroutineExceptionHandler`. `a + b` is right-biased: the right operand replaces any same-key element. Show `coroutineContext[Job]`, `minusKey`, and the inheritance rule — a child copies the parent's context but substitutes its own new Job."
+    },
+    {
+      "topic": "Coroutine context",
+      "level": 2,
+      "type": "qa",
+      "q": "What does `CoroutineScope(Dispatchers.Main + SupervisorJob())` create, and what happens to it after you call `cancel()`?",
+      "angle": "A CoroutineScope is nothing but a holder for a CoroutineContext; the `CoroutineScope(...)` factory adds a Job if you did not supply one, and you own cancelling it. The trap that gets people: a cancelled scope is dead permanently — `launch` on it returns an already-cancelled Job and the block never runs, with no exception and no log. If you want to reuse the scope, use `coroutineContext.cancelChildren()` instead."
+    },
+    {
+      "topic": "Structured concurrency",
+      "level": 2,
+      "type": "qa",
+      "q": "`Job` vs `SupervisorJob` — and why does `launch(SupervisorJob())` supervise nothing?",
+      "angle": "SupervisorJob only changes how failures of *its own children* propagate. Passing one into `launch` makes it that coroutine's own Job, so the siblings you wanted isolated are unaffected — and the new Job is still parented to the enclosing job, so a failure propagates upward anyway. The only correct forms are `CoroutineScope(SupervisorJob() + ...)` and `supervisorScope { }`."
+    },
+    {
+      "topic": "Structured concurrency",
+      "level": 2,
+      "type": "qa",
+      "q": "Why is `GlobalScope` effectively banned, and what replaces it?",
+      "angle": "No parent, no Job you can cancel, and uncaught exceptions go straight to the thread's default handler and crash the app — the coroutine outlives the screen while holding whatever it captured. Replacements: an injected application-scoped `CoroutineScope(SupervisorJob() + Dispatchers.Default)` for fire-and-forget, or WorkManager when the work must survive process death. Mention the `@DelicateCoroutinesApi` opt-in as the library telling you the same thing."
+    },
+    {
+      "topic": "Structured concurrency",
+      "level": 4,
+      "type": "qa",
+      "q": "The user taps Save and immediately backs out. `viewModelScope` is cancelled and the POST dies. Fix it, and defend the design.",
+      "angle": "This is structured concurrency working as specified — no work outlives its scope — so the fix is to give the work a scope whose lifetime matches the *work*: an `@ApplicationScope` singleton scope owned by the repository, or WorkManager with unique work for anything that must survive process death. Argue both sides (a leaked app-scoped write vs a lost user edit) and name the three wrong answers: `NonCancellable`, `GlobalScope`, and launching in the ViewModel and hoping."
+    },
+    {
+      "topic": "Exception handling",
+      "level": 3,
+      "type": "qa",
+      "q": "Where exactly does a `CoroutineExceptionHandler` fire, and where does it silently do nothing?",
+      "angle": "It is consulted only by the *root* coroutine of a scope. Installing it on a child `launch` is ignored — the exception goes to the parent — and it never applies to `async`, whose exception sits in the Deferred until `await()`. Direct children of `supervisorScope` behave as roots, so a handler there does fire. With no handler the exception reaches `Thread.uncaughtExceptionHandler` and crashes the Android process."
+    },
+    {
+      "topic": "Exception handling",
+      "level": 3,
+      "type": "qa",
+      "q": "Fetch profile, settings and feed in parallel. Show the code, then explain exactly what happens when one of them fails.",
+      "angle": "`coroutineScope { val a = async{}; val b = async{}; awaitAll(a, b) }` is fail-fast: the failing child cancels its siblings and `coroutineScope` rethrows at the first `await`. Contrast the partial-results variant (`supervisorScope` + per-branch `runCatching`, remembering that an `async` under a supervisor holds its exception until awaited and loses it entirely if never awaited), and name the `async(start = LAZY)` trap where a Deferred that is never awaited makes `coroutineScope` hang forever on a child that never started."
+    },
+    {
+      "topic": "Coroutine builders",
+      "level": 4,
+      "type": "qa",
+      "q": "Race a cache read against a network call and take whichever answers first. What are the options, and what leaks?",
+      "angle": "`select { cacheDeferred.onAwait { }; networkDeferred.onAwait { } }` returns the first branch — but the losing coroutine keeps running unless you cancel it, so you leak a request and possibly a registered callback; wrapping in `coroutineScope` and cancelling the loser explicitly is the fix. Cover `onTimeout`/`onReceive`, the experimental status of parts of `select`, and the simpler alternatives that usually win a code review: `withTimeoutOrNull`, `merge(a, b).first()`."
+    },
+    {
+      "topic": "Cancellation",
+      "level": 2,
+      "type": "qa",
+      "q": "Cancellation is cooperative. What does that mean, and how do you make a CPU-bound loop cancellable?",
+      "angle": "`cancel()` only moves the Job to Cancelling and arms the *next suspension point* to throw — a `while (true) { crunch() }` with no suspension runs to completion regardless. Add `ensureActive()` (throws) or check `isActive` (returns cleanly), and use `yield()` when you also want to let other coroutines on that dispatcher run. Second half: `cancel()` returns immediately, so use `cancelAndJoin()` when you need the coroutine to actually be finished — the classic source of flaky tests."
+    },
+    {
+      "topic": "Cancellation",
+      "level": 3,
+      "type": "qa",
+      "q": "Why does `try { api.load() } catch (e: Exception) { showError() }` break cancellation?",
+      "angle": "Cancellation is delivered as a `CancellationException` thrown from the suspension point, so a catch-all swallows the signal: the coroutine 'recovers' and keeps executing while its Job is already Cancelling, and the user sees an error toast on a screen they already left. The rules to state: rethrow `CancellationException` (or catch only the specific exception), call `currentCoroutineContext().ensureActive()` at the top of the catch, and never wrap a suspend call in `runCatching`, which catches Throwable."
+    },
+    {
+      "topic": "Cancellation",
+      "level": 3,
+      "type": "qa",
+      "q": "How do you release a resource in a `finally` block when the coroutine has already been cancelled?",
+      "angle": "In a cancelled coroutine every suspension point throws immediately, so a `finally` that suspends — closing a session, flushing analytics — never completes. Wrap only that cleanup in `withContext(NonCancellable)`. Insist on the boundary: a few lines with a bounded runtime, never a wrapper around the real work, because `NonCancellable` makes the block genuinely uninterruptible. Mention `job.invokeOnCompletion` and `Closeable.use` for the non-suspending case."
+    },
+    {
+      "topic": "Cancellation",
+      "level": 2,
+      "type": "qa",
+      "q": "`withTimeout` vs `withTimeoutOrNull` — and what do people get wrong about both?",
+      "angle": "withTimeout throws `TimeoutCancellationException`, withTimeoutOrNull returns null. Trap one: that exception *is* a `CancellationException`, so an outer catch-all swallows it and an enclosing coroutine can be fooled into thinking it was cancelled. Trap two: the timeout can only fire at a suspension point, so it will not interrupt `Thread.sleep` or a blocking JNI call — and a result produced right at the deadline is discarded, which is a resource leak if it owned a stream."
+    },
+    {
+      "topic": "Cancellation",
+      "level": 4,
+      "type": "qa",
+      "q": "A `suspendCancellableCoroutine` wrapping a download is cancelled at the exact instant the response arrives. Who closes the response body?",
+      "angle": "Nobody — the resume/cancel race means the value passed to `resume()` is dropped on the floor when the continuation is already cancelled, leaking the `Response`, `Cursor` or file descriptor. Fixes: the `resume(value) { ... }` onCancellation overload, `Channel(onUndeliveredElement = { it.close() })` for the channel case, and `CoroutineStart.ATOMIC` when the launch itself must not be skipped. Explain why a hand-rolled try/finally across a suspension point does not close this window."
+    },
+    {
+      "topic": "Coroutine builders",
+      "level": 2,
+      "type": "qa",
+      "q": "Compare `launch`, `async`, `withContext`, `coroutineScope`, `runBlocking` and `produce`: what each returns, which ones suspend, and how each surfaces an exception.",
+      "angle": "A table the candidate should be able to reconstruct from first principles: launch → Job, fire-and-forget, exception straight to the parent; async → Deferred, exception parked until `await()`; withContext/coroutineScope → suspending, return a value, rethrow to the caller; runBlocking → blocks a thread and is not a suspend function; produce → hot ReceiveChannel. Include the four `CoroutineStart` modes and the rule that a single call should use `withContext`, never `async { }.await()`."
+    },
+    {
+      "topic": "Coroutine builders",
+      "level": 3,
+      "type": "qa",
+      "q": "Why is `runBlocking` banned in production Android code, and where is it legitimately correct?",
+      "angle": "It blocks the calling thread and runs an event loop on it until the block finishes — on Main that is a guaranteed ANR. The killer detail: `runBlocking { withContext(Dispatchers.Main) { } }` called *from* the main thread deadlocks, because the looper is blocked and can never dispatch the inner block. Legitimate uses: `fun main()`, JUnit tests, and framework entry points that must return synchronously (ContentProvider, a legacy Worker). Everywhere else it means the caller should have been suspend."
+    },
+    {
+      "topic": "Dispatchers",
+      "level": 3,
+      "type": "qa",
+      "q": "What does `withContext(Dispatchers.IO)` actually do, and what does it cost?",
+      "angle": "It suspends, creates a child coroutine with the merged context, dispatches to the target, runs the block, then dispatches back and returns the value — up to two thread hand-offs per call, so calling it per item inside a loop instead of hoisting it around the loop is a real regression. Three semantics to nail: it is strictly sequential (never a concurrency tool), it is cancelled with its caller, and a `Job` you pass in is replaced by the new coroutine's own Job — `withContext(IO + Job())` detaches nothing."
+    },
+    {
+      "topic": "Dispatchers",
+      "level": 4,
+      "type": "qa",
+      "q": "You need at most 4 concurrent uploads. `Dispatchers.IO.limitedParallelism(4)`, a `Semaphore(4)`, or `flatMapMerge(concurrency = 4)`?",
+      "angle": "limitedParallelism is a *view* over the shared CoroutineScheduler that caps how many tasks are dispatched simultaneously — a coroutine that suspends (exactly what an upload does while awaiting IO) gives the slot back, so it does not bound logical concurrency at all; `Semaphore(4)` or `flatMapMerge(4)` do. Use the answer to explain the shared IO/Default pool, IO's elastic 64-thread limit (`kotlinx.coroutines.io.parallelism`) layered on CPU permits, why a blocking call on Default starves it, and when `Executor.asCoroutineDispatcher()` — which you must close — is still justified."
+    },
+    {
+      "topic": "Shared state",
+      "level": 3,
+      "type": "qa",
+      "q": "`Mutex` vs `synchronized` in suspending code.",
+      "angle": "`synchronized` takes a JVM monitor bound to a *thread*; the compiler refuses a suspension point inside it, and if it did not, a coroutine could suspend while still owning a monitor that another coroutine on the same thread needs. `Mutex.withLock` is suspending, cancellation-aware and FIFO-fair — but explicitly **not reentrant**, so a nested `withLock` on the same mutex deadlocks permanently — and it is far slower than an atomic under contention."
+    },
+    {
+      "topic": "Shared state",
+      "level": 3,
+      "type": "qa",
+      "q": "Three coroutines increment a shared counter and you get the wrong number. Rank the fixes.",
+      "angle": "Preference order: don't share (confine the state to one coroutine or a `limitedParallelism(1)` dispatcher), then immutable state behind `MutableStateFlow.update { it.copy(...) }`, then `AtomicInteger`/`AtomicReference`, and only then `Mutex`. Two traps must appear: `update {}` is a compare-and-set loop so the lambda **can run more than once** and must be side-effect-free, and `state.value = state.value + 1` is a lost-update race — which is the entire reason `update` exists."
+    },
+    {
+      "topic": "Flow basics",
+      "level": 1,
+      "type": "qa",
+      "q": "What is a Flow, and what happens the moment you call `collect`?",
+      "angle": "A Flow is essentially a suspend function that can return many values: `collect` runs the builder block in the *collector's own coroutine*, and each `emit` is a direct suspending call into the collector's lambda, so intermediate operators are just wrappers around the collector. Nothing runs until a terminal operator is invoked, and every new collector re-runs the whole chain. Contrast intermediate (returns a Flow, lazy, free) vs terminal (suspends, does the work)."
+    },
+    {
+      "topic": "Flow operators",
+      "level": 2,
+      "type": "qa",
+      "q": "Tour the Flow operators you use daily, and name the two that people misuse.",
+      "angle": "map/filter, `transform` (0..n emissions per input — the escape hatch when map is not enough), onEach, onStart for a Loading state, scan/runningFold for accumulation; terminals first/single/toList/fold plus `launchIn(scope)` as sugar for `scope.launch { collect() }`. The two misused: `onCompletion`, which receives the cause including a CancellationException, runs on failure, but cannot swallow the exception; and `first()`, which cancels the upstream after one value — correct for a one-shot read, silently wrong when you meant to observe."
+    },
+    {
+      "topic": "Flow internals",
+      "level": 3,
+      "type": "qa",
+      "q": "`flow { withContext(Dispatchers.IO) { emit(x) } }` crashes at runtime. Why, and what is the rule?",
+      "angle": "'Flow invariant is violated: emission from another coroutine context' — `emit` must be called from the same coroutine that called `collect`, otherwise the collector's context and Job no longer govern the emission and cancellation breaks. The correct tools are `flowOn(Dispatchers.IO)`, which changes the context of everything *upstream of that operator only* by inserting an extra coroutine and channel, and `channelFlow` when you genuinely need concurrent emitters. Note that a second `flowOn` lower in the chain does not undo the first."
+    },
+    {
+      "topic": "Flow internals",
+      "level": 3,
+      "type": "qa",
+      "q": "Exception transparency: what can `catch` catch, and what escapes it?",
+      "angle": "`catch` sees only exceptions thrown *upstream of itself* — a crash inside the `collect { }` lambda flies straight past it, which is why you move that body into an `onEach { }` above the `catch` if you want it covered. Also: wrapping your own `emit` in try/catch violates transparency because it can capture the *downstream's* exception; `catch` may emit a fallback value; and `retry`/`retryWhen` are built on exactly this machinery."
+    },
+    {
+      "topic": "Flow internals",
+      "level": 4,
+      "type": "qa",
+      "q": "Explain `buffer`, `conflate` and `collectLatest` at the channel level, and what operator fusion does to them.",
+      "angle": "`buffer(capacity, onBufferOverflow)` inserts a Channel plus a second coroutine so producer and collector run concurrently; `conflate()` is exactly `buffer(CONFLATED)`; `collectLatest` buffers nothing at all — it cancels and restarts the *collector body* on each new value, so the producer still runs flat out and a slow body may never complete once. Then the part almost nobody knows: adjacent `flowOn`/`buffer`/`conflate` operators are **fused** into a single channel with combined capacity, so `.conflate().buffer(10)` is not two buffers."
+    },
+    {
+      "topic": "Flow operators",
+      "level": 2,
+      "type": "qa",
+      "q": "Build search-as-you-type and defend the position of every operator.",
+      "angle": "`query.debounce(300).filter { it.length >= 2 }.distinctUntilChanged().flatMapLatest { repo.search(it) }.catch { emit(Empty) }` — debounce before the network call, distinctUntilChanged to kill the delete-then-retype duplicate, flatMapLatest so the in-flight request is cancelled. Traps to name: debounce also delays the *first* keystroke, a user typing continuously never triggers debounce at all (use `sample` when you need periodic updates), `distinctUntilChanged` compares with `equals` so a wrapper data class can defeat it, and `debounce`/`sample` still need `@OptIn(FlowPreview::class)`."
+    },
+    {
+      "topic": "Flow operators",
+      "level": 2,
+      "type": "qa",
+      "q": "`combine` vs `zip` vs `merge` — which one builds a UiState from three sources?",
+      "angle": "`combine` re-emits on *any* source change but only starts once **every** source has emitted at least once — one cold flow that never emits means your screen never renders, which is why StateFlows combine safely and a filtered Room flow may not. `zip` is lock-step pairing and completes with the shortest source; `merge` interleaves same-typed flows with no correlation. Warn about the combine re-emission storm driving recomposition, and prefer one `UiState` flow over five stacked combines."
+    },
+    {
+      "topic": "Flow operators",
+      "level": 3,
+      "type": "qa",
+      "q": "Add retry with exponential backoff to a network Flow.",
+      "angle": "`retryWhen { cause, attempt -> if (cause is IOException && attempt < 3) { delay(1000L * (1 shl attempt.toInt()) + Random.nextLong(500)); true } else false }` — the jitter matters because synchronised clients thundering-herd the backend on recovery. Mechanics to land: `retry` re-collects the **entire upstream** (fine for a cold flow, meaningless for a hot one), the attempt counter is zero-based, you must not retry 4xx, and stacking this on top of OkHttp and WorkManager retry gives you three compounding backoffs."
+    },
+    {
+      "topic": "Channels",
+      "level": 2,
+      "type": "qa",
+      "q": "`flow { }` vs `channelFlow { }` vs `callbackFlow { }` — how do you choose?",
+      "angle": "`flow {}` is the default: cold, sequential, context-preserving and cheapest (no channel allocated). `channelFlow {}` exists precisely to break the emission-context rule — `send` is thread-safe so multiple child coroutines can emit concurrently — at the cost of a Channel plus an extra coroutine. `callbackFlow` is `channelFlow` specialised for register/unregister of a listener, and its non-negotiable contract is `awaitClose`."
+    },
+    {
+      "topic": "Channels",
+      "level": 3,
+      "type": "qa",
+      "q": "Wrap a listener-based API (say `LocationManager`) in a Flow. What goes wrong?",
+      "angle": "Omitting `awaitClose` throws at runtime — it is both the suspension that keeps the flow alive and the only place you unregister, so forgetting it leaks the listener. Then: you cannot `send` from a non-suspending callback, so it is `trySend`, whose default RENDEZVOUS capacity makes it **fail silently** unless you pass a capacity or add `.buffer()`/`.conflate()`. Check `trySend().isSuccess`, or you will quietly drop location fixes and never know."
+    },
+    {
+      "topic": "Channels",
+      "level": 3,
+      "type": "qa",
+      "q": "Enumerate the Channel capacities and `BufferOverflow` modes, then design a telemetry pipeline that must never block the producer.",
+      "angle": "RENDEZVOUS (0), BUFFERED (64 by default via `kotlinx.coroutines.channels.defaultBuffer`), CONFLATED, UNLIMITED, plus SUSPEND / DROP_OLDEST / DROP_LATEST — the right answer is a bounded buffer with DROP_OLDEST, never UNLIMITED, which is an OOM with extra steps. Also cover `close()` (receivers drain, then finish) vs `cancel()` (buffer discarded), ClosedSendChannelException, `onUndeliveredElement` for elements that own resources, and that a Channel is hot and single-delivery — two receivers split the values, they do not each get all of them."
+    },
+    {
+      "topic": "Channels",
+      "level": 4,
+      "type": "qa",
+      "q": "One-shot events (navigate, show a snackbar): `Channel`, `SharedFlow`, or state? Argue all three.",
+      "angle": "`SharedFlow(replay = 0)` drops events emitted while the UI is STOPPED — exactly the window `repeatOnLifecycle` creates — so a navigation event vanishes on rotation. A `Channel` gives exactly-once delivery to a single consumer but breaks with two collectors and still loses everything on process death. Modelling the event as state with an explicit `onEventConsumed()` survives both, at the cost of boilerplate. The candidate must take a position and name which failure mode they are knowingly accepting."
+    },
+    {
+      "topic": "Hot flows",
+      "level": 2,
+      "type": "qa",
+      "q": "StateFlow vs SharedFlow vs LiveData — which do you expose for UI state, and why is LiveData out?",
+      "angle": "StateFlow: always has a value, conflated, deduped by `equals`, `.value` readable synchronously — the default for UI state. SharedFlow: no initial value, configurable replay, no dedup — for events and broadcast. LiveData: lifecycle-aware but main-thread-bound, no operators, no KMP, and superseded by `collectAsStateWithLifecycle`/`repeatOnLifecycle`. Land the key asymmetry: StateFlow is *not* lifecycle-aware on its own, which is the entire reason the lifecycle-aware collectors exist."
+    },
+    {
+      "topic": "Hot flows",
+      "level": 3,
+      "type": "qa",
+      "q": "You update the state in the ViewModel but the UI does not change. Why?",
+      "angle": "StateFlow conflates by `equals`, so re-emitting an equal value emits nothing: mutating a `MutableList` in place and assigning the same reference back, or a data class with an `Array` field whose `equals` is identity-based, produce a silent no-op. Fix with immutable state and `update { it.copy(...) }`. Then the other half of conflation: intermediate values from a fast producer are dropped *by design*, so a StateFlow is the wrong type for a stream of events you must not miss."
+    },
+    {
+      "topic": "Hot flows",
+      "level": 3,
+      "type": "qa",
+      "q": "Tune `MutableSharedFlow(replay, extraBufferCapacity, onBufferOverflow)` for an in-app event bus.",
+      "angle": "With replay = 0 and extraBufferCapacity = 0 the buffer is zero, so `emit` **suspends until every subscriber has collected the value** — one slow collector stalls your ViewModel — and `tryEmit` always returns false. The usual configuration is `extraBufferCapacity = 1` with `onBufferOverflow = DROP_OLDEST`, which makes emit never suspend. Add `subscriptionCount` for starting/stopping upstream work, and the warning that replay > 0 re-delivers to every new subscriber, which is wrong for navigation events."
+    },
+    {
+      "topic": "Hot flows",
+      "level": 4,
+      "type": "qa",
+      "q": "`stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Loading)` — justify every argument.",
+      "angle": "WhileSubscribed starts the upstream on the first subscriber and stops it `stopTimeoutMillis` after the last one leaves; 5000 is a grace window sized to cover an Activity recreation, so a rotation does not tear down and rebuild a Room query or a socket — it has nothing to do with process death. Also: `replayExpirationMillis` defaults to `Long.MAX_VALUE`, so the cached value survives the stop (pass 0 to force a refresh); Eagerly and Lazily never stop the upstream; and the suspending `stateIn(scope)` overload waits for the first value, so it can hang forever on a source that never emits."
+    },
+    {
+      "topic": "Android integration",
+      "level": 2,
+      "type": "qa",
+      "q": "What exactly are `viewModelScope` and `lifecycleScope`, and when is each cancelled?",
+      "angle": "Both are plain CoroutineScopes stored on their owner: `viewModelScope` = `SupervisorJob() + Dispatchers.Main.immediate`, cancelled in `onCleared()`; `lifecycleScope` = the same context, cancelled at `onDestroy`. Traps: in a Fragment use `viewLifecycleOwner.lifecycleScope`, because the Fragment outlives its view on the back stack; and `Main.immediate` means the block can start synchronously, which is why a unit test that forgets `Dispatchers.setMain` sees different ordering."
+    },
+    {
+      "topic": "Android integration",
+      "level": 3,
+      "type": "qa",
+      "q": "Why was `lifecycleScope.launchWhenStarted { }` deprecated?",
+      "angle": "It suspends the *consumer* at STOP but leaves the upstream producer alive and hot — the Room cursor, the location callback, the socket stay registered and keep producing into a buffer nobody reads, and the suspended collector still holds its captured view. `repeatOnLifecycle(STARTED)` instead *cancels* the entire collection and restarts it on the next START. `flowWithLifecycle` is the operator form (implemented over callbackFlow + repeatOnLifecycle) — fine for one flow, but it allocates per flow, so nest multiple collects inside a single `repeatOnLifecycle` block."
+    },
+    {
+      "topic": "Android integration",
+      "level": 2,
+      "type": "qa",
+      "q": "`collectAsState()` vs `collectAsStateWithLifecycle()` in Compose — and what does neither of them fix?",
+      "angle": "`collectAsState` keeps collecting while the app is backgrounded, because composition is not lifecycle-aware; `collectAsStateWithLifecycle` wraps collection in `repeatOnLifecycle(minActiveState = STARTED)`, and that parameter is configurable (RESUMED for a camera preview). Traps: a flow constructed inline in the composable is a brand-new instance on every recomposition (hoist it or `remember` it), a non-StateFlow requires an explicit `initialValue`, and neither operator reduces the recomposition cost of a state object whose identity changes on every emission."
+    },
+    {
+      "topic": "Android integration",
+      "level": 4,
+      "type": "qa",
+      "q": "The user takes a phone call, Android kills the process, they come back. What happened to your StateFlow?",
+      "angle": "It is gone — StateFlow, SharedFlow and all in-memory ViewModel state are process-scoped. Only `SavedStateHandle` survives, and `savedStateHandle.getStateFlow(key, default)` is its flow-shaped API. Cover what belongs there (ids, query text, scroll key — small, parcelable, well under the ~1MB Binder limit before TransactionTooLargeException) versus what should simply be re-read from Room or the network, and explicitly kill the widespread confusion that `WhileSubscribed(5000)` or `viewModelScope` has anything to do with process death."
+    },
+    {
+      "topic": "Testing",
+      "level": 3,
+      "type": "qa",
+      "q": "Your coroutine test hangs, or fails with 'After waiting for 60s, the test coroutine is not completing'. Debug it.",
+      "angle": "`runTest` waits for every coroutine in the TestScope to finish, so a collector on a hot flow (`stateIn`, a MutableSharedFlow) never completes — launch it in `backgroundScope`, or use Turbine, which cancels its own collector. Other causes to enumerate: `StandardTestDispatcher` queues everything until you call `advanceUntilIdle()`/`runCurrent()`, so a 'nothing happened' assertion is usually a missing advance; `UnconfinedTestDispatcher` hides genuine ordering bugs; every TestDispatcher in a test must share the same `testScheduler` or virtual time diverges; and testing `WhileSubscribed(5_000)` needs a real subscriber plus `advanceTimeBy(5_001)`."
+    }
+  ],
+  "coverageNotes": "Existing pack read in full: content/packs/coroutines-a.json (8 items, ids co-0001..co-0008). Already covered there, and therefore deliberately NOT repeated: CPS/state-machine compilation (co-0001); coroutineScope vs supervisorScope as builders (co-0002); launch-vs-async exception propagation basics (co-0003); the Main/Default/IO/Unconfined comparison table, main-safety and dispatcher injection (co-0004); cold vs hot (co-0005); the flatMapLatest/Merge/Concat family and a one-line intro to buffer/conflate/debounce/sample/distinctUntilChanged/flowOn (co-0006); repeatOnLifecycle + collectAsStateWithLifecycle as \"how to collect safely\" (co-0007); runTest virtual clock, Standard vs Unconfined, Dispatchers.setMain, Turbine, fakes (co-0008).\n\nAnti-overlap decisions where a scope subject touches an existing item:\n- Dispatchers: co-0004 already names the shared IO/Default pool and limitedParallelism, so the new L4 item is framed as a decision problem (\"cap 4 concurrent uploads\") whose payload is that limitedParallelism does NOT bound logical concurrency because a suspended coroutine releases its slot — plus scheduler internals, IO elasticity and custom dispatchers.\n- flowOn: co-0006 explains it descriptively; the new item is framed around the \"Flow invariant is violated\" crash and the emission-context rule.\n- buffer/conflate: co-0006 defines them; the new L4 goes to channel level plus operator fusion.\n- Lifecycle collection: co-0007 covers the how; the new items cover WHY launchWhenStarted was deprecated (upstream stays hot) and Compose-specific collectAsStateWithLifecycle mechanics (minActiveState, inline-flow-per-recomposition, initialValue).\n- Testing: co-0008 covers the toolkit; the new item is failure-driven (hanging tests, backgroundScope, shared testScheduler, advancing virtual time past WhileSubscribed).\n\nScope subjects folded into a broader item rather than given their own slot (all explicitly named in the angles): CoroutineStart LAZY/ATOMIC/UNDISPATCHED (in the interception L4, the parallel-decomposition L3 and the builders L2); awaitAll and exceptions-inside-async (parallel-decomposition L3); cancel/cancelAndJoin/cancelChildren (cooperative-cancellation L2 and the scope-lifetime L2); produce and fan-out (builders L2 and the Channel capacity L3); Semaphore/flatMapMerge concurrency limiting (dispatchers L4); atomics (shared-state L3); terminal operators (operator-anatomy L2); conflation silently dropping values (StateFlow L3 and buffer/fusion L4); Turbine and dispatcher injection (testing L3, deepening co-0008).\n\nLevel mix is exact: L1 = 5 (10.6%), L2 = 14 (29.8%), L3 = 19 (40.4%), L4 = 9 (19.1%). The nine L4s are all internals or argue-both-sides items: continuation interception/dispatch, where structured concurrency breaks, the resume-vs-cancel resource race, the shared scheduler and limitedParallelism semantics, channel-level buffering and operator fusion, select/racing leaks, one-shot event delivery guarantees, WhileSubscribed/replayExpiration semantics, and process death vs SavedStateHandle.\n\nOrdering: items are grouped so any contiguous chunk stays coherent — suspend internals (1-6), scope/context/Job (7-12), exceptions and racing (13-15), cancellation (16-20), builders and dispatchers (21-24), shared state (25-26), Flow core and internals (27-31), Flow operators (32-34), channels (35-38), hot flows (39-42), Android integration (43-46), testing (47).\n\nTopic names reused from the existing pack: Suspend mechanics, Structured concurrency, Exception handling, Dispatchers, Flow basics, Flow operators, Android integration, Testing. New topics introduced only where genuinely new: Coroutine context, Cancellation, Coroutine builders, Shared state, Flow internals, Channels, Hot flows.\n\nVersion-sensitive facts referenced in angles are all stack-snapshot-safe (no version claims beyond kotlinx-coroutines API surface); no ids assigned, per instructions. No files were written.",
+  "scope": [
+    "suspend-function compilation to CPS and the state machine, Continuation, label dispatch and spilled locals",
+    "what a suspension point actually costs",
+    "CoroutineContext composition and its core elements",
+    "Job vs SupervisorJob, parent-child hierarchy, structured-concurrency guarantees",
+    "cancellation is cooperative — ensureActive, yield, isActive, suspendCancellableCoroutine",
+    "CancellationException and why catching Throwable breaks cancellation",
+    "NonCancellable cleanup",
+    "withTimeout vs withTimeoutOrNull",
+    "exception propagation, coroutineScope vs supervisorScope, CoroutineExceptionHandler and where it does and does not fire",
+    "async, lazy deferreds, awaitAll, exceptions inside async",
+    "dispatchers — Main, Main.immediate, IO, Default, the shared IO/Default pool, limitedParallelism, custom dispatchers, confinement vs locking",
+    "withContext semantics and cost",
+    "runBlocking and why it is banned in production code",
+    "builders compared",
+    "Mutex vs synchronized in suspending code",
+    "atomics and shared mutable state",
+    "Flow — cold streams, builders, terminal operators, context preservation and the flowOn rule, exception transparency and catch",
+    "intermediate operators (map/filter/transform/onEach/scan/debounce/sample/distinctUntilChanged/flatMapLatest/flatMapMerge/flatMapConcat/combine/zip/merge)",
+    "backpressure with buffer/conflate/collectLatest",
+    "channelFlow and callbackFlow, awaitClose, trySend semantics",
+    "Channel types, capacity and BufferOverflow",
+    "StateFlow vs SharedFlow vs LiveData vs Channel for one-shot events",
+    "SharedFlow replay and extraBufferCapacity tuning",
+    "stateIn/shareIn and SharingStarted.WhileSubscribed(5000)",
+    "conflation silently dropping values",
+    "repeatOnLifecycle vs flowWithLifecycle vs the deprecated launchWhenStarted",
+    "viewModelScope and lifecycleScope",
+    "collectAsStateWithLifecycle",
+    "retry/retryWhen with exponential backoff",
+    "select and racing",
+    "testing with runTest, StandardTestDispatcher vs UnconfinedTestDispatcher, virtual time and advanceUntilIdle, Turbine, injecting dispatchers",
+    "interview traps around GlobalScope and leaked scopes"
+  ],
+  "coverage": {
+    "suspend-function compilation to CPS and the state machine, Continuation, label dispatch and spilled locals": [
+      "co-0001",
+      "co-0012",
+      "co-0013"
+    ],
+    "what a suspension point actually costs": [
+      "co-0012",
+      "co-0011"
+    ],
+    "CoroutineContext composition and its core elements": [
+      "co-0016",
+      "co-0017"
+    ],
+    "Job vs SupervisorJob, parent-child hierarchy, structured-concurrency guarantees": [
+      "co-0002",
+      "co-0015",
+      "co-0018",
+      "co-0020"
+    ],
+    "cancellation is cooperative — ensureActive, yield, isActive, suspendCancellableCoroutine": [
+      "co-0024",
+      "co-0028"
+    ],
+    "CancellationException and why catching Throwable breaks cancellation": [
+      "co-0025"
+    ],
+    "NonCancellable cleanup": [
+      "co-0026"
+    ],
+    "withTimeout vs withTimeoutOrNull": [
+      "co-0027"
+    ],
+    "exception propagation, coroutineScope vs supervisorScope, CoroutineExceptionHandler and where it does and does not fire": [
+      "co-0003",
+      "co-0021",
+      "co-0022"
+    ],
+    "async, lazy deferreds, awaitAll, exceptions inside async": [
+      "co-0022"
+    ],
+    "dispatchers — Main, Main.immediate, IO, Default, the shared IO/Default pool, limitedParallelism, custom dispatchers, confinement vs locking": [
+      "co-0004",
+      "co-0014",
+      "co-0031",
+      "co-0032"
+    ],
+    "withContext semantics and cost": [
+      "co-0031"
+    ],
+    "runBlocking and why it is banned in production code": [
+      "co-0030"
+    ],
+    "builders compared": [
+      "co-0029"
+    ],
+    "Mutex vs synchronized in suspending code": [
+      "co-0033"
+    ],
+    "atomics and shared mutable state": [
+      "co-0034"
+    ],
+    "Flow — cold streams, builders, terminal operators, context preservation and the flowOn rule, exception transparency and catch": [
+      "co-0005",
+      "co-0035",
+      "co-0037",
+      "co-0038"
+    ],
+    "intermediate operators (map/filter/transform/onEach/scan/debounce/sample/distinctUntilChanged/flatMapLatest/flatMapMerge/flatMapConcat/combine/zip/merge)": [
+      "co-0006",
+      "co-0036",
+      "co-0040",
+      "co-0041"
+    ],
+    "backpressure with buffer/conflate/collectLatest": [
+      "co-0039"
+    ],
+    "channelFlow and callbackFlow, awaitClose, trySend semantics": [
+      "co-0043",
+      "co-0044"
+    ],
+    "Channel types, capacity and BufferOverflow": [
+      "co-0045"
+    ],
+    "StateFlow vs SharedFlow vs LiveData vs Channel for one-shot events": [
+      "co-0046",
+      "co-0047"
+    ],
+    "SharedFlow replay and extraBufferCapacity tuning": [
+      "co-0049"
+    ],
+    "stateIn/shareIn and SharingStarted.WhileSubscribed(5000)": [
+      "co-0050"
+    ],
+    "conflation silently dropping values": [
+      "co-0048"
+    ],
+    "repeatOnLifecycle vs flowWithLifecycle vs the deprecated launchWhenStarted": [
+      "co-0052"
+    ],
+    "viewModelScope and lifecycleScope": [
+      "co-0051"
+    ],
+    "collectAsStateWithLifecycle": [
+      "co-0053"
+    ],
+    "retry/retryWhen with exponential backoff": [
+      "co-0042"
+    ],
+    "select and racing": [
+      "co-0023"
+    ],
+    "testing with runTest, StandardTestDispatcher vs UnconfinedTestDispatcher, virtual time and advanceUntilIdle, Turbine, injecting dispatchers": [
+      "co-0008",
+      "co-0055"
+    ],
+    "interview traps around GlobalScope and leaked scopes": [
+      "co-0019"
+    ]
+  }
+}

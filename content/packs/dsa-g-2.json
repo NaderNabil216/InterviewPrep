@@ -1,0 +1,301 @@
+{
+  "id": "dsa-g-2",
+  "title": "Problem Solving",
+  "track": "dsa",
+  "items": [
+    {
+      "id": "ds-0027",
+      "track": "dsa",
+      "topic": "Sorting",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Sorting / custom comparator",
+      "tags": [
+        "string",
+        "sorting"
+      ],
+      "q": "Sort Characters by Frequency",
+      "prompt": "Given a string, sort its characters by how often they appear (descending). Ties can be broken in any order. Example: `\"tree\"` → `\"eert\"` or `\"eetr\"`.\n\nThe move interviewers want to hear: build a frequency map, then sort by count. In Kotlin the whole thing is a one-liner — but you still need to say the complexity and the count tie-break rule out loud.",
+      "hints": [
+        "You need counts first. What's the one pass over the string that gives them?",
+        "Counts are in a `HashMap<Char, Int>`. How do you sort the characters by those counts?",
+        "In Kotlin: `s.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.flatMap { e -> List(e.value) { e.key } }.joinToString(\"\")`."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Frequency map + sort — O(n log n)",
+          "src": "fun frequencySort(s: String): String {\n    return s.groupingBy { it }.eachCount()\n        .entries\n        .sortedByDescending { it.value }\n        .flatMap { (ch, n) -> List(n) { ch } }\n        .joinToString(\"\")\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "Bucket variant — O(n) when n distinct chars is small",
+          "src": "fun frequencySortBuckets(s: String): String {\n    val counts = s.groupingBy { it }.eachCount()\n    val buckets = Array(s.length + 1) { StringBuilder() }\n    for ((ch, n) in counts) buckets[n].append(ch)\n    val out = StringBuilder()\n    for (n in buckets.indices.reversed()) {\n        for (ch in buckets[n]) repeat(n) { out.append(ch) }\n    }\n    return out.toString()\n}"
+        }
+      ],
+      "complexity": "Time O(n log n) for the sort variant, O(n) for the bucket variant (the alphabet is fixed size). Space O(n) for the map and output. State both and let the interviewer pick which you'd ship.",
+      "followUps": [
+        "What if the string is huge and the alphabet small — which variant wins?",
+        "Return the characters in descending frequency with a stable tie-break (first occurrence).",
+        "Same problem on a stream you cannot hold in memory — what do you change?"
+      ],
+      "starter": "fun frequencySort(s: String): String {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin groupingBy",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/grouping-by.html",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0028",
+      "track": "dsa",
+      "topic": "Intervals",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Intervals / merge",
+      "tags": [
+        "intervals",
+        "array"
+      ],
+      "q": "Insert Interval into a sorted, non-overlapping list",
+      "prompt": "Given a sorted list of non-overlapping intervals `[[a,b]]` and a new interval, insert it and merge any overlaps, returning the result still sorted and non-overlapping.\n\nThe three-region insight is the whole problem: intervals ending before the new one, intervals that overlap it, intervals starting after it. Walk the list once and classify.",
+      "hints": [
+        "Since the list is sorted and non-overlapping, split the work into three phases: before, during overlap, after.",
+        "Intervals with `end < newStart` go in unchanged. Intervals with `start > newEnd` go in unchanged (and the rest of the list is done).",
+        "Everything in between merges into one interval with `minStart` and `maxEnd`."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "One pass, three regions — O(n)",
+          "src": "fun insertInterval(intervals: List<IntArray>, newInterval: IntArray): List<IntArray> {\n    val out = mutableListOf<IntArray>()\n    var (start, end) = newInterval\n    var i = 0\n    while (i < intervals.size && intervals[i][1] < start) out += intervals[i++]\n    while (i < intervals.size && intervals[i][0] <= end) {\n        start = minOf(start, intervals[i][0])\n        end = maxOf(end, intervals[i][1])\n        i++\n    }\n    out += intArrayOf(start, end)\n    while (i < intervals.size) out += intervals[i++]\n    return out\n}"
+        }
+      ],
+      "complexity": "Time O(n), space O(n) for the output (O(1) extra if you reuse the input list). The naive \"append then sort then merge\" is O(n log n) — say why the sorted input lets you do better.",
+      "followUps": [
+        "What if the input can be unsorted? (Sort first, O(n log n).)",
+        "Now also report the *gaps* between intervals.",
+        "Merge the new interval into a list where intervals may already overlap."
+      ],
+      "starter": "fun insertInterval(intervals: List<IntArray>, newInterval: IntArray): List<IntArray> {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0029",
+      "track": "dsa",
+      "topic": "Intervals",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Intervals / sweep line",
+      "tags": [
+        "intervals",
+        "heap",
+        "sweep"
+      ],
+      "q": "Minimum Number of Meeting Rooms required",
+      "prompt": "Given `intervals: List<IntArray>` of `[start, end)` meeting times, return the minimum number of conference rooms required so that no two meetings overlap.\n\nTwo classic routes exist and you should know both: a min-heap keyed on end times (the \"assign the earliest-freeing room\" greedy), and a sweep line counting concurrent meetings. The heap version is the one most interviewers want to watch you build.",
+      "hints": [
+        "Sort by start time first. Which meeting could possibly reuse a room? The one that ends earliest among busy rooms.",
+        "Track busy rooms' end times in a min-heap. When a new meeting starts, if its start ≥ the earliest end, pop that room and reuse it.",
+        "The heap size at the end is the answer — it's the number of rooms that were ever simultaneously needed."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Min-heap of end times — O(n log n)",
+          "src": "fun minMeetingRooms(intervals: Array<IntArray>): Int {\n    val sorted = intervals.sortedBy { it[0] }\n    val ends = java.util.PriorityQueue<Int>()   // end times of busy rooms\n    for ((s, e) in sorted) {\n        if (ends.isNotEmpty() && ends.peek() <= s) ends.poll()\n        ends.add(e)\n    }\n    return ends.size\n}"
+        }
+      ],
+      "complexity": "Time O(n log n) — dominated by sorting, each heap op is O(log n). Space O(n) for the heap. The sweep-line variant is O(n log n) too but with two sorted event lists.",
+      "followUps": [
+        "Why `peek() <= s` and not `< s`? (Meetings ending exactly when another starts can share a room.)",
+        "Return the actual peak number of *concurrent* meetings at any instant.",
+        "What if meetings are `(start, end]` exclusive on the other side?"
+      ],
+      "starter": "fun minMeetingRooms(intervals: Array<IntArray>): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "PriorityQueue (Java)",
+          "url": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0030",
+      "track": "dsa",
+      "topic": "Monotonic stack",
+      "level": 4,
+      "type": "dsa",
+      "pattern": "Monotonic stack",
+      "tags": [
+        "stack",
+        "array"
+      ],
+      "q": "Largest Rectangle in a Histogram",
+      "prompt": "Given `heights: IntArray` where each bar has width 1, return the area of the largest rectangle that can be drawn within the histogram.\n\nThis is the hard monotonic-stack problem. The insight that makes it tractable: for each bar as the *height* of a rectangle, the rectangle can extend left and right until a shorter bar blocks it. A monotonic stack finds those boundaries in O(n) total.",
+      "hints": [
+        "For each bar, its rectangle extends to the previous shorter bar on the left and the next shorter bar on the right. Naively that's O(n²).",
+        "A stack that stays increasing by height lets each bar, when popped, know its right boundary (the new bar) and its left boundary (the bar now on top).",
+        "Push indexes, not heights. When `heights[i] < heights[stack.top()]`, pop — the popped bar's rectangle is `height * (i - newTop - 1)`. Append a sentinel height 0 to flush the stack."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Monotonic stack of indexes — O(n)",
+          "src": "fun largestRectangleArea(heights: IntArray): Int {\n    val stack = ArrayDeque<Int>()\n    var best = 0\n    val h = heights + 0   // sentinel flushes the stack\n    for (i in h.indices) {\n        while (stack.isNotEmpty() && h[stack.last()] >= h[i]) {\n            val top = stack.removeLast()\n            val left = if (stack.isEmpty()) -1 else stack.last()\n            best = maxOf(best, h[top] * (i - left - 1))\n        }\n        stack.addLast(i)\n    }\n    return best\n}"
+        }
+      ],
+      "complexity": "Time O(n) — every index is pushed and popped once. Space O(n) for the stack. The brute force is O(n²); a divide-and-conquer is O(n log n). State the stack invariant precisely and you'll pass.",
+      "followUps": [
+        "Trace the sentinel-0 flush: what does the stack look like at the end without it?",
+        "Maximal Rectangle in a binary matrix — how is it histograms in disguise?",
+        "Largest rectangle with all bars constrained to a budget K."
+      ],
+      "starter": "fun largestRectangleArea(heights: IntArray): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin ArrayDeque",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0031",
+      "track": "dsa",
+      "topic": "Monotonic deque",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Monotonic deque",
+      "tags": [
+        "deque",
+        "array",
+        "window"
+      ],
+      "q": "Sliding Window Maximum — the monotonic deque",
+      "prompt": "Given an array and a window size `k`, return an array of the maximum in each sliding window.\n\nA max-heap is the tempting O(n log k) answer, but the classic solution is a **monotonic deque** that stays decreasing by value, giving O(n). This is the pattern behind \"nearest greater\" problems and it reuses the fixed-window slide from ds-0022.",
+      "hints": [
+        "The window slides; a heap can't cheaply remove elements that exit the left side. What structure supports both ends?",
+        "Keep a deque of *indexes* whose values are strictly decreasing front-to-back. The front is always the current window's max.",
+        "When a new element arrives, pop from the back anything smaller (it can never be the max of any future window), then pop the front if it fell out of the window, then push."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Monotonic deque — O(n)",
+          "src": "fun maxSlidingWindow(nums: IntArray, k: Int): IntArray {\n    val dq = ArrayDeque<Int>()   // indexes, values decreasing\n    val out = IntArray(nums.size - k + 1)\n    for (i in nums.indices) {\n        while (dq.isNotEmpty() && nums[dq.last()] <= nums[i]) dq.removeLast()\n        dq.addLast(i)\n        if (dq.first() <= i - k) dq.removeFirst()\n        if (i >= k - 1) out[i - k + 1] = nums[dq.first()]\n    }\n    return out\n}"
+        }
+      ],
+      "complexity": "Time O(n) — each index enters and leaves the deque once. Space O(k) for the deque. Compare with the O(n log k) heap approach and say why the deque wins.",
+      "followUps": [
+        "Why can you safely discard all smaller back elements? Argue they can never be a future max.",
+        "Sliding window *minimum* — identical, flip the comparison.",
+        "Return the window maximum as a list of the actual indices, not just values."
+      ],
+      "starter": "fun maxSlidingWindow(nums: IntArray, k: Int): IntArray {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin ArrayDeque",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0032",
+      "track": "dsa",
+      "topic": "Stacks",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Stacks / parsing",
+      "tags": [
+        "stack",
+        "parsing"
+      ],
+      "q": "Evaluate Reverse Polish Notation",
+      "prompt": "Given a `List<String>` in reverse Polish (postfix) notation with operands and the operators `+ - * /`, evaluate it to an integer (truncating division toward zero).\n\nThis is the standard stack-parsing warm-up: numbers push, operators pop two, compute, push. What looks mechanical here is the real skill behind building calculator interpreters.",
+      "hints": [
+        "Numbers and operators arrive in postfix order — operands first. What data structure naturally holds 'not yet used' numbers?",
+        "A stack. On a number, push it. On an operator, pop `b`, pop `a`, compute `a op b`, push the result. Careful: order matters for `-` and `/`.",
+        "Division truncates toward zero, so use `a / b` with integer math and beware Kotlin's rounding — `Int` division already truncates toward zero."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Stack evaluation — O(n)",
+          "src": "fun evalRPN(tokens: List<String>): Int {\n    val st = ArrayDeque<Int>()\n    for (t in tokens) {\n        when (t) {\n            \"+\" -> { val b = st.removeLast(); val a = st.removeLast(); st.addLast(a + b) }\n            \"-\" -> { val b = st.removeLast(); val a = st.removeLast(); st.addLast(a - b) }\n            \"*\" -> { val b = st.removeLast(); val a = st.removeLast(); st.addLast(a * b) }\n            \"/\" -> { val b = st.removeLast(); val a = st.removeLast(); st.addLast(a / b) }\n            else -> st.addLast(t.toInt())\n        }\n    }\n    return st.last()\n}"
+        }
+      ],
+      "complexity": "Time O(n), space O(n) for the stack (O(1) if the input is a single expression but the stack can grow with nesting of pending operands).",
+      "followUps": [
+        "Why is `a - b` and not `b - a`? Trace `[\"3\",\"4\",\"-\"]`.",
+        "Add unary minus and a `^` power operator (right-associative — different pop order).",
+        "Evaluate an *infix* expression with parentheses — how does it differ?"
+      ],
+      "starter": "fun evalRPN(tokens: List<String>): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin ArrayDeque",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0033",
+      "track": "dsa",
+      "topic": "Heaps",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Heap / top-K",
+      "tags": [
+        "heap",
+        "array"
+      ],
+      "q": "K Closest Points to Origin",
+      "prompt": "Given `points: List<IntArray>` and an integer `k`, return the `k` points closest to the origin `(0,0)` (Euclidean distance; order among them doesn't matter).\n\nTwo good answers: sort all points by distance (O(n log n)) or keep a size-k max-heap (O(n log k)). The interviewer wants to see you pick the heap for large inputs and justify it. In Kotlin, `PriorityQueue` with a comparator — and a tie-break on coordinates so it's total.",
+      "hints": [
+        "We only need the k smallest — do we need to sort everything?",
+        "Keep a max-heap of size k: insert each point, and when size exceeds k evict the *farthest* (the heap's root).",
+        "In Kotlin, `java.util.PriorityQueue(compareByDescending { dist(it) })`; remember to compare by full distance squared and add a secondary tie-break so no `ClassCastException` from equal distances."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Size-k max-heap — O(n log k)",
+          "src": "fun kClosest(points: Array<IntArray>, k: Int): Array<IntArray> {\n    val dist = { p: IntArray -> p[0] * p[0] + p[1] * p[1] }\n    val heap = java.util.PriorityQueue(\n        compareByDescending<IntArray> { dist(it) }.thenBy { it[0] }.thenBy { it[1] }\n    )\n    for (p in points) {\n        heap.add(p)\n        if (heap.size > k) heap.poll()\n    }\n    return heap.toTypedArray()\n}"
+        }
+      ],
+      "complexity": "Time O(n log k) — each of n inserts into a size-k heap. Space O(k). Sorting everything is O(n log n) but simpler; say when you'd accept it (small n) and when not.",
+      "followUps": [
+        "When would you choose a full sort over the heap?",
+        "What if k is almost n — does the heap still win?",
+        "Return them sorted by distance as well."
+      ],
+      "starter": "fun kClosest(points: Array<IntArray>, k: Int): Array<IntArray> {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "PriorityQueue (Java)",
+          "url": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java",
+          "checked": "2026-08-13"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,196 @@
+{
+  "id": "data-networking",
+  "title": "Data, Networking & Persistence",
+  "track": "data-networking",
+  "items": [
+    {
+      "id": "dn-0001",
+      "track": "data-networking",
+      "topic": "Networking",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "okhttp",
+        "retrofit",
+        "interceptor"
+      ],
+      "q": "How do OkHttp interceptors work, and how do you implement token refresh correctly?",
+      "shortAnswer": [
+        "**Application interceptors** run once per call and see the logical request; **network interceptors** run per actual network request, so they see redirects, retries, and the real headers/body on the wire.",
+        "Token refresh belongs in an `Authenticator`, not an interceptor — the `Authenticator` is invoked specifically on a 401 and OkHttp handles the retry for you.",
+        "The subtle bug is the **refresh stampede**: ten parallel requests all 401 at once. Single-flight the refresh behind a mutex and have the losers reuse the new token."
+      ],
+      "answer": "#### Interceptor types\n- **Application interceptor** (`addInterceptor`): called once per `Call`, so it doesn't see intermediate responses. Best for auth headers, app-level logging, mocking.\n- **Network interceptor** (`addNetworkInterceptor`): called for every network round trip, sees redirects/retries and the real body. Best for wire-level logging, cache header inspection.\n\nOrder matters: interceptors form a chain, each calling `chain.proceed(request)`.\n\n#### Authenticator\nOkHttp invokes `Authenticator.authenticate()` on a **401**, hands you the failed request, and retries with whatever request you return. Return `null` to give up. This beats \"catch 401 in an interceptor and retry manually\" because OkHttp manages the retry count (`response.priorResponse` chain) and avoids infinite loops.\n\n#### The stampede\nWith 10 concurrent requests, all get 401 and all try to refresh — 9 invalidate tokens the others just obtained. Fix: a `Mutex` (or `synchronized`) around the refresh, re-checking inside the lock whether another thread already refreshed — the classic double-checked pattern.\n\n#### Other things worth naming\n- **Connection pooling** and HTTP/2 multiplexing are on by default; reuse **one** `OkHttpClient` via `newBuilder()` so pool and dispatcher are shared.\n- **Timeouts**: `connectTimeout`, `readTimeout`, `writeTimeout`, and `callTimeout` for the whole call — most people forget the last one.\n- **HTTP caching** via `Cache` + `Cache-Control` for cacheable GETs, not a substitute for real offline.\n- **Certificate pinning** with `CertificatePinner` — always pin a backup key, or a cert rotation bricks your app.\n- **Ktor client** is the KMP alternative with a similar plugin model.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Auth header + single-flight refresh",
+          "src": "class AuthInterceptor(private val store: TokenStore) : Interceptor {\n    override fun intercept(chain: Interceptor.Chain): Response {\n        val token = store.accessToken\n        val request = if (token != null) {\n            chain.request().newBuilder().header(\"Authorization\", \"Bearer $token\").build()\n        } else chain.request()\n        return chain.proceed(request)\n    }\n}\n\nclass TokenAuthenticator(\n    private val store: TokenStore,\n    private val refreshApi: RefreshApi,\n) : Authenticator {\n\n    private val mutex = Mutex()\n\n    override fun authenticate(route: Route?, response: Response): Request? {\n        // Give up rather than loop forever\n        if (response.priorResponseCount() >= 2) return null\n\n        val failedToken = response.request.header(\"Authorization\")?.removePrefix(\"Bearer \")\n\n        val newToken = runBlocking {\n            mutex.withLock {\n                // Another thread may already have refreshed while we waited\n                val current = store.accessToken\n                if (current != null && current != failedToken) return@withLock current\n                refreshApi.refresh(store.refreshToken)\n                    .also { store.save(it) }\n                    .accessToken\n            }\n        } ?: return null\n\n        return response.request.newBuilder()\n            .header(\"Authorization\", \"Bearer $newToken\")\n            .build()\n    }\n\n    private fun Response.priorResponseCount(): Int {\n        var count = 0; var r = priorResponse\n        while (r != null) { count++; r = r.priorResponse }\n        return count\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Why use an `Authenticator` instead of retrying inside an interceptor?",
+        "What happens if you create a new `OkHttpClient` per request?",
+        "Why must certificate pinning include a backup pin?"
+      ],
+      "traps": [
+        "Not handling the concurrent-401 stampede — this is the follow-up interviewers reach for immediately.",
+        "Creating multiple `OkHttpClient` instances, losing connection pooling and thread reuse."
+      ],
+      "refs": [
+        {
+          "title": "OkHttp interceptors",
+          "url": "https://github.com/square/okhttp/blob/master/docs/features/interceptors.md",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "OkHttp recipes — handling authentication",
+          "url": "https://github.com/square/okhttp/blob/master/docs/recipes.md",
+          "checked": "2026-08-09"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0002",
+      "track": "data-networking",
+      "topic": "Room",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "room",
+        "migrations",
+        "sqlite"
+      ],
+      "q": "How do Room migrations work, and what breaks in production?",
+      "shortAnswer": [
+        "Bump `version`, supply a `Migration(from, to)` with raw SQL, and Room runs them in sequence. Export the schema JSON and commit it — that's what makes migration tests possible.",
+        "**Auto-migrations** (`@AutoMigration`) handle additive changes; anything ambiguous (renames, deletes, type changes) needs an `@RenameColumn`/`@DeleteColumn` spec or a manual migration.",
+        "`fallbackToDestructiveMigration()` silently wipes user data — never in a shipped release."
+      ],
+      "answer": "#### The mechanics\nRoom stores a schema hash and compares it to the compiled schema on open; a mismatch with no migration path is an `IllegalStateException` crash.\n\nSet `exportSchema = true`, commit `schemas/*.json`; `MigrationTestHelper` tests every migration against a real database — most teams skip this.\n\n#### Auto-migrations\n`@AutoMigration(from = 2, to = 3, spec = MySpec::class)` generates SQL for additive changes. For renames/deletes you must give a spec annotated with `@RenameColumn`, `@RenameTable`, `@DeleteColumn`, or `@DeleteTable` — otherwise Room can't tell a rename from a drop-and-add and would lose data.\n\n#### What actually breaks in production\n1. **A skipped path.** User on v1 updates to v5; Room chains 1→2→3→4→5 only if each step exists. Test every path from every shipped version.\n2. **SQLite's limited ALTER TABLE.** Changing a column type or constraint means create-new-table, copy, drop-old, rename.\n3. **Migrations that are slow.** Copying a million rows at startup looks like a hang and can ANR.\n4. **Destructive fallback left in.** Ships fine, then a schema change silently deletes everyone's data.\n\n#### Other Room points that come up\n- Return `Flow<T>` from `@Query`; Room re-emits on table change — table-granular, not row-granular.\n- `@Transaction` for multi-step reads/writes and `@Relation` queries, avoiding a torn read.\n- `@Upsert` (insert-or-update) since Room 2.5.\n- Indices matter: `@Entity(indices = [Index(\"userId\")])`. Verify with `EXPLAIN QUERY PLAN`.\n- Room is **KMP-ready**, so the DAO layer can serve Android and iOS.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Manual migration plus a migration test",
+          "src": "val MIGRATION_2_3 = object : Migration(2, 3) {\n    override fun migrate(db: SupportSQLiteDatabase) {\n        db.execSQL(\"ALTER TABLE users ADD COLUMN avatar_url TEXT\")\n        db.execSQL(\"CREATE INDEX IF NOT EXISTS index_users_team ON users(team_id)\")\n    }\n}\n\n// The test that keeps you honest\n@RunWith(AndroidJUnit4::class)\nclass MigrationTest {\n    @get:Rule\n    val helper = MigrationTestHelper(\n        InstrumentationRegistry.getInstrumentation(),\n        AppDatabase::class.java\n    )\n\n    @Test\n    fun migrate2To3() {\n        helper.createDatabase(TEST_DB, 2).apply {\n            execSQL(\"INSERT INTO users (id, name) VALUES ('1', 'Ada')\")\n            close()\n        }\n        val db = helper.runMigrationsAndValidate(TEST_DB, 3, true, MIGRATION_2_3)\n        db.query(\"SELECT avatar_url FROM users WHERE id = '1'\").use {\n            assertTrue(it.moveToFirst())\n        }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "How do you change a column's type when SQLite won't let you ALTER it?",
+        "Why is Room's `Flow` invalidation table-granular, and when does that hurt?",
+        "How would you run a very expensive migration without blocking app start?"
+      ],
+      "traps": [
+        "Leaving `fallbackToDestructiveMigration()` in a release build.",
+        "Not committing exported schema JSON, which makes migration tests impossible and the whole process guesswork."
+      ],
+      "refs": [
+        {
+          "title": "Migrate your Room database",
+          "url": "https://developer.android.com/training/data-storage/room/migrating-db-versions",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Room releases",
+          "url": "https://developer.android.com/jetpack/androidx/releases/room",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0003",
+      "track": "data-networking",
+      "topic": "Key-value storage",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "datastore",
+        "sharedpreferences"
+      ],
+      "q": "DataStore vs SharedPreferences — why did SharedPreferences need replacing?",
+      "shortAnswer": [
+        "`SharedPreferences.apply()` is async but its **initial load and `commit()` are blocking disk I/O on the calling thread** — a documented ANR source, and errors are silently swallowed.",
+        "DataStore is coroutine/Flow-based, fully async, transactional, and surfaces read/write errors as exceptions you can handle.",
+        "Preferences DataStore = key-value, no type safety. Proto DataStore = typed schema via protobuf, worth it for structured settings."
+      ],
+      "answer": "#### The problems with SharedPreferences\n- The first `getSharedPreferences` triggers a **synchronous full-file parse**; if it happens on the main thread during startup it stalls you.\n- `commit()` writes synchronously on the calling thread.\n- `apply()` is async, but it blocks in `onPause`/`onStop` via `QueuedWork.waitToFinish()` — an infamous ANR signature.\n- No error signalling: a failed write just… doesn't happen.\n- No transactional guarantees across multiple keys.\n- Not observable in a first-class way (`OnSharedPreferenceChangeListener` is awkward and leaks easily).\n\n#### DataStore\n- Exposes `Flow<Preferences>` / `Flow<T>` — reads are observable by default.\n- All writes are `suspend` and atomic; `edit { }` is a transaction.\n- Errors surface as exceptions in the flow, so you can `catch { }` and fall back.\n- Backed by a file written via an atomic rename, so a crash mid-write can't corrupt it.\n\n#### Preferences vs Proto\n- **Preferences DataStore**: drop-in-ish replacement, key-based, values are untyped at compile time (you use `booleanPreferencesKey(\"x\")`).\n- **Proto DataStore**: define a `.proto` schema, get a generated typed class. Compile-time safety, schema evolution rules, better for a settings object with many fields.\n\n#### What it's not for\nDataStore is for small amounts of data. It rewrites the whole file on each change, so it is a bad fit for lists that grow, caches, or anything you'd want to query. That's Room's job.\n\n#### Migration\n`SharedPreferencesMigration` moves existing keys over on first read, so you can migrate without losing user settings.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Preferences DataStore with error handling and migration",
+          "src": "private val Context.dataStore by preferencesDataStore(\n    name = \"settings\",\n    produceMigrations = { ctx -> listOf(SharedPreferencesMigration(ctx, \"legacy_prefs\")) }\n)\n\nclass SettingsRepository(private val context: Context) {\n\n    private val darkModeKey = booleanPreferencesKey(\"dark_mode\")\n\n    val darkMode: Flow<Boolean> = context.dataStore.data\n        .catch { e ->\n            // A corrupt file should degrade to defaults, not crash the app\n            if (e is IOException) emit(emptyPreferences()) else throw e\n        }\n        .map { it[darkModeKey] ?: false }\n\n    suspend fun setDarkMode(enabled: Boolean) {\n        context.dataStore.edit { it[darkModeKey] = enabled }   // atomic\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Why is DataStore a bad choice for a growing list of items?",
+        "What does Proto DataStore give you that Preferences DataStore doesn't?",
+        "How does DataStore avoid file corruption on crash?"
+      ],
+      "traps": [
+        "Saying 'DataStore is just async SharedPreferences'. The transactional guarantee and error surfacing are the substantive differences.",
+        "Using DataStore as a cache. It rewrites the whole file per edit."
+      ],
+      "refs": [
+        {
+          "title": "DataStore",
+          "url": "https://developer.android.com/topic/libraries/architecture/datastore",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1"
+    },
+    {
+      "id": "dn-0004",
+      "track": "data-networking",
+      "topic": "Paging",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "paging3",
+        "remotemediator",
+        "pagination"
+      ],
+      "q": "How does Paging 3 with `RemoteMediator` work, and why is cursor pagination better than offset?",
+      "shortAnswer": [
+        "`PagingSource` supplies pages to the UI; `RemoteMediator` sits behind it and fetches from the network into the database when the local data runs out.",
+        "With a mediator, **Room is the `PagingSource`** — so the UI always renders from the database and works offline by construction.",
+        "Offset pagination breaks when items are inserted or deleted between page fetches: you get duplicates or gaps. Cursors encode a stable position, so they don't."
+      ],
+      "answer": "#### The two-tier model\n`Pager(config, remoteMediator = FeedRemoteMediator(...)) { dao.pagingSource() }` — two layers:\n- `PagingSource` = where the UI gets pages; here backed by Room.\n- `RemoteMediator` = called when the pager runs out of local data, with a `LoadType`:\n  - `REFRESH` — initial load or refresh; usually clear and repopulate,\n  - `PREPEND` — rarely used for feeds; return `endOfPaginationReached = true`,\n  - `APPEND` — fetch the next page using the stored cursor.\n\nRows and the cursor are written **in a transaction** (`remote_keys` table); Room invalidation pushes the new page to the UI.\n\n#### Why offset breaks\n`?offset=20&limit=20` assumes a stable list. On a live feed:\n- an insert at the top shifts item 20 to 21 → duplicate,\n- a delete skips an item entirely.\n\n**Cursor pagination** sends an opaque token encoding the last item's sort key and id (`(createdAt, id)` — the id breaks ties). The server returns everything strictly after it; other insertions/deletions don't disturb it.\n\n#### Practical config\n`pageSize = 20`, `prefetchDistance = 5` (load near the end), `initialLoadSize = 40` (first screen in one round trip), `enablePlaceholders = false` (unknown total count).\n\n#### Things interviewers probe\n- `LoadState` handling: header/footer for loading and error, with retry.\n- `PagingData` is a stream of *operations*, not a list — no indexing. Transformations (`map`, `filter`, `insertSeparators`) run per-page, lazily.\n- Test `PagingSource.load()` directly; use `asSnapshot { }` end-to-end.\n- Compose: `collectAsLazyPagingItems()` plus `items(count = items.itemCount, key = items.itemKey { it.id })`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "RemoteMediator with cursor keys",
+          "src": "@OptIn(ExperimentalPagingApi::class)\nclass FeedRemoteMediator(\n    private val db: AppDatabase,\n    private val api: FeedApi,\n) : RemoteMediator<Int, PostEntity>() {\n\n    override suspend fun load(loadType: LoadType, state: PagingState<Int, PostEntity>): MediatorResult {\n        return try {\n            val cursor: String? = when (loadType) {\n                LoadType.REFRESH -> null\n                LoadType.PREPEND -> return MediatorResult.Success(endOfPaginationReached = true)\n                LoadType.APPEND -> db.remoteKeyDao().cursor(\"feed\")\n                    ?: return MediatorResult.Success(endOfPaginationReached = true)\n            }\n\n            val response = api.feed(cursor = cursor, limit = state.config.pageSize)\n\n            db.withTransaction {                                  // atomic: rows + cursor together\n                if (loadType == LoadType.REFRESH) {\n                    db.postDao().clearAll()\n                    db.remoteKeyDao().clear(\"feed\")\n                }\n                db.postDao().insertAll(response.items.map { it.toEntity() })\n                db.remoteKeyDao().upsert(RemoteKey(\"feed\", response.nextCursor))\n            }\n\n            MediatorResult.Success(endOfPaginationReached = response.nextCursor == null)\n        } catch (e: IOException) {\n            MediatorResult.Error(e)\n        } catch (e: HttpException) {\n            MediatorResult.Error(e)\n        }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Why must the cursor include the id and not just the timestamp?",
+        "What does `enablePlaceholders = true` require from your data source?",
+        "How would you test a `RemoteMediator`?"
+      ],
+      "traps": [
+        "Writing rows and the cursor outside a transaction — a crash between them leaves the pager permanently stuck.",
+        "Defending offset pagination for a live feed. Interviewers specifically look for the duplicate/skip failure."
+      ],
+      "refs": [
+        {
+          "title": "Paging 3 with network and database",
+          "url": "https://developer.android.com/topic/libraries/architecture/paging/v3-network-db",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Paging library overview",
+          "url": "https://developer.android.com/topic/libraries/architecture/paging/v3-overview",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.11"
+    }
+  ]
+}

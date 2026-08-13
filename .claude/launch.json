@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "prep-site",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["tools/serve.py"],
+      "autoPort": true,
+      "port": 8777
+    }
+  ]
+}

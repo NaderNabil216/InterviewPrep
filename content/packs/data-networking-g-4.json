@@ -1,0 +1,416 @@
+{
+  "id": "data-networking-g-4",
+  "title": "Data, Networking & Persistence",
+  "track": "data-networking",
+  "items": [
+    {
+      "id": "dn-0032",
+      "track": "data-networking",
+      "topic": "Networking",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "observability",
+        "logging",
+        "proxy"
+      ],
+      "q": "How do you debug and observe network traffic on Android?",
+      "shortAnswer": [
+        "OkHttp's EventListener is the structured way to observe every call — it reports DNS, connect, TLS handshake, request/response bytes, and cache hits in sequence, giving a per-call latency breakdown.",
+        "A logging interceptor shows the actual request and response content, but it belongs in the debug variant only, or you leak tokens and bloat release logs.",
+        "For raw bytes, route traffic through a proxy (Charles or mitmproxy) and install the proxy CA on the device — the network security config must trust it or TLS fails."
+      ],
+      "answer": "#### The events API\nOkHttp's `EventListener` is the structured observability layer. It fires in order: `callStart`, `dnsStart`/`dnsEnd`, `connectStart`/`connectEnd`, `secureConnectStart`/`secureConnectEnd`, `connectionAcquired`, `requestHeadersStart`, `responseHeadersEnd`, `callEnd`/`callFailed`. That's a precise latency breakdown — DNS vs connect vs TLS vs server time — per call, per host, usable in production.\n\n#### Interceptors vs events\nA logging interceptor (`HttpLoggingInterceptor`) shows request/response *content*; an `EventListener` shows *timing and connections*. Use the logging interceptor **in debug builds only** — a BODY-level log in release leaks tokens and bloats storage. Redact `Authorization` in whatever you keep.\n\n#### Proxy debugging\nTo see raw bytes: run the app against Charles or mitmproxy, install the proxy's CA on the device, and set the proxy (device Wi-Fi settings or a `Proxy` on the client). `trust-anchors`/`debug-overrides` in the network security config must permit the user CA, or TLS fails.\n\n#### Metrics\nThe right move is aggregating `EventListener` data — status, bytes, latency, cache hit/miss — into analytics. Those numbers surface a regression before a user reports it.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "An EventListener that times each phase",
+          "src": "class TimingListener : EventListener() {\n    var callStart: Long = 0\n\n    override fun callStart(call: Call) {\n        callStart = System.nanoTime()\n    }\n\n    override fun dnsStart(call: Call, domainName: String) {\n        println(\"dns begin $domainName\")\n    }\n\n    override fun connectStart(call: Call, inetSocketAddress: InetSocketAddress, proxy: Proxy) {\n        println(\"connect begin ${inetSocketAddress.hostString}\")\n    }\n\n    override fun secureConnectEnd(call: Call, handshake: Handshake?) {\n        println(\"tls done ${handshake?.cipherSuite}\")\n    }\n\n    override fun callEnd(call: Call) {\n        val totalMs = (System.nanoTime() - callStart) / 1_000_000\n        println(\"call took ${totalMs}ms url=${call.request().url}\")\n    }\n}\n\nval client = OkHttpClient.Builder().eventListenerFactory { TimingListener() }.build()"
+        }
+      ],
+      "followUps": [
+        "How do you get a per-phase time breakdown of a call?",
+        "What's the difference between an EventListener and an interceptor for metrics?",
+        "How do you intercept HTTPS from a proxy?"
+      ],
+      "traps": [
+        "Leaving a BODY-level logging interceptor in a release build — tokens leak to storage and logs.",
+        "Reaching for log strings instead of the events API when the question is about structured metrics."
+      ],
+      "refs": [
+        {
+          "title": "OkHttp — events",
+          "url": "https://github.com/square/okhttp/blob/master/docs/features/events.md",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "OkHttp README",
+          "url": "https://github.com/square/okhttp/blob/master/README.md",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0033",
+      "track": "data-networking",
+      "topic": "Networking",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "offline",
+        "conflict-resolution",
+        "queue"
+      ],
+      "q": "How do you implement an offline mutation queue and resolve conflicts?",
+      "shortAnswer": [
+        "Writes land in a local Room outbox first — the UI renders optimistically — and a worker drains it in order; every mutation carries a client-generated idempotency key so a replayed queue never double-applies.",
+        "Conflicts are inherent and you choose a policy per operation: last-write-wins with server timestamps, version vectors for document-shaped data, or field-level merge for records.",
+        "Read-your-writes requires the optimistic value to be queryable locally, and when the ack arrives you reconcile and re-emit, surfacing a visible pending or conflict state instead of failing silently."
+      ],
+      "answer": "#### The outbox\nWrites don't hit the network first — they land in a local Room **outbox**: `id, operation, payloadJson, status, retryCount, clientMutationId`. The UI renders optimistically from the local snapshot; a worker drains the queue in order. Each mutation carries a **client-generated idempotency key** the server dedupes on, so replaying a queue after a crash never double-applies.\n\n#### Ordering\nOrder within a session matters, but a failed item shouldn't block the rest forever — retry it with backoff and keep the rest moving. Surface a visible 'pending' state rather than hiding failures.\n\n#### Conflict resolution\nPick a policy per operation type:\n- **last-write-wins** with server timestamps — wrong for counters or accumulators,\n- **version vectors** for document-shaped data, which order concurrent edits,\n- **field-level merge** when disjoint fields change on both sides,\n- manual resolution UI for genuinely irreconcilable edits.\n\n#### Read-your-writes\nThe optimistic value must be queryable locally (that's the Room snapshot), and when the server ack lands you reconcile and re-emit to the UI. `WorkManager` guarantees the drain eventually runs; the design guarantees it runs *correctly*.\n\n#### The trap\nReplaying a whole failed batch from the start double-applies whatever already succeeded — process per item, with per-item keys.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Enqueuing an offline mutation and draining it",
+          "src": "@Entity\ndata class OutboxEntry(\n    @PrimaryKey val id: Long,\n    val operation: String,\n    val payload: String,\n    val clientMutationId: String,   // server dedupes on this\n    val status: Int,\n)\n\n// The worker that drains the queue\nclass OutboxWorker(ctx, params) : CoroutineWorker(ctx, params) {\n    override suspend fun doWork(): Result {\n        val pending = db.outboxDao().pending()\n        for (entry in pending) {\n            val accepted = api.send(\n                entry.operation,\n                entry.payload,\n                idempotencyKey = entry.clientMutationId,\n            )\n            when {\n                accepted -> db.outboxDao().markDone(entry.id)\n                isRetryable(entry) -> db.outboxDao().bumpRetry(entry.id)\n                else -> db.outboxDao().markFailed(entry.id)   // visible conflict state\n            }\n        }\n        return Result.success()\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "How do you guarantee ordering when one item keeps failing?",
+        "What does a version vector buy you over last-write-wins?",
+        "How does the user see that their edit is still pending?"
+      ],
+      "traps": [
+        "Replaying a failed batch from the start — already-applied writes double-apply.",
+        "Using last-write-wins on a counter field, losing increments silently."
+      ],
+      "refs": [
+        {
+          "title": "WorkManager",
+          "url": "https://developer.android.com/topic/libraries/architecture/workmanager",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Accessing data with Room",
+          "url": "https://developer.android.com/training/data-storage/room/accessing-data",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0034",
+      "track": "data-networking",
+      "topic": "Room",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "sqlite",
+        "index",
+        "database"
+      ],
+      "q": "What is a database index, and why do some queries slow down as data grows?",
+      "shortAnswer": [
+        "A table without an index stores rows in a heap, so a lookup has to visit every row — a full table scan whose cost grows linearly with the table size.",
+        "An index is a separate sorted structure holding the indexed column's values with pointers back to the rows, letting SQLite jump straight to matches instead of scanning.",
+        "The trade-off is that every insert and update must also keep each index fresh, so you index the columns you actually filter or join on — not every column."
+      ],
+      "answer": "#### The problem\nA table without an index stores rows in a heap. To find rows matching `WHERE team = ?`, SQLite visits **every row** — a full table scan. Double the rows, double the work; at a million rows a scan is a noticeable pause.\n\n#### The fix\nAn index is a separate, **sorted** structure holding the indexed column's values with pointers back to the rows. Lookups now jump straight to the matching entries — like the index at the back of a book. A scan that visited every row becomes a search that visits a handful.\n\n#### The catch\nNothing is free: every insert and update must also keep each index fresh, so more indices mean slower writes and more storage. Index the columns you actually `WHERE`, `JOIN`, `ORDER BY`, or enforce unique on — not every column.\n\n#### What Room does\nYou declare indices on the entity: `@Entity(indices = [Index(\"teamId\")])`. The primary key is always indexed automatically — it's SQLite's rowid alias. For a small table the scan is cheap and an index is overkill; for a table that grows, the index is the difference between instant and slow.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Declaring an index in Room",
+          "src": "@Entity(indices = [Index(\"teamId\")])\ndata class Member(\n    @PrimaryKey val id: Long,\n    val teamId: Long,\n    val name: String,\n)\n\n// SQLite keeps a B-tree on teamId, so this is a search not a scan:\n//   SELECT * FROM members WHERE teamId = ?\n// The primary key (rowid) is indexed automatically — no declaration needed."
+        }
+      ],
+      "followUps": [
+        "When would you NOT add an index?",
+        "What is indexed automatically without you doing anything?"
+      ],
+      "traps": [
+        "Saying an index makes every query faster — it only helps indexed columns and slows writes.",
+        "Indexing columns you never filter on, paying the write cost for nothing."
+      ],
+      "refs": [
+        {
+          "title": "Defining data with Room (indices)",
+          "url": "https://developer.android.com/training/data-storage/room/defining-data",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0035",
+      "track": "data-networking",
+      "topic": "Networking",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "http",
+        "requests",
+        "networking-basics"
+      ],
+      "q": "Walk me through what happens when your app makes an HTTPS request.",
+      "shortAnswer": [
+        "Your app builds an HTTP request — a method, a URL, headers, and maybe a body — and OkHttp then resolves DNS, opens a TCP connection, and negotiates TLS before any HTTP bytes flow.",
+        "The server replies with a status line, headers, and a body, which your client parses into a typed response.",
+        "The full path — URL → DNS → TCP → TLS → HTTP → response — is the map interviewers want to see you draw rather than jumping straight to 'the server returns JSON'."
+      ],
+      "answer": "#### The request\nYour app builds an HTTP request: a method (GET/POST), a URL, headers, and maybe a body. OkHttp then does the heavy lifting in order:\n\n1. **DNS** — turn the hostname into an IP address.\n2. **TCP** — open a connection with a three-way handshake.\n3. **TLS** — negotiate encryption so nothing on the wire is readable.\n4. **Send** — the request bytes go over the secure connection.\n\n#### The response\nThe server answers with a **status line** (200 OK, 404 Not Found, 500 Internal Server Error), **headers** (Content-Type, Content-Length), and a **body** — usually JSON. OkHttp hands you the response, and a converter such as Retrofit's turns the body into your data class.\n\n#### Why the map matters\nEvery step is a place things can go wrong and a place to measure: DNS failures, TCP timeouts, TLS handshake errors, slow servers. A candidate who draws the whole path understands where latency and failures actually live — and that understanding is what separates the answer from 'the server returns JSON'.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The request/response shape in code",
+          "src": "val request = Request.Builder()\n    .url(\"https://api.example.com/users/42\")\n    .header(\"Accept\", \"application/json\")\n    .get()\n    .build()\n\nclient.newCall(request).enqueue(object : Callback {\n    override fun onFailure(call: Call, e: IOException) {\n        // DNS, TCP, or TLS failed before any HTTP response\n    }\n\n    override fun onResponse(call: Call, response: Response) {\n        val status = response.code            // 200, 404, 500, or any other status\n        val contentType = response.header(\"Content-Type\")\n        val body = response.body?.string()    // JSON text\n    }\n})"
+        }
+      ],
+      "followUps": [
+        "What are the pieces of a URL and what does each one do?",
+        "Which steps can fail before a single HTTP byte is sent?"
+      ],
+      "traps": [
+        "Skipping DNS, TCP, and TLS and jumping straight to 'the server returns JSON'.",
+        "Confusing the status line with the headers or the body."
+      ],
+      "refs": [
+        {
+          "title": "OkHttp — calls",
+          "url": "https://github.com/square/okhttp/blob/master/docs/features/calls.md",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Chrome DevTools — network reference",
+          "url": "https://developer.chrome.com/docs/devtools/network",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0036",
+      "track": "data-networking",
+      "topic": "Key-value storage",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "storage",
+        "sharedpreferences",
+        "datastore"
+      ],
+      "q": "Room, DataStore, or files — how do you decide where data lives?",
+      "shortAnswer": [
+        "Small flat settings belong in DataStore, anything you query, filter, or join belongs in Room, and large blobs belong in files.",
+        "The rule of thumb: if you'd ever write WHERE userId = ?, it's a database; if it's one flat key/value flag, it's DataStore; if it's a big blob, it's files.",
+        "DataStore rewrites its whole file on every edit, so a growing list belongs in Room, and none of these are places for secrets."
+      ],
+      "answer": "#### The decision\nThree homes for data, chosen by shape and use:\n\n- **DataStore** — small flat key/value settings: dark mode, onboarding seen, last-run timestamp. Tiny, frequent, no queries needed.\n- **Room** — anything you query, filter, join, or paginate: a feed, a message history, a user list. If you'd ever write `WHERE userId = ?`, it's a database.\n- **Files** — large binary data: images, downloads, media. No querying needed, just bytes on disk.\n\n#### The rule of thumb\n'Do I need to ask the data questions?' → Room. 'Is it one flat flag?' → DataStore. 'Is it a big blob?' → files.\n\n#### Watch-outs\nDataStore rewrites its whole file on every edit — a list that grows belongs in Room, not DataStore. Files in the `cacheDir` can be reclaimed by the system, so durable data goes in `filesDir`. And none of the three is a place for secrets — those belong behind encryption or the Keystore.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Choosing a home for data by its shape",
+          "src": "enum class StorageKind { DataStore, Room, Files }\n\nfun storageFor(requirements: StorageRequirements): StorageKind = when {\n    requirements.queryable -> StorageKind.Room\n    requirements.sizeKb > 1024 -> StorageKind.Files\n    else -> StorageKind.DataStore\n}\n\n// darkMode: Boolean            -> DataStore (one flat flag)\n// feed: List<Post>             -> Room      (query, filter, paginate)\n// downloadedVideo: ByteArray   -> Files     (large, no queries)"
+        }
+      ],
+      "followUps": [
+        "Why is DataStore a bad choice for a growing list?",
+        "What belongs in the cache directory rather than the files directory?"
+      ],
+      "traps": [
+        "Putting everything in DataStore — every edit rewrites the entire file.",
+        "Storing large blobs in Room BLOBs — slow reads and bloated database size."
+      ],
+      "refs": [
+        {
+          "title": "DataStore",
+          "url": "https://developer.android.com/topic/libraries/architecture/datastore",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "App-specific storage overview",
+          "url": "https://developer.android.com/training/data-storage/app-specific",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0037",
+      "track": "data-networking",
+      "topic": "Networking",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "downloads",
+        "streaming",
+        "resume"
+      ],
+      "q": "How would you implement a large, resumable file download on Android?",
+      "shortAnswer": [
+        "Stream the body to a file with OkHttp's source() into a temp file — never body.string() — and rename it only when the transfer completes.",
+        "Resume with a Range: bytes=<offset>- header when the server advertises Accept-Ranges: bytes, persisting the byte offset so a restart continues instead of restarting.",
+        "Verify the Content-Range and ETag before appending, and if the server doesn't support ranges you re-download — which is why Range support matters for large media."
+      ],
+      "answer": "#### Stream, don't slurp\nRead the body with OkHttp's `source()` into a buffer and write to a temp file incrementally. `response.body.string()` holds the whole download in memory and will OOM on a 200 MB file. Rename the temp file to its final name only when the transfer completes, so a crash never leaves a half-file under the real name.\n\n#### Resume with Range\nIf the server advertises `Accept-Ranges: bytes`, a dead transfer resumes: persist the byte offset, send `Range: bytes=<offset>-`, and append. Check the `Content-Range` response and the `ETag` — if the file changed server-side, restart from zero rather than corrupting the partial.\n\n#### No Range support?\nNo `Accept-Ranges` header means no resume — you re-download and overwrite. That's why large-media design includes Range from the start.\n\n#### Plumbing\nRun the loop in a coroutine on `Dispatchers.IO` (or a WorkManager worker for long runs), report progress from the source read, and keep the partial file in `filesDir` keyed by URL hash plus etag so a fresh app start can continue instead of restarting.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Resumable streaming download",
+          "src": "suspend fun download(client: OkHttpClient, url: String, dest: File, offset: Long) {\n    val request = Request.Builder()\n        .url(url)\n        .header(\"Range\", \"bytes=$offset-\")\n        .build()\n\n    client.newCall(request).execute().use { response ->\n        if (response.code != 206 && response.code != 200) return   // no partial content support\n        val total = offset + (response.header(\"Content-Length\")?.toLong() ?: 0L)\n        dest.outputStream().use { out ->\n            val source = response.body!!.source()\n            val buffer = Buffer()\n            while (true) {\n                val read = source.read(buffer, 8192L)\n                if (read == -1L) break\n                buffer.copyTo(out)                    // progress = out.count + offset\n            }\n        }\n    }\n}\n\n// Persist `offset` on every chunk so a cancelled run resumes, not restarts."
+        }
+      ],
+      "followUps": [
+        "How do you resume when the server does not support Range?",
+        "How do you surface progress for a streamed download?",
+        "Where do you store the partial file and why?"
+      ],
+      "traps": [
+        "Calling body.string() on a large download — OOM.",
+        "Assuming resume works without server-side Range support."
+      ],
+      "refs": [
+        {
+          "title": "OkHttp — recipes (download a file)",
+          "url": "https://github.com/square/okhttp/blob/master/docs/recipes.md",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0038",
+      "track": "data-networking",
+      "topic": "Room",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "room",
+        "transaction",
+        "atomicity"
+      ],
+      "q": "Why use transactions in Room, and what does @Transaction actually do?",
+      "shortAnswer": [
+        "A transaction wraps several statements so they commit atomically — all apply or none — protecting against torn state when a crash or exception hits mid-way.",
+        "@Transaction on a DAO method runs the whole method inside beginTransaction/setTransactionSuccessful/endTransaction on a single connection, and withTransaction is the coroutine equivalent.",
+        "Transactions also serialize related writes under SQLite's write lock, so they're both a grouping mechanism and a concurrency control — and they must stay short."
+      ],
+      "answer": "#### What a transaction is\nA transaction wraps multiple statements so they commit **atomically**: all of them apply, or none. If the app crashes or the code throws mid-way, SQLite rolls back to the state before the transaction began. Without it, a partial multi-statement write — an order plus its line items — can be left half-applied.\n\n#### @Transaction\nMarking a DAO method `@Transaction` runs the whole method inside a single transaction on one connection. Room generates `beginTransaction()` / `setTransactionSuccessful()` / `endTransaction()` around it. It's **required** for `@Relation` reads, so the parent and child selects see one consistent snapshot, and it groups related writes into one commit.\n\n#### withTransaction\nIn coroutines, `db.withTransaction { ... }` is the suspend equivalent: it returns the block's result, commits on success, and rolls back on exception. Room asserts it isn't called on the transaction thread — nesting transactions throws.\n\n#### The rules\nKeep transactions short — they hold a write lock and block other writers. Never do network I/O inside one (the lock is held across the network call). And don't wrap a single-statement DAO call in `@Transaction`; there's nothing to group.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Grouped write, relation read, and withTransaction",
+          "src": "@Dao\ninterface OrderDao {\n    @Transaction\n    suspend fun insertOrderWithItems(order: Order, items: List<OrderItem>) {\n        insert(order)\n        items.forEach { insertItem(it) }   // all-or-nothing on one connection\n    }\n\n    @Transaction\n    @Query(\"SELECT * FROM orders WHERE id = :id\")\n    suspend fun orderWithItems(id: Long): OrderWithItems   // consistent snapshot\n\n    suspend fun replaceAll(orders: List<Order>) {\n        db.withTransaction {\n            clearAll()\n            insertAll(orders)              // readers never see the empty state\n        }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What happens if you nest transactions in Room?",
+        "Why does a relation read need a transaction?",
+        "How does a transaction interact with Flow invalidation?"
+      ],
+      "traps": [
+        "Wrapping a single-statement DAO call in @Transaction — overhead with nothing to group.",
+        "Running network calls inside a transaction, holding the write lock across the network."
+      ],
+      "refs": [
+        {
+          "title": "Accessing data with Room (transactions)",
+          "url": "https://developer.android.com/training/data-storage/room/accessing-data",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0039",
+      "track": "data-networking",
+      "topic": "Networking",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "http-methods",
+        "idempotency",
+        "api-design"
+      ],
+      "q": "GET vs POST vs PUT vs PATCH — how do idempotency and safety shape your API?",
+      "shortAnswer": [
+        "Safe methods (GET, HEAD, OPTIONS) change no server state and are cacheable; idempotent methods (GET, PUT, DELETE) give the same result when repeated, so they can be retried safely.",
+        "POST is neither safe nor idempotent — two identical POSTs create two resources — so retries must be guarded by an idempotency key the server dedupes on.",
+        "PATCH is only idempotent if the operation itself is (replacing a field yes, incrementing a counter no), which is why it's the method to scrutinize for retries."
+      ],
+      "answer": "#### The two properties\nThey come from RFC 9110 and are different:\n- **Safe** — no server state change: GET, HEAD, OPTIONS.\n- **Idempotent** — repeating the request yields the same server state: GET, PUT, DELETE.\n\nPOST is **neither**: two identical POSTs create two resources. PATCH is only idempotent when the change is — replacing a field is, incrementing a counter is not.\n\n#### Why it matters on mobile\n- **Retries**: OkHttp auto-retries connection failures only when the request is replayable — a body-bearing POST is not, so *you* guard it.\n- **Offline queues**: an outbox of POSTs needs an `Idempotency-Key` header the server dedupes on, or a double-tap on Send creates two orders.\n- **Caching**: safe methods can be cached; POST responses aren't.\n\n#### The API shape\nGET to read, PUT to replace the whole resource, PATCH for a partial change, DELETE to remove, POST to create. Map the right method to the right operation and a whole class of retry and consistency bugs disappears before they exist.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Method choice and idempotency in a Retrofit API",
+          "src": "interface OrderApi {\n    @GET(\"orders/{id}\")                    // safe, cacheable, retry-safe\n    suspend fun getOrder(@Path(\"id\") id: String): Order\n\n    @POST(\"orders\")                        // neither safe nor idempotent\n    suspend fun createOrder(@Body order: NewOrder): Order\n\n    @PUT(\"orders/{id}\")                    // idempotent: full replace\n    suspend fun replaceOrder(@Path(\"id\") id: String, @Body order: Order): Order\n\n    @PATCH(\"orders/{id}\")                  // idempotent only if the patch is\n    suspend fun patchOrder(@Path(\"id\") id: String, @Body patch: OrderPatch): Order\n}\n\n// Retry-safe create: server dedupes on the key\nval request = Request.Builder().url(url)\n    .post(body)\n    .header(\"Idempotency-Key\", clientMutationId)\n    .build()"
+        }
+      ],
+      "followUps": [
+        "Why is PATCH not automatically idempotent?",
+        "How do you make a POST retry-safe?",
+        "Which status codes pair with which methods?"
+      ],
+      "traps": [
+        "Calling DELETE safe — it's idempotent but it absolutely changes state.",
+        "Retrying a POST without a guard — duplicate side effects."
+      ],
+      "refs": [
+        {
+          "title": "RFC 9110 — HTTP semantics",
+          "url": "https://datatracker.ietf.org/doc/html/rfc9110",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "OkHttp — calls",
+          "url": "https://github.com/square/okhttp/blob/master/docs/features/calls.md",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0040",
+      "track": "data-networking",
+      "topic": "Networking",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "security-config",
+        "cleartext",
+        "trust"
+      ],
+      "q": "How does the Android network security config control cleartext and trust?",
+      "shortAnswer": [
+        "network_security_config.xml is an XML policy applied via android:networkSecurityConfig that governs all traffic from the app — cleartext, trust anchors, and per-domain certificate pinning.",
+        "Android 9+ blocks cleartext HTTP by default, so base-config with cleartextTrafficPermitted=false makes it explicit and a domain-config scoped to one dev host allows HTTP only there.",
+        "trust-anchors limits which CAs the app trusts (system vs user), and debug-overrides lets a debug build trust user CAs for proxy debugging while release keeps trusting only system CAs."
+      ],
+      "answer": "#### The file\n`network_security_config.xml` is an XML policy applied with `android:networkSecurityConfig` on the `<application>`. It is parsed by the OS and governs *all* traffic from the app, not just OkHttp's.\n\n#### Cleartext\nAndroid 9+ (targetSdk 28+) blocks cleartext HTTP by default. `base-config` with `cleartextTrafficPermitted=\"false\"` makes that explicit app-wide; a `domain-config` scoped to one dev host — `10.0.2.2`, a LAN IP, a staging box — allows HTTP only there. The trap: flipping the base config to `true` to 'fix a dev issue' disables HTTPS enforcement app-wide.\n\n#### Trust\n`trust-anchors` declares which CAs the app trusts: `system` only, or `system` plus `user`. Android 7+ apps don't trust user-installed CAs by default — security for users, a hurdle for debugging. `debug-overrides` lets a *debug* build trust user CAs (proxy debugging) while release keeps trusting only system CAs.\n\n#### Pinning\nA `pin-set` with SPKI `pin` entries pins a domain in config — but rotation needs a backup pin, or the app bricks until you ship a fix. Prefer OkHttp's `CertificatePinner` when you want code-level control and tests.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A network security config that is strict by default",
+          "src": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<network-security-config>\n    <base-config cleartextTrafficPermitted=\"false\">\n        <trust-anchors>\n            <certificates src=\"system\" />\n        </trust-anchors>\n    </base-config>\n\n    <domain-config cleartextTrafficPermitted=\"true\">\n        <domain includeSubdomains=\"false\">10.0.2.2</domain>   <!-- dev only -->\n    </domain-config>\n\n    <debug-overrides>\n        <trust-anchors>\n            <certificates src=\"user\" />   <!-- proxy CA in debug builds only -->\n        </trust-anchors>\n    </debug-overrides>\n</network-security-config>"
+        }
+      ],
+      "followUps": [
+        "How do you allow cleartext for exactly one dev host?",
+        "Why does trusting user CAs matter for a corporate MITM?",
+        "How does debug-overrides differ from a pin-set?"
+      ],
+      "traps": [
+        "Setting usesCleartextTraffic=true app-wide to fix one dev host — global security loss.",
+        "Not knowing Android 9+ blocks cleartext by default, so the base-config is belt and braces."
+      ],
+      "refs": [
+        {
+          "title": "Network security configuration",
+          "url": "https://developer.android.com/training/articles/security-config",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    }
+  ]
+}

@@ -1,0 +1,487 @@
+{
+  "id": "security-kmp-g-1",
+  "title": "Security, KMP & Modern Android",
+  "track": "security-kmp",
+  "items": [
+    {
+      "id": "sk-0004",
+      "track": "security-kmp",
+      "topic": "Security",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "sandbox",
+        "selinux",
+        "kernel"
+      ],
+      "q": "Walk through the Android security model — how does the OS keep one app from touching another app's data?",
+      "shortAnswer": [
+        "Every app runs as its own Linux UID in its own process, and the kernel enforces the files and IPC a UID can touch — app A literally cannot open app B's private files.",
+        "SELinux adds mandatory access control on top: even where file permissions would allow an action, the kernel refuses it unless the policy for that process domain authorizes it.",
+        "Crossing the boundary is only possible through permission-gated, user-approved channels — runtime permissions, content URIs, and explicit intents — never by default."
+      ],
+      "answer": "#### The sandbox\nEvery Android app runs as a unique Linux user ID (UID) inside its own process. The kernel's normal user/group model is the first wall: a UID's files, sockets, and shared memory are owned by that UID, so one app literally cannot open another's private data — an attempt gets `Permission denied` at the syscall level, before any Java code runs. IPC is confined to Binder, and intents are only delivered to components the manifest exposes. A buggy or malicious app is therefore contained: it can only touch what its own UID owns.\n\n#### SELinux on top\nSELinux is a second, independent layer of mandatory access control. Every process is assigned a security label, and the kernel enforces a policy of allowed actions per label — a *domain* — regardless of the classic Unix permission bits. Even where DAC would permit an operation, SELinux refuses it if the policy does not authorize it. Apps run in the `untrusted_app` domain; platform services get tightly scoped domains of their own, so a compromise in one service does not cascade into the others.\n\n#### Where the model stops\nIt does not protect an app from its own bugs, does not survive a rooted device (root is the kernel's god-mode), and does not replace permissions. Sharing happens only through the sanctioned channels: `dangerous` runtime permissions the user grants, content URIs with per-access grants, and explicit intents to exported components. The one-line summary interviewers want: isolation by UID, containment by SELinux, sharing only through user-approved, permission-gated interfaces.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Why app B's files are unreachable even from your own process",
+          "src": "// /data/data/<pkg>/ is chmod 0700 to its own UID — the kernel refuses before\n// any app code runs, and SELinux adds a policy check on top of that.\nfun tryReadAnotherApp(pkg: String): String? = try {\n    java.io.File(\"/data/data/$pkg/shared_prefs/secrets.xml\").readText()\n} catch (e: SecurityException) {\n    null   // sandbox + SELinux; there is no way to opt out\n}"
+        }
+      ],
+      "followUps": [
+        "What can an app with the same signing certificate still not do to another of your apps without SELinux policy?",
+        "How does the sandbox protect your exported component from a malicious intent?",
+        "Where does the sandbox end — what survives a backup restore or an adb pull?"
+      ],
+      "traps": [
+        "Claiming the sandbox can be 'turned off' for performance — isolation by UID is not optional.",
+        "Saying SELinux is 'just file permissions' — it is a separate mandatory-access-control layer enforced by the kernel."
+      ],
+      "refs": [
+        {
+          "title": "Application sandbox",
+          "url": "https://source.android.com/docs/security/app-sandbox",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "SELinux on Android",
+          "url": "https://source.android.com/docs/security/selinux",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0005",
+      "track": "security-kmp",
+      "topic": "Keystore",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "keystore",
+        "strongbox",
+        "attestation"
+      ],
+      "q": "How does the Android Keystore keep a key non-exportable, what does StrongBox add, and how does key attestation prove the key is real?",
+      "shortAnswer": [
+        "`KeyGenerator` with the `AndroidKeyStore` provider creates the key inside trusted hardware — a TEE or, with `setIsStrongBoxBacked(true)`, a dedicated secure element — and the raw material never leaves it.",
+        "`setUserAuthenticationRequired(true)` ties key use to a biometric or device-credential unlock, with a per-use or time-limited window set via `setUserAuthenticationValidityDurationSeconds`.",
+        "Key attestation returns a certificate chain rooted at Google (TEE) or the vendor's StrongBox key, signed at generation and bound to the device's boot state, so a server can prove the key is real hardware."
+      ],
+      "answer": "#### Where the key lives\nThe `AndroidKeyStore` provider generates keys inside a **TEE** — a CPU-isolated trusted execution environment — and hands your process a handle, not key bytes. The key is created in hardware, used in hardware, and the raw material is never readable by your app. A rooted device, a memory dump, or an APK pull yields only the ability to *ask* the hardware to use the key, never the key itself. That is what 'non-exportable' means.\n\n#### StrongBox\n`setIsStrongBoxBacked(true)` in `KeyGenParameterSpec` moves the key into a dedicated secure element — the same class of hardware as a smart-card chip — rather than the general TEE. It is slower and has a finite key-use counter, but it is more isolated: a compromise of the TEE does not compromise it. Use it for high-value keys like payments; not every device has one, so keep a fallback.\n\n#### setUserAuthenticationRequired\nThe Keystore can gate key use behind authentication: `setUserAuthenticationRequired(true)` plus `setInvalidatedByBiometricEnrollment(true)` (a newly enrolled fingerprint invalidates the key) and `setUserAuthenticationValidityDurationSeconds(...)` for a time window instead of per-use auth. The *hardware* enforces the gate — your code cannot bypass it.\n\n#### Key attestation\nKey attestation (`KeyStore.getCertificateChain` bound to a server-supplied challenge) returns an X.509 chain rooted at Google's key (TEE) or the vendor's StrongBox root, signed at generation time. A server verifies the chain and the attestation's boot-stated fields to prove the key was generated in genuine secure hardware on a verified-boot device — separating real key material from a software-keystore emulator.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A StrongBox-backed, auth-gated key and its attestation chain",
+          "src": "private const val KEY_ALIAS = \"pay_key\"\n\nfun createKey(): KeyGenParameterSpec =\n    KeyGenParameterSpec.Builder(\n        KEY_ALIAS,\n        KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT\n    )\n        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)\n        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)\n        .setUserAuthenticationRequired(true)\n        .setInvalidatedByBiometricEnrollment(true)\n        .setUserAuthenticationValidityDurationSeconds(30)\n        .setIsStrongBoxBacked(true)\n        .build()\n\nfun attestationChain(): List<java.security.cert.Certificate> {\n    val ks = KeyStore.getInstance(\"AndroidKeyStore\").apply { load(null) }\n    return ks.getCertificateChain(KEY_ALIAS).toList()\n}"
+        }
+      ],
+      "followUps": [
+        "Why does key attestation need a fresh server challenge, and what does the attestation's boot-state field prove?",
+        "What happens to an auth-gated key when the user enrolls a new fingerprint?",
+        "When is the TEE not enough, and you want a server-side HSM instead?"
+      ],
+      "traps": [
+        "Saying the Keystore 'encrypts your data'. It holds keys; you still perform the encryption with a `Cipher`.",
+        "Claiming `setUserAuthenticationRequired(true)` alone blocks all offline attacks — the lock screen and the threat model still matter."
+      ],
+      "refs": [
+        {
+          "title": "Android Keystore system",
+          "url": "https://developer.android.com/privacy-and-security/keystore",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Android Key Attestation",
+          "url": "https://developer.android.com/training/articles/security-key-attestation",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0006",
+      "track": "security-kmp",
+      "topic": "Security",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "encryption",
+        "keystore",
+        "data-at-rest"
+      ],
+      "q": "Jetpack Security's security-crypto is deprecated — how do you encrypt data at rest today, and what do you actually gain?",
+      "shortAnswer": [
+        "`security-crypto` (EncryptedSharedPreferences, EncryptedFile) was a convenience wrapper around the Keystore; it is deprecated, and the guidance is to build on the raw Keystore APIs or a maintained library.",
+        "The pattern to describe: a non-exportable Keystore AES/GCM key, a `Cipher` with a fresh random 12-byte IV, and the IV plus ciphertext stored — never the key, never a hardcoded passphrase.",
+        "For a whole Room database you swap the SQLite driver for SQLCipher, deriving its passphrase from a Keystore key — and you exclude the secrets from auto-backup so a cloud restore can't leak them."
+      ],
+      "answer": "#### Why security-crypto is gone\nJetpack Security's `security-crypto` library wrapped the Keystore so encrypted preferences and files were a one-liner. Google deprecated it — the APIs are unmaintained — and the replacement is the underlying pattern it used. In an interview, citing it as *the* answer is a date check; the current answer is the raw-Keystore pattern below.\n\n#### The pattern to describe\n1. Generate an AES/GCM key in the `AndroidKeyStore` — non-exportable, optionally StrongBox-backed.\n2. `Cipher.getInstance(\"AES/GCM/NoPadding\")`, `init(ENCRYPT_MODE, key)`, read `cipher.iv`, and store **IV + ciphertext**. A fresh random IV per encryption is mandatory — a reused IV with GCM is a catastrophic, fully-recoverable break.\n3. Never store the key and never derive it from a hardcoded passphrase — a hardcoded secret is recoverable from the APK, which is equivalent to no encryption.\n4. For a whole database, SQLCipher encrypts every page; `Room.databaseBuilder(...).openHelperFactory(SQLCipherOpenHelperFactory(...))` swaps in with the same DAOs and migrations.\n\n#### What you actually gain\nAt-rest encryption defends the stolen-device and forensics case: a `dd` of internal storage yields ciphertext, and the key lives only in the TEE. It does **not** defend an attacker running inside your app (same UID reads your plaintext after you decrypt), malware with root, or your own logs. So scope it — encrypt tokens, keys, and sensitive blobs; exclude them from backups; and keep the threat model honest: the client is still untrusted.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Keystore AES/GCM encrypt/decrypt — IV travels with the ciphertext",
+          "src": "fun encryptToFile(plain: ByteArray): ByteArray {\n    val key = getOrCreateAesKey(KEY_ALIAS)      // non-exportable Keystore key\n    val cipher = Cipher.getInstance(\"AES/GCM/NoPadding\")\n    cipher.init(Cipher.ENCRYPT_MODE, key)\n    val iv = cipher.iv\n    val ct = cipher.doFinal(plain)\n    return iv + ct                              // store IV alongside ciphertext\n}\n\nfun decryptFromFile(data: ByteArray): ByteArray {\n    val key = getOrCreateAesKey(KEY_ALIAS)\n    val iv = data.copyOfRange(0, 12)\n    val ct = data.copyOfRange(12, data.size)\n    val cipher = Cipher.getInstance(\"AES/GCM/NoPadding\")\n    cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))\n    return cipher.doFinal(ct)\n}"
+        }
+      ],
+      "followUps": [
+        "Why is reusing an IV with AES/GCM a fatal flaw, not a subtle one?",
+        "What does SQLCipher give you that encrypting individual values doesn't?",
+        "How do you keep a token out of Google Drive auto-backup without breaking device migration?"
+      ],
+      "traps": [
+        "Recommending security-crypto as the current solution — it is deprecated.",
+        "Answering 'we use AES' without a key-management story; where the key lives is the whole question."
+      ],
+      "refs": [
+        {
+          "title": "Jetpack Security releases",
+          "url": "https://developer.android.com/jetpack/androidx/releases/security",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Android Keystore system",
+          "url": "https://developer.android.com/privacy-and-security/keystore",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0007",
+      "track": "security-kmp",
+      "topic": "Biometrics",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "biometrics",
+        "biometricprompt",
+        "class-3"
+      ],
+      "q": "How do you build biometric login with BiometricPrompt, when do you attach a CryptoObject, and why does Class 3 matter?",
+      "shortAnswer": [
+        "Check capability first with `BiometricManager.canAuthenticate(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)`, then show the system prompt only when it returns success — and deep-link enrollment when nothing is enrolled.",
+        "Attach a `CryptoObject` (a `Cipher` over a `setUserAuthenticationRequired(true)` key) so the TEE only releases the key on a real successful authentication — the prompt result is then cryptographically bound to your operation.",
+        "Class 3 (`BIOMETRIC_STRONG`) means strong biometrics like fingerprint or 3D face; weaker Class 2 modalities cannot be used with crypto-bound keys, so the class choice trades UX against assurance."
+      ],
+      "answer": "#### The flow\nCheck availability before showing anything: `BiometricManager.from(context).canAuthenticate(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)` — `BIOMETRIC_SUCCESS` means you may prompt; `BIOMETRIC_ERROR_NONE_ENROLLED` means the user has no credential set up and you deep-link enrollment. Then build `PromptInfo` with `setAllowedAuthenticators(...)`. Including `DEVICE_CREDENTIAL` is what lets the PIN/pattern/password fallback happen *inside the same system prompt* — the honest path for a user with no biometric.\n\n#### Why CryptoObject\nA bare prompt proves only that a biometric gesture happened; nothing ties it to your data. A `CryptoObject` wraps a `Cipher`, `Mac`, or `Signature` over a Keystore key created with `setUserAuthenticationRequired(true)`. The hardware releases the key for `Cipher.init(DECRYPT_MODE, ...)` only after a genuine successful authentication — so you can decrypt a stored token in the success callback and know the auth was real, not replayed. No `CryptoObject`, no cryptographic binding.\n\n#### Class 2 vs Class 3\nClass 3 is strong: fingerprint, secure 3D face, iris. Class 2 is weaker face/voice that is cheaper to spoof. Strong-biometric-protected keys require Class 3 — passing `BIOMETRIC_STRONG` declares it. If you allow Class 2 (`BIOMETRIC_WEAK`), crypto-bound authentication is off the table entirely. Combine the class choice with `CryptoObject` and `setUserAuthenticationValidityDurationSeconds` for re-auth windows, and keep a real fallback — re-entry of a server-side password — for the failure path.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "BiometricPrompt with a crypto-bound decrypt",
+          "src": "fun promptLogin(activity: FragmentActivity) {\n    val canAuth = BiometricManager.from(activity)\n        .canAuthenticate(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)\n    if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {\n        promptEnrollment(activity)   // ACTION_BIOMETRIC_ENROLL or device lock\n        return\n    }\n\n    val promptInfo = BiometricPrompt.PromptInfo.Builder()\n        .setTitle(\"Unlock your vault\")\n        .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)\n        .build()\n\n    val cipher = getAuthCipher()     // Cipher over a setUserAuthenticationRequired(true) key\n    val prompt = BiometricPrompt(\n        activity,\n        ContextCompat.getMainExecutor(activity),\n        object : BiometricPrompt.AuthenticationCallback() {\n            override fun onAuthenticationSucceeded(\n                result: BiometricPrompt.AuthenticationResult\n            ) {\n                val crypto = result.cryptoObject ?: return\n                decryptWith(crypto.cipher)   // key released only after real success\n            }\n\n            override fun onAuthenticationError(code: Int, errString: CharSequence) {\n                fallbackToPassword()\n            }\n        }\n    )\n    prompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))\n}"
+        }
+      ],
+      "followUps": [
+        "Why is a crypto-bound key invalidated when the user adds a new biometric?",
+        "How do you keep the prompt alive across a configuration change like rotation?",
+        "What is the difference between DEVICE_CREDENTIAL in setAllowedAuthenticators and the old setDeviceCredentialAllowed?"
+      ],
+      "traps": [
+        "Treating the prompt result as proof of identity for arbitrary data — without a CryptoObject the auth isn't bound to any key or operation.",
+        "Allowing Class 2 biometrics for a strong-protected key — the platform rejects the crypto operation at runtime."
+      ],
+      "refs": [
+        {
+          "title": "Biometric authentication guide",
+          "url": "https://developer.android.com/identity/sign-in/biometric-auth",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "BiometricPrompt API reference",
+          "url": "https://developer.android.com/reference/androidx/biometric/BiometricPrompt",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0008",
+      "track": "security-kmp",
+      "topic": "Integrity",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "play-integrity",
+        "safetynet",
+        "fraud"
+      ],
+      "q": "Play Integrity replaced SafetyNet — what signal does it give you, what does it prove, and where should the verdict actually be checked?",
+      "shortAnswer": [
+        "Play Integrity returns a Google-signed, nonce-bound verdict covering app integrity (your signed APK from Play), device integrity (bootloader state, no obvious compromise), and licensing.",
+        "SafetyNet Attestation is deprecated; Play Integrity is the same idea with more signals and a standardized server-verification path — the JWS is verified with Google's keys or the Play Console API.",
+        "Verify on your backend, not client-side — and treat the verdict as a device-state risk signal for fraud detection, never as proof of who is holding the device."
+      ],
+      "answer": "#### The three signals\nPlay Integrity returns a Google-signed JSON verdict with: **app integrity** — the running APK is the one you signed and Play distributed; **device integrity** — bootloader state and no root/compromise-indicating flags, with Play services running; and **licensing/account details**. The token is bound to a nonce you supply, short-lived, and signed by Google, so it cannot be forged or replayed.\n\n#### Vs SafetyNet\nSafetyNet Attestation is deprecated; Play Integrity is the successor. The practical differences: Play Integrity adds app-integrity and licensing signals SafetyNet lacked, and its verification story is standardized — verify the JWS signature with Google's public keys or call the Play Console API from your server. Migrating is mostly issuing a new token and verifying the new format.\n\n#### What it does NOT prove\nThe list interviews reward you for stating: a passing verdict does not prove the *user* is legitimate (device farms attest real hardware), does not stop a determined attacker (device-and-response replay, Frida attached after the call, a modified build on a device the check flags later), and is not 'this person is trustworthy'. It is a point-in-time statement that *this app instance is in a known-good state*. Use it as one signal in a server-side risk engine alongside anomaly detection.\n\n#### Where to check\nThe verdict must be verified server-side: the client sends app + token, your server validates the signature and nonce, reads the verdict, and only then raises the user's trust level. Checking client-side is theater — a tampered client tampers with the check too.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Client collects the token; the server is the only verifier",
+          "src": "// Client: collect the token bound to a server-supplied nonce.\nsuspend fun fetchIntegrityToken(nonce: String): String =\n    integrityManager.requestIntegrityToken(\n        IntegrityTokenRequest.builder().setNonce(nonce).build()\n    )\n\n// Server, NOT in the app:\nfun verifyVerdict(token: String, expectedNonce: String): Verdict {\n    val jws = verifyGoogleSignature(token)          // Google keys or Play Console API\n    check(jws.requestDetails.nonce == expectedNonce)\n    check(System.currentTimeMillis() < jws.expiryTimestamp)\n    return Verdict(\n        appIntegrity = jws.appIntegrity.appRecognitionVerdict,\n        deviceIntegrity = jws.deviceIntegrity.deviceRecognitionVerdict,\n        licensing = jws.accountDetails.appLicensingVerdict,\n    )\n}"
+        }
+      ],
+      "followUps": [
+        "What is the difference between MEETS_DEVICE_INTEGRITY and MEETS_STRONG_INTEGRITY?",
+        "How do you handle a user whose verdict fails — block outright or degrade their trust level?",
+        "Why should the nonce be generated server-side and bound to the session?"
+      ],
+      "traps": [
+        "Trusting a verdict checked inside the app — the check must run somewhere the attacker doesn't control.",
+        "Presenting Play Integrity as identity or anti-fraud proof rather than a device-state signal."
+      ],
+      "refs": [
+        {
+          "title": "Play Integrity API",
+          "url": "https://developer.android.com/google/play/integrity",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "SafetyNet API reference",
+          "url": "https://developers.google.com/android/reference/com/google/android/gms/safetynet/SafetyNetApi",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0009",
+      "track": "security-kmp",
+      "topic": "Integrity",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "root-detection",
+        "tamper",
+        "play-integrity"
+      ],
+      "q": "You're asked to detect rooted devices client-side. How would you actually approach it, and why is that approach fragile?",
+      "shortAnswer": [
+        "Every client-side check runs in the attacker's environment and can be hooked, spoofed, or answered with a clean process — root detection is a losing arms race, not a solvable problem.",
+        "The realistic pattern is a stack of fragile-but-cheap signals — test-keys, su binaries, known packages — feeding a risk score, combined with Play Integrity's device verdict verified server-side.",
+        "Treat root as a risk factor to weigh and degrade around, never as a fact to block on — a client that blocks on root simply gets its check stripped and re-signed."
+      ],
+      "answer": "#### Why it's fragile\nRoot detection runs on the attacker's machine. Any check you write — `ro.build.tags` containing `test-keys`, an `su` binary on PATH, the Magisk package, overlayfs traces, `/system/xbin` — can be read, hooked (Frida, LSPosed), spoofed, or bypassed by Zygisk deny-lists while the real app runs elsewhere. A rooted attacker controls the responses; a bypass is an afternoon of work. Treat any single check as noise, not proof.\n\n#### What still earns a place\nUse the checks as **cheap signals in a stack**, not a binary gate: test-keys property, known-bad package names, su binary locations, suspicious mounts, and your own APK signature at runtime. Fail closed where the cost is low — require re-authentication or block one high-value action — and log the score server-side with a version tag. Accept false positives: some legitimate users run admin tools, custom ROMs, or a corporate MDM that trips your heuristics.\n\n#### The platform answer\nThe strongest signal available is Play Integrity's device-integrity verdict — bootloader state and Play services health — which is Google-signed and server-verifiable, and far harder to fake than a file check. But even it can be gamed with device farming, so it remains a risk indicator, not identity.\n\n#### The realism the interview tests\nThe right framing: root detection is a **risk indicator feeding a server-side risk engine**, never a statement of truth, never enforced purely on the device. Anyone promising 'we detect root and block' client-side is describing a demo, not a defense.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Cheap client signals that feed a server-side risk score — never a gate",
+          "src": "fun rootRisk(): Int {\n    var score = 0\n    if (System.getProperty(\"ro.build.tags\")?.contains(\"test-keys\") == true) score += 2\n    if (File(\"/system/app/Superuser.apk\").exists()) score += 1\n    if (File(\"/system/xbin/su\").exists() || File(\"/system/bin/su\").exists()) score += 2\n    return score\n}\n\n// Combine with the Play Integrity device verdict on the server, e.g.:\n//   risk = rootRisk() + integrityScore(verdict)     // not enforced client-side"
+        }
+      ],
+      "followUps": [
+        "Why is Play Integrity's device verdict more trustworthy than a file existence check?",
+        "How do you keep a rooted user usable while still protecting the highest-risk actions?",
+        "What is the cost of a false positive for a legitimate user?"
+      ],
+      "traps": [
+        "Promising root detection as a solvable problem — the environment is attacker-controlled.",
+        "Blocking users purely on a client-side check, which the attacker simply removes."
+      ],
+      "refs": [
+        {
+          "title": "Play Integrity API",
+          "url": "https://developer.android.com/google/play/integrity",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Verified Boot",
+          "url": "https://source.android.com/docs/security/features/verifiedboot",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0010",
+      "track": "security-kmp",
+      "topic": "Security",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "intent-redirection",
+        "exported-components",
+        "uri-grants"
+      ],
+      "q": "Two exported components forward the intents they receive to internal Activities. What is intent redirection, and how do you audit for it?",
+      "shortAnswer": [
+        "Intent redirection is an exported component re-launching the intent it received — or passing it to a PendingIntent — so the attacker's component target, data URI, and URI-grant flags travel into your app's process.",
+        "The payoff is a URI permission grant or a privileged action performed as your UID: the attacker piggybacks on your authority without ever asking you.",
+        "Audit: never forward a received Intent; copy validated fields into a fresh Intent, zero the flags, drop FLAG_GRANT_*_URI_PERMISSION, and enable StrictMode's detectUnsafeIntentLaunch in debug."
+      ],
+      "answer": "#### The chain\nAn exported component is reachable by any app — that is its definition. The vulnerable pattern is forwarding: `startActivity(intent)` on the very Intent you received. That Intent still carries the attacker's component target, action, extras, and — the real payload — URI permission grant flags such as `FLAG_GRANT_READ_URI_PERMISSION`. The system honours those grants because *your* UID is performing the launch, so an attacker who gets your component to forward a crafted intent can read a content URI your app never meant to share, or steer an internal component into an action it shouldn't take. The same chain works through `PendingIntent` and `getActivity` — anywhere a received Intent is re-invoked.\n\n#### What the platform changed\nSince Android 14, apps targeting 34+ cannot send an **implicit** intent that resolves to one of their own non-exported components — that specific self-navigation hole is closed by the system. An explicit forward, or a forward into a system component, is still on you. The change reduces blast radius; it does not remove the bug class.\n\n#### The audit checklist\n- `exported=\"false\"` unless you can name the caller and the use case.\n- In any exported component, never re-launch the received Intent — copy the fields you validated into a fresh one.\n- Strip flags (`intent.flags = 0` unless you re-add them deliberately) and drop the two grant flags.\n- `StrictMode.setVmPolicy(VmPolicy.Builder().detectUnsafeIntentLaunch())` catches forwards at dev time.\n- Check `getCallingPackage()` against an allowlist inside the component.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Exported component that validates input and never forwards the Intent",
+          "src": "fun onNewIntent(intent: Intent) {\n    val caller = callingPackage                       // set because the component is exported\n    if (caller !in allowedCallers) return\n\n    val itemId = intent.getStringExtra(\"itemId\")\n        ?.takeIf { it.matches(Regex(\"[a-zA-Z0-9_-]{1,32}\")) } ?: return\n\n    startActivity(Intent(this, DetailActivity::class.java).apply {\n        putExtra(\"itemId\", itemId)                   // fresh intent: no flags, no grants\n    })\n}\n\n// Debug-only tripwire for forwarding bugs.\nStrictMode.setVmPolicy(\n    StrictMode.VmPolicy.Builder()\n        .detectUnsafeIntentLaunch()\n        .penaltyLog()\n        .build()\n)"
+        }
+      ],
+      "followUps": [
+        "How does a URI permission grant survive the forward — why is that the attack's payload?",
+        "What did Android 14's implicit-intent block actually fix, and what did it leave open?",
+        "How would you find an intent-redirection bug in a legacy codebase?"
+      ],
+      "traps": [
+        "Forwarding the received Intent unchanged and assuming the framework re-validates — grants and flags travel with it.",
+        "Treating exported=false as the whole fix — the explicit forward and the PendingIntent variants remain."
+      ],
+      "refs": [
+        {
+          "title": "Exported components",
+          "url": "https://developer.android.com/privacy-and-security/risks/android-exported",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Intent redirection",
+          "url": "https://developer.android.com/privacy-and-security/risks/intent-redirection",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0011",
+      "track": "security-kmp",
+      "topic": "Security",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "pendingintent",
+        "flag-immutable",
+        "capabilities"
+      ],
+      "q": "Why is every PendingIntent you hand out immutable by default, and what does FLAG_MUTABLE actually let the recipient do?",
+      "shortAnswer": [
+        "A PendingIntent is a capability token: whoever holds it can fire your wrapped Intent as your app — so since Android 12 the wrapped Intent is immutable by default and the holder can't rewrite it.",
+        "FLAG_MUTABLE lets the holder modify the Intent's action, data, component, and extras before it fires — a redirection primitive if the holder is malicious.",
+        "You only need FLAG_MUTABLE where the system itself must fill a field — notification direct reply, some widget and assistant flows — and you minimize it to exactly those cases."
+      ],
+      "answer": "#### The token model\nA `PendingIntent` wraps an Intent and a component, and grants whoever holds the token the right to fire it **as your app**: `getCreatorPackage()` returns your package, the launch runs with your UID, and URI grants on it are honoured with your authority. It is a capability, so the default posture since Android 12 is `FLAG_IMMUTABLE` — the holder cannot touch the wrapped Intent's contents.\n\n#### What mutability buys an attacker\nWith `FLAG_MUTABLE`, the holder can `fillIn`/`send` a modified Intent: change the component target, inject extras, or attach a data URI carrying a grant flag. A mutable PendingIntent handed to a system API that passes it onward, or exposed through an exported surface, becomes an intent-redirection primitive — an attacker steers *your* token at a component you never meant to reach, running as you. That is why the platform made the flag mandatory to declare when targeting Android 12+ and immutable the default: the dangerous value now has to be explicit.\n\n#### When mutable is genuinely required\nThe short list: notification **direct reply** (`RemoteInput` must inject the reply text), some `AppWidgetProvider` click flows the system augments, and certain `getActivity`-for-result patterns. The rule: immutable everywhere, mutable exactly where the API breaks without it, no URI grants on a mutable token, and a code review for every mutable creation. The default incantation should read `FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Immutable by default; mutable only for RemoteInput",
+          "src": "val contentIntent = Intent(context, InboxActivity::class.java)\nval defaultPi = PendingIntent.getActivity(\n    context, 0, contentIntent,\n    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE\n)\n\n// The one legitimate mutable case: RemoteInput must write the reply into the Intent.\nval replyIntent = Intent(context, ReplyReceiver::class.java)\nval replyPi = PendingIntent.getBroadcast(\n    context, 1, replyIntent,\n    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE\n)\nval action = NotificationCompat.Action.Builder(\n    R.drawable.ic_reply, \"Reply\", replyPi\n).addRemoteInput(RemoteInput.Builder(KEY_REPLY).build()).build()"
+        }
+      ],
+      "followUps": [
+        "Beyond notifications, what can a malicious holder do with a mutable PendingIntent?",
+        "How do URI grants interact with a mutable PendingIntent?",
+        "Which Android version forced the explicit mutability flag, and what does targeting lower change?"
+      ],
+      "traps": [
+        "Marking a PendingIntent mutable 'in case we need it later' — every mutable token is a redirection surface.",
+        "Claiming FLAG_IMMUTABLE prevents the creator from reusing the token — it only binds the recipient."
+      ],
+      "refs": [
+        {
+          "title": "Mutable PendingIntent risk",
+          "url": "https://developer.android.com/privacy-and-security/risks/pending-intent",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Sender of PendingIntents",
+          "url": "https://developer.android.com/privacy-and-security/risks/sender-of-pending-intents",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0012",
+      "track": "security-kmp",
+      "topic": "Deep links",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "app-links",
+        "deep-links",
+        "assetlinks"
+      ],
+      "q": "Custom schemes and unverified https links both get hijacked. What makes a link hijack-resistant, and what does assetlinks.json actually verify?",
+      "shortAnswer": [
+        "A custom scheme is a first-come claim — any app can declare the same filter, there's no ownership, and the user sees a chooser; hijacking a scheme is trivial and unfixable by design.",
+        "An Android App Link is https plus android:autoVerify=true, verified at install against https://<host>/.well-known/assetlinks.json, which must list your package name and your SHA-256 signing-certificate fingerprint.",
+        "When verification fails — wrong fingerprint (Play App Signing key vs your upload key), a redirect, or the wrong content type — the link silently degrades to unverified and other apps can intercept it."
+      ],
+      "answer": "#### Why schemes are hijackable\nAn intent filter is a claim, not a right. For a custom scheme, every app can register `myapp://`, and because several apps match, Android shows a disambiguation dialog. An attacker registers your scheme, captures the user's 'always open with', or redirects a link rendered in a WebView. There is no ownership model for schemes — treating one as identity is the bug.\n\n#### App Links raise the bar\nAn App Link is an `https://your-domain/...` filter with `android:autoVerify=\"true\"`. At install time (and periodically) Android fetches `https://your-domain/.well-known/assetlinks.json` and checks that it declares your package name and a SHA-256 of your **signing certificate**. On a match the system opens your app directly — no chooser — and a competing app cannot claim that link. Ownership moves from 'whoever installed first' to 'whoever controls the domain', which is the entire point.\n\n#### The failure modes\nVerification failing is silent and the link degrades to *unverified* — the chooser returns and other apps can intercept. Common causes: the file isn't served as `application/json` from the exact path, the request redirects, the fingerprint uses your upload key instead of the Play App Signing key, or an HTTP-to-HTTPS redirect on the host. Debug with `adb shell pm verify-app-links` and `get-app-links`.\n\n#### Verification is not safety\nEven a verified App Link is an attacker-controllable entry point — a shared link can carry hostile parameters. assetlinks.json proves ownership of the mapping, nothing about the payload; every parameter is still untrusted input.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Verified App Link filter, and treating the payload as hostile",
+          "src": "<!-- AndroidManifest.xml -->\n<activity android:name=\".ItemActivity\" android:exported=\"true\" android:launchMode=\"singleTop\">\n    <intent-filter android:autoVerify=\"true\">\n        <action android:name=\"android.intent.action.VIEW\" />\n        <category android:name=\"android.intent.category.DEFAULT\" />\n        <category android:name=\"android.intent.category.BROWSABLE\" />\n        <data android:scheme=\"https\" android:host=\"example.com\" android:pathPrefix=\"/item\" />\n    </intent-filter>\n</activity>\n\n// Even a verified link is hostile input — validate every field.\nfun handleAppLink(intent: Intent) {\n    val itemId = intent.data?.lastPathSegment\n        ?.takeIf { it.matches(Regex(\"[a-zA-Z0-9_-]{1,32}\")) } ?: return\n    openItem(itemId)\n}"
+        }
+      ],
+      "followUps": [
+        "Why does the Play App Signing fingerprint mismatch make App Link verification silently fail?",
+        "What happens when verification can't complete at install, and how do you detect it?",
+        "What is still left to secure once you accept that a link is user-controllable input?"
+      ],
+      "traps": [
+        "Claiming assetlinks.json proves 'the link is safe' — it proves ownership, not that the payload is benign.",
+        "Using a custom scheme for anything sensitive because 'nobody else would register it'."
+      ],
+      "refs": [
+        {
+          "title": "Android App Links",
+          "url": "https://developer.android.com/training/app-links",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "Unsafe use of deep links",
+          "url": "https://developer.android.com/privacy-and-security/risks/unsafe-use-of-deeplinks",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    },
+    {
+      "id": "sk-0013",
+      "track": "security-kmp",
+      "topic": "WebView",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "webview",
+        "javascript-interface",
+        "safe-browsing"
+      ],
+      "q": "You're loading untrusted remote content into a WebView. What is the full hardening list, and what do you lose by applying it?",
+      "shortAnswer": [
+        "For untrusted content: JavaScript off unless required, setAllowFileAccess(false) and setAllowContentAccess(false), no file/universal-access-from-file URLs, and WebViewAssetLoader to serve your own assets over https without reopening file://.",
+        "Never addJavascriptInterface on untrusted pages — the bridge is the classic RCE and privilege-escalation channel; if you must bridge, restrict it to fully trusted first-party pages and expose the smallest surface.",
+        "Add Safe Browsing so known-malicious pages get blocked, verify the origin before any privileged action, and treat the WebView as hostile: no credentials, no file paths, no native secrets."
+      ],
+      "answer": "#### The baseline\nFor untrusted remote content: `settings.javaScriptEnabled = false` unless a feature genuinely needs it; `setAllowFileAccess(false)`, `setAllowContentAccess(false)`, `setAllowFileAccessFromFileURLs(false)`, `setAllowUniversalAccessFromFileURLs(false)`; and turn off geolocation, zoom, and other surfaces you don't need. Everything the page can read is data you handed it, so hand it nothing you wouldn't paste into a browser.\n\n#### JavaScript interfaces\n`addJavascriptInterface` injects Java methods as `window.<name>` — the single most dangerous WebView API. Before Android 4.2 it was remotely exploitable (the classic WebView RCE); since then only `@JavascriptInterface`-annotated methods are exposed, but the risk moves to what those methods can do. A page that can reach your bridge can call anything annotated. So: never bridge untrusted pages, and when a first-party page genuinely needs it, expose one method with no `Context`, no file paths, and validated arguments. Prefer `postMessage`/`WebMessageListener` or `evaluateJavascript` for the rare data you actually need.\n\n#### Files, schemes, Safe Browsing\nA WebView that renders remote HTML must not be able to read `file://` or `content://` — that turns the browser into a local-file reader. Keep both off and serve your own bundled assets through `WebViewAssetLoader`, which presents them over an https scheme (`appassets.androidplatform.net`) the page can load without file access. Enable Safe Browsing (`SafeBrowsingCompat`) so Google's lists block known-malicious pages. Finally, verify `webView.url` matches your host before any privileged action in `onPageFinished` — navigation is the other way in: a redirect chain to an attacker host is still 'your WebView'.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Hardened untrusted-content WebView with an https asset loader",
+          "src": "fun configureUntrustedWebView(webView: WebView) {\n    webView.settings.apply {\n        javaScriptEnabled = false\n        allowFileAccess = false\n        allowContentAccess = false\n        setAllowFileAccessFromFileURLs(false)\n        setAllowUniversalAccessFromFileURLs(false)\n    }\n    SafeBrowsingCompat.setSafeBrowsingEnabled(webView, true)\n\n    val loader = WebViewAssetLoader.Builder()\n        .addPathHandler(\"/assets/\", AssetsPathHandler(context))\n        .build()\n    webView.webViewClient = object : WebViewClient() {\n        override fun shouldInterceptRequest(\n            view: WebView,\n            request: WebResourceRequest\n        ): WebResourceResponse? = loader.shouldInterceptRequest(request.url)\n    }\n    webView.loadUrl(\"https://example.com/page\")\n}"
+        }
+      ],
+      "followUps": [
+        "Why is addJavascriptInterface the one thing you must never do with untrusted content?",
+        "How does WebViewAssetLoader keep local assets reachable while file access stays off?",
+        "What can the WebView still leak even with all of this locked down?"
+      ],
+      "traps": [
+        "Enabling JavaScript plus a bridge 'for convenience' on remote content — that is the RCE class.",
+        "Thinking file access being off makes your assets unreachable — route them through the https loader instead of re-opening file://."
+      ],
+      "refs": [
+        {
+          "title": "Insecure WebView JavaScript bridges",
+          "url": "https://developer.android.com/privacy-and-security/risks/insecure-webview-native-bridges",
+          "checked": "2026-08-12"
+        },
+        {
+          "title": "WebView unsafe file inclusion",
+          "url": "https://developer.android.com/privacy-and-security/risks/webview-unsafe-file-inclusion",
+          "checked": "2026-08-12"
+        }
+      ],
+      "addedIn": "2026.08.12"
+    }
+  ]
+}

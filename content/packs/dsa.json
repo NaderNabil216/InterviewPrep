@@ -1,0 +1,305 @@
+{
+  "id": "dsa",
+  "title": "Problem Solving",
+  "track": "dsa",
+  "items": [
+    {
+      "id": "ds-0001",
+      "track": "dsa",
+      "topic": "Hashing",
+      "level": 1,
+      "type": "dsa",
+      "pattern": "Hashing / frequency map",
+      "tags": [
+        "array",
+        "hashmap"
+      ],
+      "q": "Two Sum — find indices of two numbers adding to a target",
+      "prompt": "Given an `IntArray` and a target, return the indices of the two numbers that add up to the target. Exactly one solution exists and you may not use the same element twice.\n\nThis is almost always the warm-up. The interviewer is checking that you go from brute force to the hash-map insight quickly, and that you state complexity without being asked.",
+      "hints": [
+        "Brute force is two nested loops, O(n²). What information are you recomputing?",
+        "For each element `x`, you're looking for `target - x`. What data structure answers 'have I seen this value?' in O(1)?",
+        "Store value → index as you go, and check for the complement **before** inserting the current element so you never reuse it."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Single pass, O(n) time / O(n) space",
+          "src": "fun twoSum(nums: IntArray, target: Int): IntArray {\n    val seen = HashMap<Int, Int>()          // value -> index\n    for ((i, x) in nums.withIndex()) {\n        val need = target - x\n        seen[need]?.let { return intArrayOf(it, i) }\n        seen[x] = i                          // insert AFTER the lookup\n    }\n    return intArrayOf()\n}"
+        }
+      ],
+      "complexity": "Time O(n), space O(n). The brute force is O(n²) time / O(1) space — mention the trade-off explicitly.",
+      "followUps": [
+        "What if the array is sorted? (Two pointers, O(1) extra space.)",
+        "What if there are multiple valid answers and you must return all unique pairs?",
+        "Three Sum — how does the approach generalize, and why does sorting help there?"
+      ],
+      "starter": "fun twoSum(nums: IntArray, target: Int): IntArray {\n    // your solution\n}",
+      "addedIn": "2026.08.1",
+      "refs": [
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0002",
+      "track": "dsa",
+      "topic": "Sliding window",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Sliding window",
+      "tags": [
+        "string",
+        "window"
+      ],
+      "q": "Longest substring without repeating characters",
+      "prompt": "Given a string, return the length of the longest substring with no repeated characters.\n\nThe canonical sliding-window problem. If you can derive the window-shrink invariant out loud, you'll pass most window questions.",
+      "hints": [
+        "A substring is a contiguous range — that suggests a window with two pointers rather than generating substrings.",
+        "Expand `right` one character at a time. When does the window become invalid?",
+        "When you see a duplicate, move `left` to just past the previous occurrence of that character. Track last-seen index per character so the jump is O(1) rather than shrinking one step at a time."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Window with last-seen index — O(n)",
+          "src": "fun lengthOfLongestSubstring(s: String): Int {\n    val lastSeen = HashMap<Char, Int>()\n    var left = 0\n    var best = 0\n\n    for (right in s.indices) {\n        val c = s[right]\n        // only jump forward — never move left backwards\n        lastSeen[c]?.let { prev -> if (prev >= left) left = prev + 1 }\n        lastSeen[c] = right\n        best = maxOf(best, right - left + 1)\n    }\n    return best\n}"
+        }
+      ],
+      "complexity": "Time O(n) — each index is visited once by `right` and `left` never moves backward. Space O(min(n, alphabet)).",
+      "followUps": [
+        "Longest substring with at most K distinct characters — how does the invariant change?",
+        "Minimum window substring — why does that one need a counter map rather than a set?",
+        "Why is `if (prev >= left)` necessary? What breaks without it?"
+      ],
+      "starter": "fun lengthOfLongestSubstring(s: String): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.1",
+      "refs": [
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0003",
+      "track": "dsa",
+      "topic": "Design",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Design / linked hash map",
+      "tags": [
+        "cache",
+        "design",
+        "android"
+      ],
+      "q": "Design an LRU cache with O(1) get and put",
+      "prompt": "Implement an LRU (least-recently-used) cache supporting `get(key)` and `put(key, value)` in O(1) average time, evicting the least recently used entry when capacity is exceeded.\n\n**Why this one matters for Android:** it is exactly what `LruCache` and every image loader's memory cache does. Expect the follow-up \"now make it thread-safe\" or \"now add a disk tier\".",
+      "hints": [
+        "You need two things at once: O(1) key lookup, and O(1) reordering of recency. One data structure gives you each.",
+        "HashMap gives lookup. A doubly-linked list gives O(1) move-to-front and O(1) removal from the tail — provided the map stores the *node*, not the value.",
+        "In Kotlin you can also get this free: `LinkedHashMap(capacity, 0.75f, accessOrder = true)` and override `removeEldestEntry`. Show you know both — implement the manual one, then mention the shortcut."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Manual implementation — HashMap + doubly-linked list",
+          "src": "class LRUCache<K, V>(private val capacity: Int) {\n\n    private class Node<K, V>(val key: K, var value: V) {\n        var prev: Node<K, V>? = null\n        var next: Node<K, V>? = null\n    }\n\n    private val map = HashMap<K, Node<K, V>>()\n    private val head = Node<K, V>(null as K, null as V)   // sentinels avoid null checks\n    private val tail = Node<K, V>(null as K, null as V)\n\n    init { head.next = tail; tail.prev = head }\n\n    fun get(key: K): V? {\n        val node = map[key] ?: return null\n        moveToFront(node)\n        return node.value\n    }\n\n    fun put(key: K, value: V) {\n        map[key]?.let { it.value = value; moveToFront(it); return }\n\n        if (map.size == capacity) {\n            val lru = tail.prev!!\n            unlink(lru)\n            map.remove(lru.key)\n        }\n        val node = Node(key, value)\n        map[key] = node\n        addFirst(node)\n    }\n\n    private fun moveToFront(n: Node<K, V>) { unlink(n); addFirst(n) }\n\n    private fun unlink(n: Node<K, V>) {\n        n.prev?.next = n.next\n        n.next?.prev = n.prev\n    }\n\n    private fun addFirst(n: Node<K, V>) {\n        n.next = head.next\n        n.prev = head\n        head.next?.prev = n\n        head.next = n\n    }\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "The shortcut worth naming after you've shown the manual version",
+          "src": "class SimpleLru<K, V>(private val capacity: Int) :\n    LinkedHashMap<K, V>(capacity, 0.75f, /* accessOrder = */ true) {\n    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>) = size > capacity\n}"
+        }
+      ],
+      "complexity": "get / put both O(1) average. Space O(capacity). Every operation is a constant number of pointer updates plus one hash operation.",
+      "followUps": [
+        "Make it thread-safe — where exactly do you synchronize, and what does that cost under contention?",
+        "Add a size-aware eviction policy (bytes, not entries) like a bitmap cache needs.",
+        "Add a disk tier: what changes about eviction and about `get` latency?",
+        "How would you implement LFU instead, and why is it harder to keep O(1)?"
+      ],
+      "starter": "class LRUCache<K, V>(private val capacity: Int) {\n    fun get(key: K): V? {\n        TODO()\n    }\n    fun put(key: K, value: V) {\n        TODO()\n    }\n}",
+      "addedIn": "2026.08.1",
+      "refs": [
+        {
+          "title": "android.util.LruCache",
+          "url": "https://developer.android.com/reference/android/util/LruCache",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0004",
+      "track": "dsa",
+      "topic": "Android-flavored",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Flow / concurrency",
+      "tags": [
+        "android",
+        "flow",
+        "coroutines"
+      ],
+      "q": "Implement debounced search-as-you-type that cancels stale requests",
+      "prompt": "Build the data path for a search screen: the user types, and you must issue a network search — but only after typing settles, never for the same query twice in a row, and a slower earlier request must never overwrite a newer result.\n\nThis is the single most common \"write some Android code\" exercise in a modern loop, because it tests coroutines, Flow operator choice, and race-condition awareness in one small problem.",
+      "hints": [
+        "Which operator waits for a pause in emissions? Which one drops consecutive duplicates?",
+        "The stale-response race is the real question. Which flatMap variant *cancels* the in-flight inner flow when a new value arrives?",
+        "Think about where errors are caught — `catch` only sees upstream. Where must it go so a failed search doesn't kill the whole flow for the rest of the session?"
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The full pipeline, with the race and the error path handled",
+          "src": "class SearchViewModel(private val repo: SearchRepository) : ViewModel() {\n\n    private val query = MutableStateFlow(\"\")\n\n    val state: StateFlow<SearchUiState> = query\n        .debounce(300)                      // wait for typing to settle\n        .map { it.trim() }\n        .distinctUntilChanged()             // ignore no-op edits\n        .flatMapLatest { q ->               // CANCELS the previous request\n            if (q.length < 2) {\n                flowOf(SearchUiState.Idle)\n            } else {\n                repo.search(q)\n                    .map<List<Item>, SearchUiState> { SearchUiState.Results(it) }\n                    .onStart { emit(SearchUiState.Loading) }\n                    // catch INSIDE the inner flow: one failed search must not\n                    // terminate the outer flow for the rest of the session\n                    .catch { emit(SearchUiState.Error(it)) }\n            }\n        }\n        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SearchUiState.Idle)\n\n    fun onQueryChange(q: String) { query.value = q }\n}\n\nsealed interface SearchUiState {\n    data object Idle : SearchUiState\n    data object Loading : SearchUiState\n    data class Results(val items: List<Item>) : SearchUiState\n    data class Error(val cause: Throwable) : SearchUiState\n}"
+        }
+      ],
+      "complexity": "No asymptotic complexity to quote — the interviewer is scoring operator choice and race handling. Say out loud: `flatMapLatest` guarantees at most one in-flight request and cancels stale ones, so out-of-order responses are impossible by construction.",
+      "followUps": [
+        "Why `flatMapLatest` and not `flatMapMerge`? What bug does merge produce?",
+        "Where must `catch` go, and what happens if you put it after `stateIn`?",
+        "How would you add a local-cache-first tier so results appear instantly offline?",
+        "How would you test this deterministically? (Virtual time + `runTest` + Turbine.)"
+      ],
+      "starter": "class SearchViewModel(private val repo: SearchRepository) : ViewModel() {\n    private val query = MutableStateFlow(\"\")\n\n    // Build the pipeline: debounce, dedupe, cancel stale requests, handle errors\n    val state: StateFlow<SearchUiState> = TODO()\n\n    fun onQueryChange(q: String) { query.value = q }\n}",
+      "addedIn": "2026.08.1",
+      "refs": [
+        {
+          "title": "kotlinx.coroutines Flow.debounce",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/debounce.html",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Flow on Android",
+          "url": "https://developer.android.com/kotlin/flow",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0005",
+      "track": "dsa",
+      "topic": "Trees",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Tree / BFS",
+      "tags": [
+        "tree",
+        "bfs",
+        "queue"
+      ],
+      "q": "Binary tree level-order traversal",
+      "prompt": "Return the node values level by level, as a list of lists.\n\nThe base case for every \"process a tree in layers\" question — right-side view, zigzag order, level averages, and minimum depth are all one small edit away.",
+      "hints": [
+        "Depth-first recursion visits nodes in the wrong order for this. What structure processes nodes in the order they were discovered?",
+        "Use a queue. But a plain BFS loses level boundaries — how do you know where one level ends?",
+        "Capture `queue.size` at the top of each iteration: that count is exactly the number of nodes in the current level."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "BFS with an explicit level-size snapshot",
+          "src": "class TreeNode(val v: Int, val left: TreeNode? = null, val right: TreeNode? = null)\n\nfun levelOrder(root: TreeNode?): List<List<Int>> {\n    if (root == null) return emptyList()\n\n    val result = mutableListOf<List<Int>>()\n    val queue: ArrayDeque<TreeNode> = ArrayDeque()\n    queue.add(root)\n\n    while (queue.isNotEmpty()) {\n        val levelSize = queue.size          // snapshot BEFORE adding children\n        val level = ArrayList<Int>(levelSize)\n\n        repeat(levelSize) {\n            val node = queue.removeFirst()\n            level.add(node.v)\n            node.left?.let { queue.add(it) }\n            node.right?.let { queue.add(it) }\n        }\n        result.add(level)\n    }\n    return result\n}"
+        }
+      ],
+      "complexity": "Time O(n) — every node enqueued and dequeued once. Space O(w) where w is the maximum width, which is O(n) in the worst case (a complete tree's last level).",
+      "followUps": [
+        "Zigzag level order — what's the minimal change? (Reverse alternate levels, or use a deque.)",
+        "Right-side view — which element of each level do you keep?",
+        "Why is the space complexity O(w) and not O(h)?",
+        "Could you do level order with DFS? (Yes — pass depth down and index into the result list.)"
+      ],
+      "starter": "class TreeNode(val v: Int, val left: TreeNode? = null, val right: TreeNode? = null)\n\nfun levelOrder(root: TreeNode?): List<List<Int>> {\n    // your solution\n}",
+      "addedIn": "2026.08.1",
+      "refs": [
+        {
+          "title": "Kotlin ArrayDeque",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0006",
+      "track": "dsa",
+      "topic": "Dynamic programming",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Dynamic programming (1D)",
+      "tags": [
+        "dp",
+        "array"
+      ],
+      "q": "House Robber — max sum with no two adjacent elements",
+      "prompt": "Given an array of non-negative integers, choose a subset with maximum sum such that no two chosen elements are adjacent.\n\nThe cleanest introduction to DP state design. If you can articulate the recurrence and then compress the space, you've demonstrated the whole DP toolkit in three minutes.",
+      "hints": [
+        "At each index you have exactly two choices. What are they, and what does each imply about the previous index?",
+        "Define `dp[i]` = best total using the first `i` houses. Write the recurrence in terms of `dp[i-1]` and `dp[i-2]`.",
+        "`dp[i] = max(dp[i-1], dp[i-2] + nums[i])`. Now notice you only ever read two cells back — you don't need the array at all."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "O(1) space after recognizing the two-cell window",
+          "src": "fun rob(nums: IntArray): Int {\n    var skip = 0    // best if we do NOT take the previous house  (dp[i-2])\n    var take = 0    // best considering everything up to previous (dp[i-1])\n\n    for (n in nums) {\n        val next = maxOf(take, skip + n)\n        skip = take\n        take = next\n    }\n    return take\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "The explicit table version — write this first if it helps you think",
+          "src": "fun robTable(nums: IntArray): Int {\n    if (nums.isEmpty()) return 0\n    if (nums.size == 1) return nums[0]\n\n    val dp = IntArray(nums.size)\n    dp[0] = nums[0]\n    dp[1] = maxOf(nums[0], nums[1])\n    for (i in 2 until nums.size) {\n        dp[i] = maxOf(dp[i - 1], dp[i - 2] + nums[i])\n    }\n    return dp.last()\n}"
+        }
+      ],
+      "complexity": "Time O(n), space O(1) for the rolling version (O(n) for the table). Always mention that you'd write the table first and compress second — interviewers like seeing the derivation.",
+      "followUps": [
+        "House Robber II — the houses form a circle. How does that change the problem? (Run it twice, excluding first or last.)",
+        "What if you could take at most K non-adjacent houses?",
+        "Reconstruct which houses were chosen, not just the total. What extra bookkeeping is needed?"
+      ],
+      "starter": "fun rob(nums: IntArray): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.1",
+      "refs": [
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin sequences",
+          "url": "https://kotlinlang.org/docs/sequences.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    }
+  ]
+}

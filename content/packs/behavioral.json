@@ -1,0 +1,120 @@
+{
+  "id": "behavioral",
+  "title": "Behavioral & Interview Craft",
+  "track": "behavioral",
+  "items": [
+    {
+      "id": "bh-0001",
+      "track": "behavioral",
+      "topic": "STAR stories",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "star",
+        "preparation"
+      ],
+      "q": "Build your STAR story bank — which six stories cover almost every behavioral question?",
+      "shortAnswer": [
+        "Prepare **six** stories, not thirty. Nearly every behavioral prompt is a re-skin of one of: a hard technical problem, a failure, a conflict, leading/mentoring, ambiguity, and measurable impact.",
+        "STAR: **Situation** (2 sentences), **Task** (1), **Action** (the bulk — what *you* did, first person), **Result** (quantified, plus what you learned).",
+        "The most common failure is spending 80% on context and 20% on your actions. Invert that."
+      ],
+      "answer": "#### The six stories\n1. **Hardest technical problem** — ideally a real diagnostic journey: a production crash, a memory leak, a race. Interviewers love debugging narratives because they cannot be faked.\n2. **A failure you owned** — something that went wrong because of your decision, including what you changed afterward. \"I care too much\" wastes the question.\n3. **Conflict** — with a peer, manager or PM. The good version ends in a decision made on evidence, and you supporting it even when it was not your preference.\n4. **Leadership** — bringing someone up, running a migration, setting a standard. No title required.\n5. **Ambiguity** — vague requirements, shifting priorities. Show how you created clarity: prototypes, written proposals, narrowed scope.\n6. **Measurable impact** — a number. Crash rate, startup time, conversion, build time, on-call load.\n\nOne story can serve two slots, but rehearse which one you will reach for so you are not deciding live.\n\n#### Writing them well\nKeep Situation and Task short. **Action is 60-70% of the airtime**, in first person singular; \"we\" hides your contribution. **Quantify the result**: \"cold start 4.2 s to 2.6 s p90, moving D1 retention 1.8%.\" With no number, give a proxy: \"that on-call page stopped firing.\" Close with one sentence on what you would do differently — that separates a rehearsed answer from a mature one.\n\n#### Practice\nSay each out loud, timed, targeting **2-3 minutes**. Past four you are losing the room. Record yourself once: uncomfortable, unusually effective.",
+      "followUps": [
+        "Tell me about a time you disagreed with your manager.",
+        "Tell me about a project that failed.",
+        "Tell me about a time you had to make a decision without enough information.",
+        "What's the most technically challenging thing you've built?",
+        "Tell me about a time you gave difficult feedback."
+      ],
+      "traps": [
+        "Using 'we' throughout. The interviewer literally cannot score a candidate who never says what they personally did.",
+        "A failure story where the failure was someone else's fault, or wasn't really a failure. It reads as a lack of self-awareness, which is worse than the failure would have been.",
+        "No numbers anywhere. Even rough ones ('roughly halved the crash rate') beat none."
+      ],
+      "refs": [
+        {
+          "title": "Google — how we hire",
+          "url": "https://www.google.com/about/careers/applications/how-we-hire/",
+          "checked": "2026-08-09"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "bh-0002",
+      "track": "behavioral",
+      "topic": "Live coding craft",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "live-coding",
+        "communication"
+      ],
+      "q": "How do you run a live coding round well, independent of whether you solve it?",
+      "shortAnswer": [
+        "**Clarify → state the approach → get buy-in → code → test → optimize.** Never start typing on the first sentence of the problem.",
+        "Narrate continuously. A silent candidate who solves it can score worse than a talking candidate who nearly solves it, because the interviewer can't assess reasoning they never heard.",
+        "Test your own code by hand on a small input before saying you're done. Finding your own bug is a strong positive signal; the interviewer finding it is not."
+      ],
+      "answer": "#### The sequence\n1. **Restate the problem** in your own words — it catches misunderstandings while they are free.\n2. **Ask about constraints**: input size, duplicates, empty or null, sorted, memory, may I mutate it? Two or three sharp questions, not twenty.\n3. **Work one small example by hand.** It often reveals the pattern and always demonstrates rigor.\n4. **State the brute force** with its complexity — a working baseline that shows you understand the problem.\n5. **Propose the improvement and its complexity, then pause for buy-in**: \"a hash map gets this to O(n) — does that seem right?\" A good interviewer redirects you here, saving ten minutes.\n6. **Code it**, narrating decisions rather than syntax: \"I'm using a deque so I can pop from both ends\", not \"now I type a for loop\".\n7. **Trace your code** on the example, out loud.\n8. **Discuss edge cases and improvements** unprompted.\n\n#### When you are stuck\nSay so, and say *where*: \"I know this is DP but I'm not landing the state definition — let me define what `dp[i]` means precisely.\" That is what a real colleague does. Silence with growing panic is the worst outcome. Take a hint gracefully and build on it; interviewers expect to give hints and score how you use them.\n\n#### Android-flavoured rounds\nMany Android loops replace LeetCode with \"implement a debounced search\", \"build an LRU image cache\", or \"write this screen's ViewModel\". Same structure, plus: mention threading, lifecycle, cancellation and error states unprompted. Those are what is being tested.",
+      "followUps": [
+        "What do you do when you genuinely don't know the algorithm?",
+        "How do you handle an interviewer who gives no feedback at all?",
+        "How much time should you spend clarifying before coding?"
+      ],
+      "traps": [
+        "Coding in silence. This is the single most common reason strong engineers fail loops.",
+        "Refusing hints, or taking a hint without acknowledging it. Interviewers score collaboration.",
+        "Declaring 'done' without testing. Let them watch you find your own off-by-one."
+      ],
+      "refs": [
+        {
+          "title": "Google technical interview guide",
+          "url": "https://www.google.com/about/careers/applications/interview-tips/",
+          "checked": "2026-08-09"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "bh-0003",
+      "track": "behavioral",
+      "topic": "Your questions",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "behavioral",
+        "questions"
+      ],
+      "q": "What should you ask your interviewer, and what does it signal?",
+      "shortAnswer": [
+        "Ask questions that only *that* person can answer. Generic questions ('what's the culture like?') waste the slot and signal no preparation.",
+        "The best questions reveal how the team actually works: release cadence, on-call, tech debt, how decisions get made, what the last hard trade-off was.",
+        "Always ask something. \"No questions\" reads as disinterest, and it's the easiest signal to get right."
+      ],
+      "answer": "#### Tailor by interviewer\n**Engineer / peer**\n- What does the release process look like — cadence, staged rollout, who owns the go/no-go?\n- How much of the codebase is Compose vs Views, and what's the migration story?\n- What's the on-call load actually like? What paged you most recently?\n- Where's the tech debt you'd fix first with a free month?\n- How long does CI take, and does that bother anyone?\n\n**Engineering manager**\n- How do you decide what the team works on next quarter?\n- What does growth look like for someone joining at this level?\n- What's a recent decision the team got wrong, and what changed afterward?\n- How do you handle disagreement between engineering and product?\n\n**Skip-level / director**\n- What's the biggest risk to this team's roadmap in the next year?\n- How does mobile influence product decisions here, versus receiving them?\n\n#### Signals your questions send\n- Asking about **testing, CI, and rollout** signals you've shipped and maintained real software.\n- Asking **\"what would make someone unsuccessful in this role?\"** is unusually informative.\n\n#### Questions to avoid\n- Anything answerable from the careers page.\n- Compensation with an engineer who has no say in it — save it for the recruiter.\n- \"What's the culture like?\" — you'll get a rehearsed answer with zero information.\n\n#### Remember you're evaluating them\nIt's genuinely bidirectional: does on-call sound sustainable? Do they measure anything? Can they describe a decision they reversed? Vague or defensive answers to concrete questions are data.",
+      "followUps": [
+        "How do you ask about work-life balance without sounding like you're avoiding work?",
+        "What do you do if the interviewer's answers raise a red flag?",
+        "How many questions is the right number?"
+      ],
+      "traps": [
+        "Having no questions ready. It is the cheapest possible point to lose.",
+        "Asking questions you could have answered by reading the job posting — it signals you didn't prepare."
+      ],
+      "refs": [
+        {
+          "title": "Google — interview tips",
+          "url": "https://www.google.com/about/careers/applications/interview-tips/",
+          "checked": "2026-08-07"
+        }
+      ],
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.13"
+    }
+  ]
+}

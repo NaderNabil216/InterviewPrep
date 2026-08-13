@@ -1,0 +1,124 @@
+{
+  "track": "data-networking",
+  "scope": [
+    "OkHttp internals — interceptor chain, connection pool, dispatcher, retries, cache semantics and Cache-Control",
+    "Retrofit — how the interface becomes calls, converters, call adapters, suspend support, error handling",
+    "token refresh done correctly with Authenticator and single-flighting concurrent 401s",
+    "certificate pinning, when it backfires, and the network security config",
+    "TLS, HTTP/2 and HTTP/3 on mobile, multiplexing, head-of-line blocking",
+    "request timeouts, retries with jitter, and idempotency",
+    "Ktor client as an alternative and for KMP",
+    "kotlinx.serialization vs Moshi vs Gson, polymorphic serialization, schema evolution and unknown fields",
+    "protobuf and payload size",
+    "GraphQL on mobile trade-offs",
+    "pagination protocols — offset vs cursor and why offset breaks",
+    "Room — entities, relations, DAO queries returning Flow, transactions, threading",
+    "Room — indices and query plans, migrations (auto vs manual) and testing them, destructive fallback risk",
+    "Room — full-text search, Room in KMP",
+    "SQLite basics an Android engineer must know — indices, EXPLAIN QUERY PLAN, WAL, N+1 queries",
+    "DataStore Preferences vs Proto, migration from SharedPreferences, why apply() can still block",
+    "file storage, cache dir vs files dir, cleanup",
+    "encryption at rest — SQLCipher, Keystore-backed keys, deprecation of Jetpack Security crypto",
+    "Paging 3 — PagingSource, RemoteMediator, RemoteKeys, invalidation, separators, testing",
+    "image loading with Coil — memory and disk tiers, sizing, eviction, and how you would design it",
+    "WebSockets and long-lived connections, reconnect and backoff",
+    "FCM data vs notification messages, delivery guarantees, payload limits",
+    "sync engines and background sync scheduling",
+    "network observability, metrics and debugging with a proxy",
+    "offline queueing and conflict resolution"
+  ],
+  "specs": [],
+  "coverage": {
+    "OkHttp internals — interceptor chain, connection pool, dispatcher, retries, cache semantics and Cache-Control": [
+      "dn-0001",
+      "dn-0005",
+      "dn-0006",
+      "dn-0007"
+    ],
+    "Retrofit — how the interface becomes calls, converters, call adapters, suspend support, error handling": [
+      "dn-0008",
+      "dn-0009",
+      "dn-0010"
+    ],
+    "token refresh done correctly with Authenticator and single-flighting concurrent 401s": [
+      "dn-0001"
+    ],
+    "certificate pinning, when it backfires, and the network security config": [
+      "dn-0011",
+      "dn-0040"
+    ],
+    "TLS, HTTP/2 and HTTP/3 on mobile, multiplexing, head-of-line blocking": [
+      "dn-0012"
+    ],
+    "request timeouts, retries with jitter, and idempotency": [
+      "dn-0013",
+      "dn-0039"
+    ],
+    "Ktor client as an alternative and for KMP": [
+      "dn-0014"
+    ],
+    "kotlinx.serialization vs Moshi vs Gson, polymorphic serialization, schema evolution and unknown fields": [
+      "dn-0015",
+      "dn-0016"
+    ],
+    "protobuf and payload size": [
+      "dn-0017"
+    ],
+    "GraphQL on mobile trade-offs": [
+      "dn-0018"
+    ],
+    "pagination protocols — offset vs cursor and why offset breaks": [
+      "dn-0004"
+    ],
+    "Room — entities, relations, DAO queries returning Flow, transactions, threading": [
+      "dn-0019",
+      "dn-0038"
+    ],
+    "Room — indices and query plans, migrations (auto vs manual) and testing them, destructive fallback risk": [
+      "dn-0002",
+      "dn-0020"
+    ],
+    "Room — full-text search, Room in KMP": [
+      "dn-0021",
+      "dn-0022"
+    ],
+    "SQLite basics an Android engineer must know — indices, EXPLAIN QUERY PLAN, WAL, N+1 queries": [
+      "dn-0023",
+      "dn-0024",
+      "dn-0034"
+    ],
+    "DataStore Preferences vs Proto, migration from SharedPreferences, why apply() can still block": [
+      "dn-0003",
+      "dn-0036"
+    ],
+    "file storage, cache dir vs files dir, cleanup": [
+      "dn-0025"
+    ],
+    "encryption at rest — SQLCipher, Keystore-backed keys, deprecation of Jetpack Security crypto": [
+      "dn-0026"
+    ],
+    "Paging 3 — PagingSource, RemoteMediator, RemoteKeys, invalidation, separators, testing": [
+      "dn-0004",
+      "dn-0027"
+    ],
+    "image loading with Coil — memory and disk tiers, sizing, eviction, and how you would design it": [
+      "dn-0028"
+    ],
+    "WebSockets and long-lived connections, reconnect and backoff": [
+      "dn-0029"
+    ],
+    "FCM data vs notification messages, delivery guarantees, payload limits": [
+      "dn-0030"
+    ],
+    "sync engines and background sync scheduling": [
+      "dn-0031",
+      "dn-0037"
+    ],
+    "network observability, metrics and debugging with a proxy": [
+      "dn-0032"
+    ],
+    "offline queueing and conflict resolution": [
+      "dn-0033"
+    ]
+  }
+}

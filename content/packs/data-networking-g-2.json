@@ -1,0 +1,425 @@
+{
+  "id": "data-networking-g-2",
+  "title": "Data, Networking & Persistence",
+  "track": "data-networking",
+  "items": [
+    {
+      "id": "dn-0014",
+      "track": "data-networking",
+      "topic": "Networking",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "ktor",
+        "kmp",
+        "http-client"
+      ],
+      "q": "When would you use Ktor client instead of Retrofit, and what's its plugin model?",
+      "shortAnswer": [
+        "Ktor client is a multiplatform HTTP client: the same HttpClient code runs on Android (OkHttp engine), iOS (Darwin engine), and the JVM, so a KMP app writes its networking layer once.",
+        "Features are opt-in plugins — ContentNegotiation, HttpTimeout, Auth, Logging, WebSockets — installed with install(), and a missing plugin (like ContentNegotiation) silently gives you raw strings instead of typed bodies.",
+        "The trade-off vs Retrofit is the interface-based typed API: Ktor is request-based with no compile-time endpoint validation, which is worth it when multiplatform sharing is the goal."
+      ],
+      "answer": "#### The pitch\nKtor client is a **multiplatform** HTTP client. The same `HttpClient(...)` code compiles for Android (OkHttp engine), iOS (Darwin engine), and the JVM (CIO engine). For a KMP app that means interceptors, serialization, auth, and repositories live once in shared code.\n\n#### The engine swap\nThe engine is chosen per platform in an `expect`/`actual` factory — `HttpClient(OkHttp)` on Android, `HttpClient(Darwin)` on iOS — while the call sites stay identical. You get suspend-first requests out of the box.\n\n#### Plugins, not magic\nEverything is opt-in:\n- `ContentNegotiation` with a `json()` serializer (kotlinx.serialization, Moshi, or Gson),\n- `HttpTimeout` for connect/socket/request timeouts,\n- `Auth` — including `bearer` with a `loadTokens` block and a `sendWithoutRequest` predicate (the Ktor analogue of OkHttp's Authenticator),\n- `Logging`, `WebSockets`, `HttpRequestRetry`.\n\nInstall nothing and `body<T>()` cannot work — you must wire ContentNegotiation yourself.\n\n#### The trade-off vs Retrofit\nNo interface, no `@GET` annotations, no compile-time endpoint checks; instead you write `client.get(\"path\") { parameter(...) }`. For a pure Android app Retrofit's typed service interface is still the ergonomic win. For KMP, Ktor's single stack across platforms usually wins — and it's the standard answer for shared networking.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A shared KMP client with plugins",
+          "src": "// commonMain: shared, platform-agnostic\nsuspend fun fetchUser(client: HttpClient, id: String): User =\n    client.get(\"https://api.example.com/users/$id\").body()\n\n// platform-specific engine selection\n// androidMain\nactual fun httpClient() = HttpClient(OkHttp) {\n    install(ContentNegotiation) { json() }\n    install(HttpTimeout) { requestTimeoutMillis = 15_000 }\n    install(Auth) {\n        bearer {\n            loadTokens { refreshTokens() }\n        }\n    }\n}\n\n// iosMain\nactual fun httpClient() = HttpClient(Darwin) {\n    install(ContentNegotiation) { json() }\n}"
+        }
+      ],
+      "followUps": [
+        "How does Ktor client pick its engine on Android, and why does it matter?",
+        "How does the Auth plugin compare to OkHttp's Authenticator?",
+        "What is the KMP story for Retrofit versus Ktor today?"
+      ],
+      "traps": [
+        "Pitching Ktor as just an OkHttp replacement on Android, missing the multiplatform rationale that is the whole point.",
+        "Not knowing ContentNegotiation is a plugin — forgetting it means no typed bodies and no error message."
+      ],
+      "refs": [
+        {
+          "title": "Ktor",
+          "url": "https://github.com/ktorio/ktor",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Kotlin Multiplatform",
+          "url": "https://kotlinlang.org/docs/multiplatform.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0015",
+      "track": "data-networking",
+      "topic": "Serialization",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "kotlinx-serialization",
+        "moshi",
+        "gson"
+      ],
+      "q": "kotlinx.serialization vs Moshi vs Gson — how do you choose, and what differs under the hood?",
+      "shortAnswer": [
+        "kotlinx.serialization is compile-time and reflection-free: the serialization plugin generates Serializer objects for @Serializable classes, giving fast, deterministic parsing that also works in KMP.",
+        "Moshi is reflection-based but with KSP codegen produces generated adapters, and its KotlinJsonAdapterFactory respects Kotlin nullability and default values.",
+        "Gson is the risky one: it instantiates classes via Unsafe and sets fields directly, so a missing JSON field silently becomes null in a Kotlin non-null property, bypassing the type system."
+      ],
+      "answer": "#### The mechanism split\nThe real difference is **compile-time vs runtime**. kotlinx.serialization adds a compiler plugin that *generates* `Serializer`s for `@Serializable` classes — no reflection, fast and deterministic, and it works in KMP. Moshi is reflection-based at heart, but with KSP codegen you get the same generated-adapters payoff, and `KotlinJsonAdapterFactory` handles Kotlin nullability and defaults correctly.\n\n#### Why Gson is the dangerous one\nGson uses **Unsafe** to instantiate classes and set fields directly — it skips constructors, treats a missing JSON field as `null`, and ignores Kotlin default values. Populate a `data class User(val name: String)` where the server omits `name` and Gson assigns null to a non-null property. It's the classic null-safety leak that interviews probe.\n\n#### Choosing\n- KMP app → kotlinx.serialization, because it works everywhere.\n- Android-only, want codegen → kotlinx.serialization or Moshi; both integrate with Retrofit via a converter factory.\n- Legacy JSON with dynamic shapes → Gson's looseness is a liability, not a feature.\n\n#### The setup\nkotlinx.serialization needs the plugin on *every* module that declares `@Serializable` classes, and `Json { ignoreUnknownKeys = true }` for tolerant reads of forward-compatible responses.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "kotlinx.serialization in practice",
+          "src": "@Serializable\ndata class User(\n    val id: String,\n    val name: String,\n    val email: String? = null,\n)\n\nval json = Json { ignoreUnknownKeys = true }   // unknown fields: ignore, don't crash\n\nval user: User = json.decodeFromString(\"\"\"{\"id\":\"42\",\"name\":\"Ada\",\"email\":\"ada@x.com\"}\"\"\")\nval wire: String = json.encodeToString(user)\n\n// With Retrofit (kotlinx converter):\n// Retrofit.Builder().addConverterFactory(json.asConverterFactory(\"application/json\".toMediaType()))"
+        }
+      ],
+      "followUps": [
+        "What does Gson do to a Kotlin non-null property when the field is missing?",
+        "Why is codegen faster than reflection for parsing?",
+        "How do you add a field without breaking older app versions?"
+      ],
+      "traps": [
+        "Using Gson and not realizing it bypasses Kotlin's null-safety via Unsafe instantiation.",
+        "Forgetting the serialization plugin on a module — you get 'Serializer not found' errors."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin serialization",
+          "url": "https://kotlinlang.org/docs/serialization.html",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Moshi",
+          "url": "https://github.com/square/moshi",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0016",
+      "track": "data-networking",
+      "topic": "Serialization",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "polymorphism",
+        "schema-evolution",
+        "json"
+      ],
+      "q": "How do you serialize polymorphic types and evolve a schema without breaking old clients?",
+      "shortAnswer": [
+        "Polymorphism needs a discriminator field both sides use to pick the concrete type — kotlinx.serialization emits type by default (overridable via @JsonClassDiscriminator) and resolves it against the sealed hierarchy at the base.",
+        "Schema evolution rules are: only add fields, always with defaults or nullable, and never rename or re-type existing ones — renames corrupt stored offline data, not just the wire.",
+        "Unknown fields are handled by configuration: ignoreUnknownKeys keeps old clients alive when servers add fields, and tolerant readers keep new clients working against old servers."
+      ],
+      "answer": "#### Discriminators\nPolymorphic JSON carries a discriminator field so the deserializer knows the concrete type. kotlinx.serialization emits `type` by default — override with `@JsonClassDiscriminator(\"kind\")` — and matches it against the `sealed` hierarchy declared at the base type. Moshi does the same via `@JsonClass` plus `@TypeLabel` in a `polymorphic` adapter. Without a discriminator, a concrete-only payload hits a field the reader can't map and throws.\n\n#### Evolution rules\nOnly add fields, and give them a default or `null` so both directions work: an old app reads a new response (extra field ignored or defaulted), a new app reads an old response (missing field gets its default). Never remove, rename, or re-type a field — a `@SerialName` rename is wire-compatible but corrupts anything you stored locally, which is a silent data-loss bug.\n\n#### Unknown fields\nSet `Json { ignoreUnknownKeys = true }` for forward-compatible reads; without it, a new field the server adds breaks every old client. Moshi's codegen adapters tolerate unknown keys by design. The discipline is symmetric: be tolerant of what you read, and never emit removed fields.\n\n#### Versioning\nWhen semantics genuinely change, ship a `schemaVersion` in the payload and branch server-side rather than fighting the wire format.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Sealed polymorphic serialization in kotlinx",
+          "src": "@Serializable\nsealed interface Event {\n    val id: String\n}\n\n@Serializable\n@SerialName(\"click\")\ndata class ClickEvent(override val id: String, val target: String) : Event\n\n@Serializable\n@SerialName(\"scroll\")\ndata class ScrollEvent(override val id: String, val deltaY: Int) : Event\n\nval json = Json { ignoreUnknownKeys = true }\n\n// Serializes to: {\"type\":\"click\",\"id\":\"1\",\"target\":\"button\"}\nval decoded: Event = json.decodeFromString(\"\"\"{\"type\":\"click\",\"id\":\"1\",\"target\":\"button\"}\"\"\")\n\n// Add a new variant as @SerialName(\"view\") — old clients ignore it only if\n// ignoreUnknownKeys is on; the discriminator never collides with data fields."
+        }
+      ],
+      "followUps": [
+        "What happens when the discriminator value changes but the wire format doesn't?",
+        "How do you keep an old installed app reading a newer response?",
+        "Why is renaming a field worse than deleting one?"
+      ],
+      "traps": [
+        "Serializing a polymorphic base without a discriminator — the reader cannot resolve the type at runtime.",
+        "Renaming a @SerialName and calling it compatible — stored offline data silently corrupts."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin serialization",
+          "url": "https://kotlinlang.org/docs/serialization.html",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Moshi",
+          "url": "https://github.com/square/moshi",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0017",
+      "track": "data-networking",
+      "topic": "Serialization",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "protobuf",
+        "payload",
+        "wire-format"
+      ],
+      "q": "When does protobuf beat JSON on mobile, and what does it cost you?",
+      "shortAnswer": [
+        "Protobuf encodes fields as tags (field number + wire type) plus varint values, so numeric-heavy payloads are dramatically smaller and decode without building intermediate maps or strings.",
+        "proto3 is strongly typed and versioned: you add fields by number and old and new binaries interoperate as long as numbers are never reused or renumbered.",
+        "The costs are ecosystem friction — no human-readable debugging, harder web interop — and on Android you want the protobuf-lite runtime to keep APK size and per-class overhead down."
+      ],
+      "answer": "#### The wire format\nEach field is a **tag** — field number plus wire type — followed by the value. Integers use **varints**: small numbers occupy a single byte, negative numbers get zigzag encoding, and strings/messages are length-delimited. Because the tag *is* the field name, a repeated message never repeats the keys, so numeric-heavy payloads are a fraction of the equivalent JSON.\n\n#### proto3\nA `.proto` file is the contract: typed fields, default values omitted on the wire. The compat rule is absolute — **never reuse or renumber a field**; add new numbers only, and old/new binaries interoperate.\n\n#### On Android\nUse the Gradle `com.google.protobuf` plugin and the `protobuf-javalite` runtime (`com.google.protobuf:protobuf-javalite`) — the `lite` variant keeps per-message class overhead and APK size far below full protobuf.\n\n#### The trade-offs\nSmaller, faster, strongly typed — but not human-readable (logs and proxies show bytes, not objects), awkward for web/JS consumers, and versioning discipline is on you. Pick it for large structured payloads or binary data (metrics batches, sync payloads); for small config-ish JSON, debuggability usually wins.\n\n#### Retrofitting\nWrap the generated message's `toByteArray()` in a `RequestBody` with `application/x-protobuf` and a custom converter makes it first-class.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A proto schema and its generated API",
+          "src": "// sync.proto\n// message SyncBatch {\n//   repeated int32 item_ids = 1;   // varint-packed when repeated\n//   string device_id = 2;\n//   int64 timestamp = 3;\n// }\n\n// Generated code, protobuf-lite runtime:\nval batch = SyncBatch.newBuilder()\n    .addItemIds(7)\n    .addItemIds(42)\n    .setDeviceId(\"abc\")\n    .setTimestamp(System.currentTimeMillis())\n    .build()\n\nval bytes: ByteArray = batch.toByteArray()   // tiny: tags + varints, no key names\n\n// Retrofit integration\nval body: RequestBody = bytes.toRequestBody(\"application/x-protobuf\".toMediaType())\n// and a Converter<ResponseBody, SyncBatch> for the response"
+        }
+      ],
+      "followUps": [
+        "Why is an integer smaller in protobuf than in JSON?",
+        "What breaks if you reuse a field number in proto3?",
+        "When is JSON still the better choice?"
+      ],
+      "traps": [
+        "Claiming protobuf is always smaller — string-heavy payloads shrink little, and the tooling cost stays.",
+        "Ignoring field-number stability, which silently corrupts data across versions."
+      ],
+      "refs": [
+        {
+          "title": "Protobuf overview",
+          "url": "https://developers.google.com/protocol-buffers/docs/overview",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Protobuf proto3",
+          "url": "https://developers.google.com/protocol-buffers/docs/proto3",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0018",
+      "track": "data-networking",
+      "topic": "Networking",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "graphql",
+        "apollo",
+        "trade-offs"
+      ],
+      "q": "What are the real trade-offs of GraphQL on mobile?",
+      "shortAnswer": [
+        "GraphQL lets a client request exactly the fields it needs in one round trip, eliminating the over-fetching and request chains of many REST screens.",
+        "The mobile costs are substantial: HTTP caching barely applies to one POST-ish endpoint, offline-first needs real work, error semantics allow partial data, and schema management adds operational complexity.",
+        "Apollo Kotlin generates type-safe models from queries at build time, so a query referencing a removed field fails compilation rather than crashing at runtime."
+      ],
+      "answer": "#### The upside\nOne endpoint, one round trip: the client states the exact shape it wants, so a profile screen fetches `{ user(id) { name avatar } }` in a single request with no over-fetching and no REST call chain. Types flow from the schema down.\n\n#### Apollo's codegen\nApollo Kotlin generates Kotlin models from your `.graphql` queries at build time. A query referencing a removed field **fails compilation**, and nullability comes from the schema — a field declared non-null that goes missing surfaces as an explicit error path, not a silent gap.\n\n#### The mobile costs\n- **Caching**: HTTP caching semantics barely apply to a single POST-ish endpoint. Apollo keeps an in-memory normalized cache; real offline-first needs substantial extra engineering.\n- **Errors**: responses carry partial data plus an `errors` array — a 'failed' call can still return usable data, and you handle that explicitly.\n- **Complexity**: schema versioning, gateway/server work, and generated code in the build.\n- **Pagination**: Relay-style cursors, same discipline as REST cursors.\n\n#### The verdict\nGraphQL pays off for many-fields, many-endpoint backends where round trips and over-fetching hurt. For a small REST API, the caching, offline, and operational ceremony usually isn't worth it.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A type-safe Apollo query",
+          "src": "// user.graphql\n// query GetUser($id: ID!) {\n//   user(id: $id) { name avatarUrl posts { title } }\n// }\n\n// Generated from the query — shape and nullability are compile-time\nval query = GetUserQuery(id = userId)\n\napolloClient.query(query).toFlow().collect { result ->\n    if (result.hasErrors()) {\n        val message = result.errors?.joinToString { it.message }   // partial data may exist too\n    }\n    val user = result.data?.user   // data + errors can coexist\n    user?.let { render(it.name, it.avatarUrl) }\n}"
+        }
+      ],
+      "followUps": [
+        "How do you paginate a GraphQL feed on mobile?",
+        "Why is GraphQL caching fundamentally different from HTTP caching?",
+        "How does Apollo's build-time codegen protect you?"
+      ],
+      "traps": [
+        "Selling GraphQL as simply 'faster' while ignoring the caching and offline complications.",
+        "Not knowing Apollo generates models at build time — claiming GraphQL clients are fully dynamic."
+      ],
+      "refs": [
+        {
+          "title": "Apollo Kotlin",
+          "url": "https://github.com/apollographql/apollo-kotlin",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0019",
+      "track": "data-networking",
+      "topic": "Room",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "room",
+        "dao",
+        "flow",
+        "threading"
+      ],
+      "q": "How do Room entities, relations, DAOs returning Flow, and threading fit together?",
+      "shortAnswer": [
+        "An @Entity maps one class to one table, a @Dao owns all its queries, and a @Relation lets a single query return a parent with its children assembled instead of an N+1 loop.",
+        "A DAO returning Flow re-emits whenever any table touched by the query changes, so the UI observes data instead of polling or manually refreshing.",
+        "suspend DAO methods and Flow are dispatched onto Room's own executor, so you do not need Dispatchers.IO around them; non-suspend calls run on the calling thread."
+      ],
+      "answer": "#### Entities\nAn `@Entity` maps one class to one table — `@PrimaryKey`, `@ColumnInfo` for column names, `@Index` and `@ForeignKey` for constraints. The `@Dao` owns all access: `@Query`, `@Insert`, `@Update`, `@Delete`, and `@Upsert`.\n\n#### Relations\n`@Relation` (`parentColumn` + `entityColumn`) lets one query return a parent with its children pre-joined, and `@Transaction` wraps it so the multi-select snapshot is consistent. Room enforces `@Transaction` on relation reads via lint — without it you risk a torn read.\n\n#### Flow\nA DAO returning `Flow<List<T>>` re-emits **whenever any table the query touches changes** — Room's invalidation tracker is table-granular, so a busy table re-emits often. The UI just collects; there's no manual refresh.\n\n#### Threading\nThe defaults: a non-suspend DAO call runs on the calling thread, and Room throws if that's the main thread with `allowMainThreadQueries` off. `suspend` DAO methods and `Flow` are **dispatched onto Room's own executor** (`CoroutinesRoom`) — wrapping them in `Dispatchers.IO` is a common cargo-cult that buys nothing. You can override with `setQueryExecutor`/`setTransactionExecutor`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Entity + relation + Flow DAO",
+          "src": "@Entity\ndata class Post(\n    @PrimaryKey val id: Long,\n    val authorId: Long,\n    val title: String,\n)\n\n@Entity\ndata class Author(@PrimaryKey val id: Long, val name: String)\n\ndata class PostWithAuthor(\n    @Embedded val post: Post,\n    @Relation(parentColumn = \"authorId\", entityColumn = \"id\")\n    val author: Author,\n)\n\n@Dao\ninterface PostDao {\n    @Transaction\n    @Query(\"SELECT * FROM posts ORDER BY id DESC\")\n    fun observePosts(): Flow<List<PostWithAuthor>>   // re-emits on any posts/authors change\n}"
+        }
+      ],
+      "followUps": [
+        "When exactly does Room's Flow re-emit?",
+        "Why must a @Relation query be marked @Transaction?",
+        "Do you need Dispatchers.IO around suspend Room calls?"
+      ],
+      "traps": [
+        "Wrapping suspend Room calls in Dispatchers.IO — Room already switches threads via CoroutinesRoom.",
+        "Writing a @Relation query without @Transaction — torn reads and lint errors."
+      ],
+      "refs": [
+        {
+          "title": "Accessing data with Room",
+          "url": "https://developer.android.com/training/data-storage/room/accessing-data",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Referencing data with Room",
+          "url": "https://developer.android.com/training/data-storage/room/referencing-data",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0020",
+      "track": "data-networking",
+      "topic": "Room",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "room",
+        "indexing",
+        "query-plan"
+      ],
+      "q": "How do you choose Room indices and verify them with EXPLAIN QUERY PLAN?",
+      "shortAnswer": [
+        "An index is a separate B-tree SQLite maintains on the chosen columns, so lookups, joins, and sorts on them skip a full table scan — Room declares them on the entity with @Entity(indices = [Index(\"userId\")]).",
+        "Column order matters in a composite index: SQLite can use it for a prefix of its columns, so put the most selective or most-filtered column first.",
+        "Verify with EXPLAIN QUERY PLAN, which prints whether the query used SEARCH on an index or a SCAN of the whole table, plus a USE TEMP B-TREE line when the sort column isn't indexed."
+      ],
+      "answer": "#### What an index is\nAn index is a separate **B-tree** SQLite maintains on the indexed columns, mapping values to rowids. A lookup that uses it is `SEARCH` — roughly O(log n); without one the query is a `SCAN` of every row. The rowid (`INTEGER PRIMARY KEY`) is already indexed automatically.\n\n#### Declaring\nRoom: `@Entity(indices = [Index(\"teamId\"), Index(value = [\"teamId\", \"role\"], unique = true)])`. Index foreign-key columns you join on; a `unique` index doubles as a constraint.\n\n#### Composite order\nA multi-column index is usable for a **prefix** of its columns — `(teamId, role)` serves `WHERE teamId = ?` but not `WHERE role = ?`. Put the most selective column first so the tree prunes as early as possible.\n\n#### Verifying\nRun `EXPLAIN QUERY PLAN SELECT ...` against a copy of the database (`adb shell sqlite3`, or a raw query). A good plan names the index — `SEARCH table USING INDEX idx_...`; a bad one shows `SCAN table` or `USE TEMP B-TREE FOR ORDER BY` when the sort column has no index.\n\n#### The cost\nEvery insert and update maintains *every* index on the table, so indexing everything is write amplification. Index what you filter, join, sort, or enforce unique on — nothing else.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Composite index + verifying the plan",
+          "src": "@Entity(\n    indices = [\n        Index(\"teamId\"),\n        Index(value = [\"teamId\", \"role\"], unique = true),\n    ]\n)\ndata class Member(\n    @PrimaryKey val id: Long,\n    val teamId: Long,\n    val role: String,\n)\n\n// Verify on a copy of the db:\n//   EXPLAIN QUERY PLAN\n//   SELECT * FROM members WHERE teamId = 3 AND role = 'owner';\n//   -> SEARCH members USING INDEX index_members_teamId_role (role=?)\n// With no index -> SCAN members  (~n rows visited instead of ~1)"
+        }
+      ],
+      "followUps": [
+        "Why does the column order of a composite index matter?",
+        "What do the SCAN vs SEARCH lines in a query plan tell you?",
+        "When does an index make queries slower?"
+      ],
+      "traps": [
+        "Indexing every column — write amplification on every insert.",
+        "Expecting an index to help an ORDER BY unless the sort column is inside it."
+      ],
+      "refs": [
+        {
+          "title": "Defining data with Room (indices)",
+          "url": "https://developer.android.com/training/data-storage/room/defining-data",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "SQLiteDatabase",
+          "url": "https://developer.android.com/reference/android/database/sqlite/SQLiteDatabase",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0021",
+      "track": "data-networking",
+      "topic": "Room",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "room",
+        "fts",
+        "full-text-search"
+      ],
+      "q": "How do you add full-text search with Room's FTS4/FTS5?",
+      "shortAnswer": [
+        "@Fts4(contentEntity = Article::class) creates an FTS virtual table SQLite maintains in sync with your content, tokenizing text so MATCH queries are fast instead of a LIKE scan.",
+        "You query it with MATCH — @Query(\"SELECT * FROM articleFts WHERE articleFts MATCH :term\") — and prefix queries use term*; the default tokenizer is unicode61, with porter for stemming.",
+        "The gotchas are escaping MATCH syntax in user input, joining back to the content table on rowid for full rows and bm25() ranking, and migration time rebuilding a large corpus."
+      ],
+      "answer": "#### Virtual tables\n`@Fts4(contentEntity = Article::class)` creates an FTS virtual table alongside your real table. SQLite maintains the tokenized index and syncs content from the referenced table (`contentEntity`), so you don't duplicate stored text.\n\n#### The DAO\nA `@Query(\"SELECT * FROM articleFts WHERE articleFts MATCH :term\")` returns matching rows. `MATCH` is the FTS operator — prefix queries are `term*`, and boolean operators like `AND` and `NEAR` are supported.\n\n#### How matching differs\nFTS splits text into tokens with a tokenizer — `unicode61` by default, `porter` adds stemming — then matches whole tokens. `LIKE '%term%'` is a full table scan of every row; it is not search, and it gets slower linearly.\n\n#### The gotchas\n- **Escaping**: `MATCH` treats quotes and parentheses as syntax, so raw user input can throw or silently match nothing — escape FTS special characters before binding.\n- **Ranking**: `MATCH` results carry rowids — join back to the content table on rowid and `ORDER BY bm25(articleFts)` for relevance.\n- **Cold start**: an FTS table is populated during migration; a large corpus adds real migration time.\n\n#### Coverage\nFTS indexes only the columns you declare on the `@Fts4` entity — keep searchable text there and full documents in the main table.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "FTS4 entity with content sync and a MATCH query",
+          "src": "@Entity\ndata class Article(\n    @PrimaryKey val id: Long,\n    val title: String,\n    val body: String,\n)\n\n@Fts4(contentEntity = Article::class)\n@Entity\ndata class ArticleFts(\n    val title: String,\n    val body: String,\n)\n\n@Dao\ninterface ArticleFtsDao {\n    @Query(\"SELECT * FROM articleFts WHERE articleFts MATCH :query\")\n    suspend fun search(query: String): List<ArticleFts>\n\n    // Rank by relevance, joining back to the full row\n    @Query(\"\"\"\n        SELECT * FROM articleFts JOIN articles ON articleFts.rowid = articles.id\n        WHERE articleFts MATCH :query ORDER BY bm25(articleFts)\n    \"\"\")\n    suspend fun searchRanked(query: String): List<Article>\n}"
+        }
+      ],
+      "followUps": [
+        "What does contentEntity do and why does it save space?",
+        "How does the tokenizer decide what matches?",
+        "Why can't you just use LIKE for search?"
+      ],
+      "traps": [
+        "Describing LIKE as search — FTS is tokenized, LIKE is a linear scan.",
+        "Binding raw user input into MATCH without escaping — FTS syntax breaks the query."
+      ],
+      "refs": [
+        {
+          "title": "Defining data with Room (full-text search)",
+          "url": "https://developer.android.com/training/data-storage/room/defining-data",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "dn-0022",
+      "track": "data-networking",
+      "topic": "Room",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "room",
+        "kmp",
+        "multiplatform"
+      ],
+      "q": "What does Room in KMP look like, and what works today?",
+      "shortAnswer": [
+        "Room is officially multiplatform: the same @Database, @Entity, and @Dao code compiles for Android, iOS, and desktop, with each platform providing its own SQLite driver.",
+        "suspend and Flow DAO queries, transactions, and migrations all work in shared code, so the data layer is written once for a KMP app.",
+        "Platform specifics — the driver choice (built-in on Android, SQLite C library on iOS) and schema export/verification — live in expect/actual, and each platform keeps its own database file."
+      ],
+      "answer": "#### Status\nRoom is **KMP-ready** — `androidx.room:room-runtime` is multiplatform, so `@Database`, `@Entity`, `@Dao`, migrations, and transactions compile from shared code for Android, iOS, and desktop.\n\n#### Drivers\nEach platform supplies the SQLite driver. Android uses the built-in framework driver; iOS uses the SQLite C library through the `sqlite-driver` artifact; desktop can use `sqlite-bundled`. You pick the driver in an `expect`/`actual` factory — shared code never touches platform types.\n\n#### What works\n- `suspend` and `Flow` DAO queries,\n- auto and manual migrations, with schema export and `MigrationTestHelper` on Android,\n- `withTransaction`,\n- Room KMP integrates with Paging on Android for paged local data.\n\n#### What stays platform-specific\nSchema export/verification and driver-backed features (SQLCipher on Android) are per-platform. And multiplatform does not mean one shared database: each platform has its own file — cross-device sync is your feature to build, not Room's.\n\n#### The interview shape\nWith the stack snapshot listing Room, DataStore, ViewModel, and Paging as KMP-ready, a shared data layer is the expected architecture for a greenfield KMP app — not a party trick.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Shared DAO plus platform database factories",
+          "src": "// commonMain — shared and platform-agnostic\n@Dao\ninterface UserDao {\n    @Query(\"SELECT * FROM users\")\n    fun observeAll(): Flow<List<UserEntity>>\n}\n\nexpect fun buildDatabase(): AppDatabase\n\n// androidMain\nactual fun buildDatabase(): AppDatabase =\n    Room.databaseBuilder(context, AppDatabase::class.java, \"app.db\").build()\n\n// iosMain\nactual fun buildDatabase(): AppDatabase {\n    val driver = SqliteDriver(\n        schema = AppDatabase.Schema,\n        name = \"app.db\",\n        context = NativeSqliteDriver.Context(\"app.db\")\n    )\n    return Database.Factory(driver).create()\n}"
+        }
+      ],
+      "followUps": [
+        "Which SQLite driver backs Room on iOS?",
+        "Does Room KMP support migrations on iOS?",
+        "What is still Android-only in Room KMP?"
+      ],
+      "traps": [
+        "Assuming Room KMP gives one shared, automatically synced database — each platform has its own file.",
+        "Not providing a platform driver at the expect/actual seam — the build fails at database construction."
+      ],
+      "refs": [
+        {
+          "title": "Room for Kotlin Multiplatform",
+          "url": "https://developer.android.com/kotlin/multiplatform/room",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    }
+  ]
+}

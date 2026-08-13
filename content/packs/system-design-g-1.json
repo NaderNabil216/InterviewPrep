@@ -1,0 +1,263 @@
+{
+  "id": "system-design-g-1",
+  "title": "Mobile System Design",
+  "track": "system-design",
+  "items": [
+    {
+      "id": "sd-0005",
+      "track": "system-design",
+      "topic": "Feature flags",
+      "level": 1,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "feature-flags",
+        "ab-testing",
+        "client"
+      ],
+      "q": "Design a feature-flag and A/B experimentation system on the client",
+      "prompt": "Design the client-side of a feature-flag system: remote flags that can turn features on/off and serve A/B variants to cohorts, with kill switches and exposure logging.\n\nAssume ~10M DAU, an Android client, flags change multiple times a day, and some flags gate critical paths (payments, login). **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "This scenario is lighter than most — it's the client half of an infrastructure product. Run the standard framework but expect the interviewer to push hardest on **staleness vs availability** (what the app does when the flag payload is missing) and **evaluation consistency**.",
+      "requirements": [
+        "Clarify who reads flags and how often",
+        "Define the flag evaluation API surface",
+        "Design the config payload and its versioning",
+        "Choose sync: fetch on start, poll, or push; and failure behaviour",
+        "Cache flags locally and survive cold start",
+        "Handle the first-run and logged-out case",
+        "Define how cohorts/rollouts map to a user",
+        "Design the kill switch path for a critical flag",
+        "Cover exposure logging and bucketing consistency",
+        "Talk about consistency across devices for the same user",
+        "Specify what happens when a flag is removed",
+        "Cover observability and the flag-serving dashboard",
+        "Mention experimentation hygiene: assignment must not correlate with the metric",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### Architecture\n\nThree parts: a small client SDK embedded in the app, a config service that returns flag payloads, and the experiment/assignment layer that decides which variant a user gets. `App code → FlagClient.eval(\"pay_v2\") → cached payload + resolver`, fed by a `config fetch (work manager) ← config service` on the side.\n\n#### The payload\nEach flag is `{ key, type, value, targeting }`. Targeting encodes the experiment assignment: `{ experiment, variant, rule }`. A rule is evaluated against user attributes (`user_id`, `country`, `app_version`, `install_date`). A sticky bucketing rule: `hash(user_id + experiment_id) % 100` lands the user in a bucket, and buckets map to variants. **Stickiness is the hard requirement** — the same user must stay in the same variant across sessions or the experiment is noise. Payload shape: `{ \"flags\": [ { \"key\": \"checkout_v2\", \"type\": \"boolean\", \"value\": true, \"targeting\": { \"experiment\": \"co_ab\", \"rule\": \"hash(id)%100 < 40\" } } ], \"version\": 42, \"ttl\": 600 }`.\n\n#### Sync strategy\n- **Cold start**: a bundled default payload must exist so the app renders without the network. Startup never blocks on config.\n- **Refresh**: WorkManager with a network constraint, respecting an incremental sync (config only fetches changed keys via version).\n- **Push**: a quiet FCM topic per app version for urgent kill switches, so critical flags flip in seconds.\n- **Missing payload**: `eval` falls back to the bundled default and logs a miss; a critical flag that is missing should **fail closed** (safe default) by configuration.\n\n#### Kill switch\nA critical flag (e.g. \"payments_paused\") must be evaluable even if the main config fetch is broken, so it rides the push channel. The dashboard allows one-tap global override that takes effect on the next eval — for truly urgent cases a push forces the client to re-eval immediately.\n\n#### Exposure logging\nWhen `eval` runs and the flag gates something meaningful, the client logs `{user, experiment, variant, timestamp}` through the analytics SDK (see sd-0004). The logging itself must be sampled and batched or it becomes a second product. Log-before-eval consistency matters: log what you actually *served*, using the same bucketing inputs, or the analyst gets garbage.\n\n#### Experimentation hygiene\n- Assignment must be **exogenous**: the bucketing hash inputs must not be influenced by the treatment.\n- Guardrails: a dashboard with 'did the flag actually ship to the intended %', 'did the variant corrupt a core metric', and automatic rollback thresholds.\n- Version pinning: cohorts are defined at assignment time; upgrading the app mid-experiment must not reassign a user.\n\n#### Failure modes\n- Config service down → serve cached + bundled defaults, log misses, keep the last-known-good.\n- Corrupt payload → schema-validate and refuse to apply.\n- Clock skew → use server-issued timestamps for TTL.\n- Flag removed → clients self-heal on next fetch, but a transition window must let the code path drain.\n\n#### Trade-offs to close with\nLocal cache adds staleness risk but buys offline and cold-start. Push gives speed but adds a channel. Sticky bucketing buys statistical validity at the cost of slow variant ramp. You'd also mention: staged rollout of the SDK itself behind a flag, and treating flags as code with PR review.",
+      "rubric": [
+        "Defined a clean eval API and payload schema",
+        "Designed sync with bundled defaults and offline fallback",
+        "Handled cold start without blocking",
+        "Designed a fast kill-switch path",
+        "Made bucketing sticky and explained why",
+        "Covered exposure logging with sampling",
+        "Discussed consistency across devices",
+        "Handled flag removal gracefully",
+        "Named failure modes without prompting",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: 'a flag evaluated on every frame would cost 10k evals/s on-device — so hot flags are cached in memory and cold flags are read from disk'",
+        "Plans the migration: how an existing if/else tree is replaced flag-by-flag",
+        "Considers the analytics pipeline end-to-end and the lag before an experiment is readable",
+        "Proposes automatic rollback thresholds tied to crash-free sessions and core metrics",
+        "Designs the SDK interface so flags can be owned by different product teams with separate review"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Feature flag architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"90.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">App code</text><text x=\"90.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">flag? pay_v2</text><rect x=\"220\" y=\"20\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"300.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">FlagClient</text><text x=\"300.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">eval + resolver</text><rect x=\"20\" y=\"160\" width=\"160\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"100.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Local cache</text><text x=\"100.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">bundled defaults</text><rect x=\"430\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"51.0\" text-anchor=\"middle\" class=\"dg-label\">Config service</text><rect x=\"430\" y=\"120\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"500.0\" y=\"144.0\" text-anchor=\"middle\" class=\"dg-label\">Experiment</text><text x=\"500.0\" y=\"159.0\" text-anchor=\"middle\" class=\"dg-sub\">assignment</text><rect x=\"610\" y=\"120\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"151.0\" text-anchor=\"middle\" class=\"dg-label\">Analytics</text><rect x=\"610\" y=\"220\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"251.0\" text-anchor=\"middle\" class=\"dg-label\">Push</text><line x1=\"160\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"220\" y1=\"74\" x2=\"120\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"170.0\" y=\"110.0\" text-anchor=\"middle\" class=\"dg-edge-label\">read</text><line x1=\"380\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"500\" y1=\"74\" x2=\"500\" y2=\"118\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"500.0\" y=\"100.0\" text-anchor=\"middle\" class=\"dg-edge-label\">bucketing</text><line x1=\"300\" y1=\"120\" x2=\"655\" y2=\"120\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"470.0\" y=\"115.0\" text-anchor=\"middle\" class=\"dg-edge-label\">exposure log</text><line x1=\"655\" y1=\"174\" x2=\"500\" y2=\"120\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"610\" y1=\"147\" x2=\"500\" y2=\"120\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"655\" y1=\"174\" x2=\"300\" y2=\"120\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"470.0\" y=\"200.0\" text-anchor=\"middle\" class=\"dg-edge-label\">kill switch</text></svg>",
+      "refs": [
+        {
+          "title": "Google — best practices for feature flags",
+          "url": "https://developers.google.com/firebase/docs/remote-config",
+          "checked": "2026-08-13"
+        }
+      ],
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "sd-0006",
+      "track": "system-design",
+      "topic": "Observability",
+      "level": 1,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "crash-reporting",
+        "observability",
+        "sdk"
+      ],
+      "q": "Design a crash-reporting and observability SDK",
+      "prompt": "Design a mobile crash-reporting and observability SDK (think a Firebase Crashlytics / Sentry class product): capture crashes and ANRs, attach context, and upload without hurting the app.\n\nAssume tens of millions of devices, mixed Android versions, and privacy constraints (GDPR/CCPA). **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "This is a client-infrastructure scenario. Expect the interviewer to probe **what to capture** (breadcrumbs, threads, memory) and **upload policy** (network, quota, retry) harder than the backend pipeline.",
+      "requirements": [
+        "Clarify what events to capture: crash, ANR, native, custom",
+        "Design the capture hooks (Thread.UncaughtExceptionHandler, ANR detection)",
+        "Decide how much context to attach: threads, memory, breadcrumbs, logs",
+        "Design on-device buffering and the upload policy",
+        "Handle the app restart flow and the 'crash on startup' case",
+        "Discuss sampling and rate limiting",
+        "Cover privacy: PII stripping, consent, data minimization",
+        "Design the upload retry with backoff and jitter",
+        "Talk about symbolication for native and release builds",
+        "Design the backend pipeline briefly (ingest, store, dashboard)",
+        "Address performance cost of the SDK on the main thread",
+        "Cover ANR detection specifics (input dispatch, broadcast, service)",
+        "Name observability metrics: crash-free sessions, severity",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### Architecture\n\nThe SDK has three planes: capture, buffer, upload. Capture must never block the app's main thread; buffer must survive process death; upload must be bandwidth-aware and never interfere with the user. Flow: `App crash → UncaughtExceptionHandler → session serializer → file buffer`, then on next launch `Uploader (WorkManager) → ingest API`.\n\n#### Capture\n- **Java/Kotlin crash**: install a `Thread.UncaughtExceptionHandler` that logs the report to a file *synchronously enough to survive the process dying*, then calls the previous handler. This is the famous 'file must hit disk before the process dies' problem — the handler has milliseconds.\n- **Native crash**: register the `debuggerd` callback or use the platform crash handler; native frames need symbolication from uploaded `.so` symbols.\n- **ANR**: no exception fires. Options: `ApplicationExitInfo` (API 30+, reason == `REASON_ANR`), or a watchdog thread on `InputDispatcher`. `ApplicationExitInfo` is the modern answer and is cheap.\n- **Custom**: breadcrumbs — ring buffer of last ~100 app events with timestamps, attached to the report.\n\n#### What to attach\nThread dump (with stack traces and thread states), memory class + heap headroom, app version, OS, device model, the breadcrumbs, and a session id. Strip anything identifying: redact URLs, truncate exception messages at a size budget, and never send raw files by default.\n\n#### Buffering and upload\nReports are serialized to a directory and indexed in memory; on process death the directory is the only truth. Upload via WorkManager with a `NetworkType.CONNECTED` constraint, **not metered if possible**, with exponential backoff + jitter (ds-0059) capped at a day. A per-day quota (e.g. 200 reports) and sampling (1-in-k of non-critical events) bound cost.\n\n#### Crash-on-startup loop\nIf the app keeps crashing at startup, uploading fails too. Mitigation: a 'crash loop' detector that, after N same-signature crashes at startup, sends a minimal report with a flag and stops trying.\n\n#### Privacy\nPII stripping by default, a consent gate that can disable collection, local data minimization, and a documented retention policy. The SDK must be usable in a privacy-first mode where only anonymized aggregate counts leave the device.\n\n#### Backend sketch\nIngest API (validate + schema-check) → raw store → symbolication pipeline → normalized events in a queryable store → dashboard + alerting. Alerts keyed on crash-free sessions per version, not raw crash counts, which punish installs.\n\n#### The performance contract\nNo work on the main thread. Capture is a few microseconds; serialization is off-thread; the buffer is append-only so it's cheap. Measure SDK overhead as a first-class metric — a crash SDK that adds jank is itself a bug.",
+      "rubric": [
+        "Chose the right capture hooks and explained the process-death window",
+        "Handled ANR without a watchdog if possible (ApplicationExitInfo)",
+        "Designed a crash-loop detector",
+        "Designed disk-backed buffering surviving process death",
+        "Gave a bandwidth-aware upload policy with backoff",
+        "Stripped PII and designed consent",
+        "Planned symbolication",
+        "Kept main-thread cost near zero",
+        "Sampled and rate-limited",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies the crash-on-startup window: 'the handler has ~1 s before the kernel reclaims us; a malloc in the handler can fail, so the buffer is pre-allocated'",
+        "Designs the ingest pipeline capacity around a spike: 'an outage spikes crash rate 50x — the ingest must shed load without dropping critical reports'",
+        "Considers multi-team ownership: how feature teams add their own breadcrumbs without forking the SDK",
+        "Plans a schema versioning story for the report format",
+        "Defines rollback via the kill-switch channel (sd-0005)"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Crash reporting architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"90.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">App process</text><text x=\"90.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">crash / ANR</text><rect x=\"220\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"295.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Capture</text><text x=\"295.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">handler + breadcrumbs</text><rect x=\"430\" y=\"20\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"495.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">File buffer</text><text x=\"495.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">disk, survives death</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"51.0\" text-anchor=\"middle\" class=\"dg-label\">Ingest</text><rect x=\"220\" y=\"160\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"295.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Crash loop</text><text x=\"295.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">detector</text><rect x=\"430\" y=\"160\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"495.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Uploader</text><text x=\"495.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">WorkManager + quota</text><line x1=\"160\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"370\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"399.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">serialize</text><line x1=\"560\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"584.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">upload</text><line x1=\"370\" y1=\"74\" x2=\"560\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"430.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">replay</text><line x1=\"430\" y1=\"160\" x2=\"370\" y2=\"76\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"400.0\" y=\"120.0\" text-anchor=\"middle\" class=\"dg-edge-label\">abort if looping</text><line x1=\"560\" y1=\"187\" x2=\"608\" y2=\"74\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"590.0\" y=\"130.0\" text-anchor=\"middle\" class=\"dg-edge-label\">minimal report</text></svg>",
+      "refs": [
+        {
+          "title": "Modernize Android app architecture",
+          "url": "https://developer.android.com/topic/architecture",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "ApplicationExitInfo (API reference)",
+          "url": "https://developer.android.com/reference/android/app/ApplicationExitInfo",
+          "checked": "2026-08-13"
+        }
+      ],
+      "updatedIn": "2026.08.15"
+    },
+    {
+      "id": "sd-0007",
+      "track": "system-design",
+      "topic": "Image loading",
+      "level": 2,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "images",
+        "cache",
+        "coil"
+      ],
+      "q": "Design an image-loading library (Coil-class)",
+      "prompt": "Design an image-loading library like Coil or Glide: given a URL and a target size, load a bitmap from memory cache, disk cache, or network, then decode, transform, and display it — all without janking the UI.\n\nAssume Android + Compose (but discuss Views interop), mid-range devices, and mixed networks. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "A contained, high-signal scenario. The interviewer will push on the **request lifecycle** (cancellation, reuse, keying) and the **memory cache** — that's where Coil/Glide earn their keep.",
+      "requirements": [
+        "Clarify the API surface you'd expose",
+        "Design the request pipeline (load → decode → transform → display)",
+        "Explain how a request is keyed for caching",
+        "Design the memory cache and its size policy",
+        "Design the disk cache and eviction",
+        "Handle multiple sizes of the same image",
+        "Handle cancellation and request reuse (LazyColumn fling)",
+        "Design the background executor / dispatchers",
+        "Cover the placeholder / error / success states",
+        "Decode at the right sample size to avoid OOM",
+        "Cover prefetching",
+        "Handle animation / transitions",
+        "Mention what happens on activity recreation",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### API surface\nKeep it small and declarative: `Image(url, size, placeholder, error)`. The library reads a request: `{ url, targetSize, scale, transformations }`. In Compose, `remember` + the state holder do the lifecycle; in Views, the loader attaches to the view's lifecycle.\n\n#### Pipeline stages\n1. **Key**: `url + targetWidth + targetHeight + scaleType + transformations` hashed to a single cache key. The *size* must be in the key — two screens showing the same URL at different densities need different bitmaps.\n2. **Memory cache lookup** — the hot path, sub-millisecond.\n3. **Disk cache lookup** — decoded bytes, re-decode off the main thread.\n4. **Network fetch** with an HTTP client (Coil uses OkHttp), streaming into the disk cache first.\n5. **Decode** with `BitmapFactory.Options.inSampleSize` computed from target size and image dimensions, so a 4K image is never fully decoded for a 100 px target. Actually downsample to nearest power of two and let the display tier do the final scale.\n6. **Transform** (crop, round corners, blur) via `Bitmap` or, on newer APIs, `ImageDecoder`.\n7. **Display** with a crossfade handled at the Composable level.\n\n#### Memory cache\nSized off `ActivityManager.memoryClass` (e.g. 1/8), using an `LruCache` keyed on the request key, counting `byteCount`. Hold strong references to in-use bitmaps and weak references otherwise — never recycle aggressively, because the same bitmap may be on screen in multiple places. On `onTrimMemory`, evict the LRU first.\n\n#### Disk cache\nA directory with an LRU eviction policy and a size budget (say 200 MB), keyed by the request hash, storing the *encoded* bytes so different target sizes of the same source don't duplicate storage. Disk reads go to a dedicated dispatcher, never the main thread.\n\n#### Concurrency and cancellation\nThe load runs on `Dispatchers.IO` (or a bounded pool); the result is delivered on the main thread. **Cancellation is the hard part.** In a flinging `LazyColumn`, requests are made and cancelled at ~50 Hz; each request carries a token, and when a new request for the same key supersedes an in-flight one, the old one is cancelled and its coroutine's job is cancelled so stale results never land on the UI. Reuse: two composables showing the same key share one in-flight request (single-flight, ds-0018).\n\n#### Placeholder/error/success\nA state machine per request: `Loading → Success | Error`. Placeholder and error drawables are cached; a failed request can be retried with backoff, and the error state remembers so it doesn't hot-loop.\n\n#### Prefetch\n`Image.prefetch(url, size)` warms memory+disk without a target view — used for the next scroll page or a detail screen.\n\n#### Failure modes\nDisk cache corruption (treat as miss and refetch), OOM on very large images (sample-size guard), slow network (timeouts + retry policy), and image re-download storms after cache eviction (prefetch).",
+      "rubric": [
+        "Designed a clean, minimal request API",
+        "Keyed the cache correctly including size and transformations",
+        "Downsampled before decoding and explained the math",
+        "Sized the memory cache off memoryClass and counted bytes",
+        "Designed disk caching of encoded bytes with eviction",
+        "Handled cancellation for list fling",
+        "Shared in-flight requests",
+        "Kept the main thread free of decode",
+        "Handled placeholder/error/success states",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies: 'a 400 px cell at mdpi is ~ 640 KB decoded; a feed of 40 cells is ~25 MB — that's why the memory cache is sized at 1/8 of a 256 MB heap'",
+        "Designs the cache-key collision story and the sampling of cache misses for capacity planning",
+        "Plans a plugin point for custom decoders (SVG, animated GIF) without forking the core",
+        "Discusses prewarming on cold start and the network budget for the first screen",
+        "Defines how to measure: image hit ratio, decode latency p95, OOM-free sessions"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Image loading architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"90.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Composable</text><text x=\"90.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">Image(url, size)</text><rect x=\"220\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"295.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">ImageLoader</text><text x=\"295.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">pipeline + key</text><rect x=\"430\" y=\"20\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"495.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Memory cache</text><text x=\"495.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">LruCache, bytes</text><rect x=\"430\" y=\"120\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"495.0\" y=\"144.0\" text-anchor=\"middle\" class=\"dg-label\">Disk cache</text><text x=\"495.0\" y=\"159.0\" text-anchor=\"middle\" class=\"dg-sub\">encoded bytes</text><rect x=\"430\" y=\"220\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"495.0\" y=\"251.0\" text-anchor=\"middle\" class=\"dg-label\">Network</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Decode</text><text x=\"655.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">inSampleSize</text><rect x=\"610\" y=\"120\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"151.0\" text-anchor=\"middle\" class=\"dg-label\">Transform</text><line x1=\"160\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"370\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"399.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">hit?</text><line x1=\"560\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"584.0\" y=\"42.0\" text-anchor=\"middle\" class=\"dg-edge-label\">decode</text><line x1=\"560\" y1=\"120\" x2=\"560\" y2=\"76\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"590.0\" y=\"95.0\" text-anchor=\"middle\" class=\"dg-edge-label\">miss</text><line x1=\"560\" y1=\"220\" x2=\"560\" y2=\"176\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"590.0\" y=\"195.0\" text-anchor=\"middle\" class=\"dg-edge-label\">fetch</text><line x1=\"655\" y1=\"174\" x2=\"655\" y2=\"76\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/></svg>",
+      "refs": [
+        {
+          "title": "Bitmap and drawable overview",
+          "url": "https://developer.android.com/develop/ui/views/graphics",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "sd-0008",
+      "track": "system-design",
+      "topic": "Networking",
+      "level": 2,
+      "type": "design",
+      "timerMinutes": 45,
+      "tags": [
+        "networking",
+        "retrofit",
+        "api"
+      ],
+      "q": "Design a networking library (Retrofit-class)",
+      "prompt": "Design a networking library like Retrofit: map a Kotlin interface with annotated methods to typed HTTP calls, add interceptors, adapters, and mocking, and expose it to the app cleanly.\n\nFocus on the client side: interface-to-request mapping, the interceptor chain, how `suspend` functions and reactive types map, and how it's testable. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
+      "framework": "Retrofit is the shape everyone knows, so the interview is about *explaining its moving parts*, not inventing a new one. Expect probing on the interceptor chain and the conversion/adaptation layers.",
+      "requirements": [
+        "Clarify the public API surface (annotated interface)",
+        "Explain how a method call becomes an HTTP request",
+        "Design the interceptor chain and its order",
+        "Design the converter layer (JSON, protobuf) and the adapter layer (suspend, Flow, callback)",
+        "Handle auth and token refresh",
+        "Design retries with backoff and error mapping",
+        "Explain how it integrates with a coroutine scope / lifecycle",
+        "Design testability: fake interceptors, mock server, fakes",
+        "Handle cancellation of in-flight requests",
+        "Cover logging and observability (stetho-style)",
+        "Design cache control / conditional requests",
+        "Discuss how the client handles timeouts and connectivity",
+        "Mention multi-base-URL support",
+        "Close with explicit trade-offs"
+      ],
+      "referenceAnswer": "#### The core idea\nA Kotlin interface like `interface Api { @GET(\"feed\") suspend fun feed(): FeedResponse }`. The library builds a proxy implementation at runtime: each interface method is parsed into a `RequestSpec` (method, path, query, headers, body type, return type), then a `ServiceMethod` knows how to build the request and how to adapt the response.\n\n#### The interceptor chain\nAn ordered chain, mirroring OkHttp: `Application interceptors → retryAndFollowUp → bridge → network interceptors → callServer`. Two layers of interceptors is the key design decision — application interceptors see the logical request/response (retries, caching, auth), network interceptors see the actual wire bytes (logging, gzip). Order matters: auth must run before retry so a 401-then-refresh-then-retry works.\n\n#### Converter vs adapter\nTwo separate responsibilities that people conflate:\n- **Converter** turns a `ResponseBody` into your type (`MoshiConverterFactory`, `ProtoConverterFactory`). Selected by `contentType` + return type.\n- **Adapter** turns a `Call` into the return type of the interface method: `suspend`, `Flow`, `Deferred`, or a callback. `suspend` is implemented by an `enqueue` that resumes the coroutine, and cancels the call on coroutine cancellation.\n\n#### Auth\nA dedicated auth interceptor that reads a token provider, attaches the header, and on 401 triggers a single-flight token refresh (ds-0018) before retrying once. Tokens never touch the repository layer.\n\n#### Error handling\nWrap network errors into a typed `ApiException { code, message, body }` mapping: `IOException` → retryable, 5xx → retryable with backoff, 4xx → not retryable except 401/408/429. A `Result<T>` or sealed `ApiResult` return is the idiomatic app-facing shape.\n\n#### Testability\nThe interceptor chain is the seam: a fake application interceptor can return canned responses without touching the network; `MockWebServer` (bt-0035) exercises the full stack with real HTTP. The interface is mocked with MockK for unit tests. The library itself should never hard-code a scope — the caller owns the `CoroutineScope` so tests can use `runTest`.\n\n#### Observability\nA logging interceptor (request line, headers, body, duration) and a metrics hook for latency/error/success counters. Gzip and `Accept-Encoding` handling in the bridge layer.\n\n#### Cancellation\n`enqueue`/`await` returns a handle; cancelling the coroutine or job cancels the underlying OkHttp `Call`. Partially received bodies are aborted. This is what prevents slow requests from piling up on fling-cancelled screens.\n\n#### Trade-offs\nInterface proxy buys type safety and readability at the cost of reflection/proxies and magic. A hand-rolled `ApiClient` with explicit methods is more debuggable but verbose. You'd choose per team: small APIs → explicit client; large typed APIs → Retrofit-style.",
+      "rubric": [
+        "Explained interface-to-request mapping",
+        "Designed a two-layer interceptor chain and justified the order",
+        "Separated converter from adapter",
+        "Designed auth with single-flight refresh",
+        "Mapped errors into typed results with a retry policy",
+        "Designed testability through seams",
+        "Handled cancellation end-to-end",
+        "Covered logging and metrics",
+        "Discussed multi-base-URL",
+        "Closed with explicit trade-offs"
+      ],
+      "staffAdds": [
+        "Quantifies the concurrency: 'each call pool-bounded; an unbounded OkHttp pool on a feed screen can open 100 sockets — cap and reuse connections'",
+        "Plans the migration of a codebase from callbacks to suspend without a big bang",
+        "Considers the API-contract story: generated clients vs hand-written, and how the interface doubles as documentation",
+        "Defines metrics that gate releases: p95 latency, error rate by endpoint, timeout rate",
+        "Designs per-feature base URLs and per-flavor clients (staging vs prod) with no code changes"
+      ],
+      "addedIn": "2026.08.13",
+      "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Networking library architecture\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"90.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">App</text><text x=\"90.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">interface Api</text><rect x=\"220\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"295.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Proxy</text><text x=\"295.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">ServiceMethod</text><rect x=\"430\" y=\"20\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"495.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Adapter</text><text x=\"495.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">suspend / Flow</text><rect x=\"610\" y=\"20\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"51.0\" text-anchor=\"middle\" class=\"dg-label\">Converter</text><rect x=\"20\" y=\"160\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"90.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">OkHttp</text><text x=\"90.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">interceptor chain</text><rect x=\"220\" y=\"160\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"295.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Auth / retry</text><text x=\"295.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">single-flight refresh</text><rect x=\"430\" y=\"160\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"495.0\" y=\"184.0\" text-anchor=\"middle\" class=\"dg-label\">Logging</text><text x=\"495.0\" y=\"199.0\" text-anchor=\"middle\" class=\"dg-sub\">metrics</text><rect x=\"610\" y=\"160\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"191.0\" text-anchor=\"middle\" class=\"dg-label\">Server</text><line x1=\"160\" y1=\"47\" x2=\"218\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"370\" y1=\"47\" x2=\"428\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"560\" y1=\"47\" x2=\"608\" y2=\"47\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"295\" y1=\"74\" x2=\"90\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"190.0\" y=\"110.0\" text-anchor=\"middle\" class=\"dg-edge-label\">build call</text><line x1=\"370\" y1=\"74\" x2=\"295\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"430\" y1=\"160\" x2=\"560\" y2=\"160\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"610\" y1=\"160\" x2=\"655\" y2=\"160\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"655\" y1=\"76\" x2=\"655\" y2=\"158\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"495\" y1=\"76\" x2=\"295\" y2=\"158\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"390.0\" y=\"130.0\" text-anchor=\"middle\" class=\"dg-edge-label\">retry/refresh</text></svg>",
+      "refs": [
+        {
+          "title": "OkHttp interceptors",
+          "url": "https://github.com/lysine-dev/okhttp",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Coroutines and Retrofit",
+          "url": "https://github.com/square/retrofit",
+          "checked": "2026-08-13"
+        }
+      ]
+    }
+  ]
+}

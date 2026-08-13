@@ -1,0 +1,228 @@
+{
+  "id": "kotlin-g-7",
+  "title": "Kotlin Language",
+  "track": "kotlin",
+  "items": [
+    {
+      "id": "kt-0044",
+      "track": "kotlin",
+      "topic": "Collections",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "immutability",
+        "read-only",
+        "defensive-copy"
+      ],
+      "q": "`List` is read-only, not immutable. What actually goes wrong, and what are the alternatives?",
+      "shortAnswer": [
+        "`val ids: List<Int> = mutableListOf(...)` stays mutable through whoever holds the mutable reference, so returning the backing field leaks writability.",
+        "A Java caller or `(list as MutableList).add(...)` can write through the read-only type.",
+        "`toList()` copies defensively, kotlinx.collections.immutable gives real immutability with structural sharing, and returning `Sequence`/`Iterable` hides the store entirely."
+      ],
+      "answer": "`List<T>` is a **read-only interface**, not an immutable guarantee. The runtime type underneath may be a `MutableList`, and anyone holding a reference to *that* can still mutate — the read-only type only removes methods from your view.\n\n#### What actually goes wrong\n- **Returning a backing field leaks writability**: `class Model { private val data = mutableListOf(); fun items() = data }` — a consumer calls `items().add(...)` and mutates internal state. The read-only return type does not stop it.\n- **Casting**: `(list as MutableList<Int>).add(1)` compiles if the runtime type is mutable — the compiler even has a lint against the cast for a reason.\n- **Java callers** see the raw `List` (no read-only concept) and call `add` freely.\n- Two objects can share one backing list; a mutation through one is observed by the other (aliasing).\n\n#### Alternatives\n- **`toList()`** — copies into a fresh, fixed-size read-only list. The defensive-copy escape hatch; pay one copy.\n- **kotlinx.collections.immutable** — `persistentListOf`, `ImmutableList`. Real immutability with **structural sharing** (add/remove return new instances sharing unchanged nodes). Also what Compose's stability inference prefers — stable `ImmutableList` avoids recomposition surprises.\n- **`Sequence` / `Iterable`** — hide the store entirely: no one can mutate what they can't name.\n\n#### Decision rule\nRead-only type for your own API when you control callers; defensive `toList()` at module boundaries; persistent immutable collections for state you share across threads or Compose; `Sequence` when you don't want to expose the store at all.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The leak, the cast, and the fixes",
+          "src": "class Model {\n    private val data = mutableListOf(1, 2)\n    fun items(): List<Int> = data      // LEAK: caller can cast & mutate\n}\n\nval m = Model()\n(m.items() as MutableList<Int>).add(3)   // corrupts internal state\n\n// fixes\nfun itemsSafe(): List<Int> = data.toList()               // defensive copy\nfun itemsSeq(): Sequence<Int> = data.asSequence()         // hide the store\n\nimport kotlinx.collections.immutable.persistentListOf\nval immutable: ImmutableList<Int> = persistentListOf(1, 2)  // true immutability"
+        }
+      ],
+      "followUps": [
+        "What does Compose stability inference want from collections?",
+        "When is a defensive copy the right call, and when is it wasteful?",
+        "How does structural sharing work in persistent collections?"
+      ],
+      "traps": [
+        "Equating read-only with immutable — the interface vs runtime-type distinction is the whole answer.",
+        "Returning the backing mutable list and calling it 'read-only API'."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Collection types (read-only vs mutable)",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "kotlinx.collections.immutable",
+          "url": "https://github.com/Kotlin/kotlinx.collections.immutable",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0045",
+      "track": "kotlin",
+      "topic": "Collections",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "map",
+        "filter",
+        "allocation"
+      ],
+      "q": "How do `map`, `filter` and `flatMap` allocate, and when should you drop to a loop?",
+      "shortAnswer": [
+        "Each eager operator builds a new `ArrayList` sized `collectionSizeOrDefault(10)`, so a four-step chain over 10k items allocates four lists and walks 40k elements.",
+        "`mapTo`/`filterTo`/`flatMapTo` write into a collection you own, `mapNotNull` fuses map+filter, and `count { }` beats `filter { }.size`.",
+        "`any`/`all`/`none`/`first` short-circuit, and `for (i in indices)` skips the Iterator allocation that `forEach` on a generic Iterable still makes."
+      ],
+      "answer": "Every eager transformation — `map`, `filter`, `flatMap` — creates a **new `ArrayList`** per operator. Default capacity is `collectionSizeOrDefault(10)` (a 10-slot array, growing as needed). A pipeline `list.map{}.filter{}.map{}` over 10,000 elements materializes **three intermediate lists** and touches 30,000 elements. For a four-step chain that's four lists and 40k element visits. The memory churn is real but rarely the headline; the *per-element lambda indirection* and list churn add up in hot paths.\n\n#### The leaner operators\n- **`mapTo`/`filterTo`/`flatMapTo`** write into a collection you own — reuse one `ArrayList` and avoid three intermediate allocations.\n- **`mapNotNull`** — map + filter-null in a single pass (avoids `map{}.filterNotNull()`).\n- **`count { pred }`** beats `filter { pred }.size` — no list built at all.\n- **`any`/`all`/`none`/`first`/`last`** short-circuit — they stop at the first matching element.\n- **`sumOf`** — fused sum, one pass, but beware its `Int`/`Long`/`Double` overload-ambiguity error when the selector's type is inferred ambiguously.\n\n#### When to drop to a loop\nWhen the chain is long and the data is large, or the transformation is simple enough that lambda indirection dominates: a plain `for (i in list.indices)` loop skips the `Iterator` allocation that `forEach` (on a generic `Iterable`) still creates and avoids per-element function calls. The rule of thumb: idiomatic chains for clarity; a loop when profiling shows a bottleneck — but always measure before rewriting readable code.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Allocations per operator and the lean alternatives",
+          "src": "// three eager lists built, 30k element visits\nval r = list.map { it * 2 }.filter { it > 5 }.map { it.toString() }\n\n// one reusable list, fewer allocations\nval out = ArrayList<String>(list.size)\nlist.mapTo(out) { it * 2 }\n\n// fused / short-circuiting\nval big = list.count { it > 100 }        // no list\nval anyBig = list.any { it > 100 }       // stops early\n\n// loop — no Iterator allocation for indices\nvar total = 0\nfor (i in list.indices) total += list[i]"
+        }
+      ],
+      "followUps": [
+        "When is the allocation churn actually a problem?",
+        "Why does `sumOf` have overload ambiguity?",
+        "What is the difference between `map` and `mapNotNull` allocations?"
+      ],
+      "traps": [
+        "Using `filter { }.size` instead of `count { }` — the pointless intermediate list.",
+        "Claiming chains are always slower than loops — measure first."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Collection transformations",
+          "url": "https://kotlinlang.org/docs/collection-transformations.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0046",
+      "track": "kotlin",
+      "topic": "Collections",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "groupBy",
+        "groupingBy",
+        "associate"
+      ],
+      "q": "`groupBy` vs `groupingBy`, and `associate` vs `associateBy` vs `associateWith` — what are the real differences?",
+      "shortAnswer": [
+        "`groupBy` materializes a `Map<K, MutableList<V>>` — a list per key — while `groupingBy {}.eachCount()/fold()` computes without intermediate lists.",
+        "`associate` allocates a `Pair` per element where `associateBy`/`associateWith` do not.",
+        "Every one silently keeps the LAST value on a duplicate key — quiet data loss — and stdlib map builders return a `LinkedHashMap`, so code accidentally depends on insertion order."
+      ],
+      "answer": "#### `groupBy` vs `groupingBy`\n`groupBy(keySelector)` eagerly builds a `Map<K, MutableList<V>>` — one list per distinct key, plus the map. `groupingBy(keySelector)` returns a lazy `Grouping` that only materializes when you call a terminal op: `eachCount()`, `eachCountTo()`, `fold()`/`foldTo()`, `reduce()`, `aggregate()`. For counting or folding per group, `groupingBy` avoids building the per-key lists entirely — `list.groupingBy { it.type }.eachCount()` never constructs the group lists.\n\n#### `associate`, `associateBy`, `associateWith`\n- `associate { it to transform(it) }` — the block returns a `Pair` for **every** element, so the lambda *allocates a Pair per element* even though only the key/value escape.\n- `associateBy { key }` — derives only the **key** from the element (value is the element itself). No Pair.\n- `associateWith { value }` — derives only the **value** from the element (key is the element itself). No Pair.\n\n#### The duplicate-key trap — all of them\nAll `associate*` and `groupBy` **overwrite on duplicate keys**: the **last** element with a given key wins. There is no error and no accumulation. If your key isn't unique you silently lose data. Use `groupBy` (lists) or `associateBy { }` with a *guaranteed*-unique key — or fold explicitly.\n\n#### Ordering\nThe stdlib map builders return a **`LinkedHashMap`** (insertion order). Code that iterates the result and assumes the order you added it in works by accident — and breaks if a different Map implementation ever shows up.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The allocation/duplicate traps side by side",
+          "src": "data class Order(val id: String, val region: String)\n\nval orders = listOf(Order(\"a\", \"EU\"), Order(\"b\", \"US\"), Order(\"c\", \"EU\"))\n\nval byRegion = orders.groupBy { it.region }           // Map<String, List<Order>>\nval counts = orders.groupingBy { it.region }.eachCount()  // no per-key lists\n\n// duplicate-key data loss\nval idMap = orders.associateBy { it.region }          // \"EU\" -> Order(c) — a LOST!\n\nval pairs = orders.associate { it.id to it.region }   // Pair per element\nval noPairs = orders.associateWith { it.region }      // no Pair allocation"
+        }
+      ],
+      "followUps": [
+        "When would `groupingBy` beat `groupBy`?",
+        "Why does `associate` allocate a Pair per element?",
+        "How do you handle duplicate keys deliberately?"
+      ],
+      "traps": [
+        "Saying `associate` is the same as `associateBy` — the Pair allocation is the difference.",
+        "Forgetting duplicate keys silently keep the LAST value."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Grouping and associates",
+          "url": "https://kotlinlang.org/docs/collection-transformations.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0047",
+      "track": "kotlin",
+      "topic": "Collections",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "fold",
+        "reduce",
+        "scan"
+      ],
+      "q": "`fold` vs `reduce` vs `runningFold`/`scan` — and how do you fold without going quadratic?",
+      "shortAnswer": [
+        "`reduce` throws `UnsupportedOperationException` on an empty collection while `fold` returns the seed — hence `reduceOrNull`.",
+        "`runningFold`/`runningReduce` keep every intermediate state, like running totals or state replay.",
+        "The trap is `fold(emptyList()) { acc, x -> acc + x }`, which copies the accumulator on every step for O(n²) — use a mutable accumulator or the right operator."
+      ],
+      "answer": "#### `fold` vs `reduce`\n`fold(seed) { acc, e -> ... }` starts from an explicit `seed` and returns it for an empty collection. `reduce { acc, e -> ... }` starts from the first element and throws **`UnsupportedOperationException` on an empty collection** — which is why `reduceOrNull()` exists. Rule: if your operation has a natural identity (sum → `0`, product → `1`, concat → `\"\"`), `fold`; otherwise `reduceOrNull` and handle the empty case.\n\n#### `runningFold` / `runningReduce`\n`runningFold(seed)` returns a **list of every intermediate accumulator**, not just the final one. Perfect for running totals, cumulative deltas, or replaying state history: `listOf(1,2,3).runningFold(0) { a, x -> a + x }` → `[0, 1, 3, 6]`. The `scan` name from other languages is the same idea.\n\n#### The O(n²) accumulator trap\n`fold(emptyList<Int>()) { acc, x -> acc + x }` is the classic offender: `acc + x` calls `plus`, which **copies the entire accumulator list** on every step. Over n elements that's 1+2+...+n copies — O(n²) time and allocation. Fixes:\n- Use a mutable accumulator: `fold(ArrayList<Int>()) { acc, x -> acc.add(x); acc }` (or `reduce` with a `MutableList` seed pattern).\n- Use the right operator: `map`, `filter`, `buildList` usually express the goal better than a hand-rolled fold.\n- For sums of numbers, `sum()`/`sumOf` are fused and faster than any fold.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "fold vs reduce vs runningFold, and the quadratic copy",
+          "src": "val nums = listOf(1, 2, 3)\nnums.fold(0) { a, x -> a + x }            // 6 — seed handles empty\nnums.reduce { a, x -> a + x }             // 6 — throws on empty\nnums.reduceOrNull { a, x -> a + x }       // null-safe\n\nnums.runningFold(0) { a, x -> a + x }     // [0, 1, 3, 6]\n\n// O(n²): acc + x copies the whole list each step\nnums.fold(emptyList<Int>()) { acc, x -> acc + x }\n\n// O(n): mutable accumulator\nnums.fold(ArrayList<Int>()) { acc, x -> acc.add(x); acc }"
+        }
+      ],
+      "followUps": [
+        "Why does `reduce` throw on empty while `fold` doesn't?",
+        "When is `runningFold` the right tool?",
+        "What makes `acc + x` quadratic in a fold?"
+      ],
+      "traps": [
+        "Using `reduce` on a possibly-empty collection — the UOE surprise.",
+        "Building a list in a fold with `+` — the O(n²) copy trap."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Fold and reduce",
+          "url": "https://kotlinlang.org/docs/collection-aggregate.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0048",
+      "track": "kotlin",
+      "topic": "Collections",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "chunked",
+        "windowed",
+        "zip",
+        "partition"
+      ],
+      "q": "Explain `chunked`, `windowed`, `zip`, `zipWithNext` and `partition` precisely.",
+      "shortAnswer": [
+        "`windowed(size, step, partialWindows)` slides and by DEFAULT drops the trailing partial window — silent data loss when people batch with it.",
+        "`chunked(n)` is `windowed(n, n, partialWindows = true)`; `zip` truncates to the shorter input and allocates a Pair per element.",
+        "`zipWithNext` gives adjacent deltas, and `partition` returns a Pair of two eagerly built lists."
+      ],
+      "answer": "#### `windowed`\n`list.windowed(size, step = 1, partialWindows = false)` slides a window of `size` across the list, advancing by `step` each time. The critical default: **`partialWindows = false`**, so a trailing window shorter than `size` is **dropped**. People batching data with `windowed(50)` and assuming every element appears get silent loss at the tail. `windowed(50, 50, partialWindows = true)` keeps the last partial batch.\n\n#### `chunked`\n`list.chunked(n)` splits into consecutive `n`-sized groups — it is exactly `windowed(n, n, partialWindows = true)`. The difference from `windowed`: non-overlapping, and the trailing partial chunk is **kept**.\n\n#### `zip` and `zipWithNext`\n`a.zip(b)` pairs elements positionally and **truncates to the shorter input** — if `a` has 5 and `b` has 3, you get 3 pairs. It allocates a `Pair` per element. `zipWithNext()` pairs adjacent elements (`(a0,a1), (a1,a2), ...`) — the natural tool for adjacent deltas.\n\n#### `partition`\n`list.partition { pred }` returns a `Pair<List, List>` — the matching and non-matching elements, **both eagerly built** in full. Good for splitting, but it's two lists and one pass, so weigh it against `filter`+`filterNot` (two passes, two lists) — `partition` is the single-pass win.\n\n#### Grounding\n- Moving averages: `list.windowed(3) { it.average() }`.\n- SQLite chunking: `ids.chunked(999)` to stay under the 999-variable limit, then `IN (${chunk.joinToString()})`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "windowed partial-window loss vs chunked; zip; partition",
+          "src": "val list = (1..7).toList()\n\nlist.windowed(3)            // [1,2,3] [2,3,4] ... [5,6,7] — 5 windows\nlist.windowed(3, step = 3)  // [1,2,3] [4,5,6]       — 7 DROPPED (partialWindows=false)\nlist.chunked(3)             // [1,2,3] [4,5,6] [7]    — trailing kept\n\nlist.windowed(3, 3, partialWindows = true)  // == chunked(3)\n\nlist.zip(listOf(\"a\",\"b\",\"c\"))  // 3 pairs — truncated to shorter\nlist.zipWithNext()               // (1,2) (2,3) ... (6,7) — deltas\n\nval (even, odd) = list.partition { it % 2 == 0 }   // Pair of two lists\n\nids.chunked(999).forEach { chunk -> query(\"IN (${chunk.joinToString()})\") }"
+        }
+      ],
+      "followUps": [
+        "When does `windowed` silently lose data?",
+        "How does `chunked` relate to `windowed`?",
+        "Why does `zip` truncate?"
+      ],
+      "traps": [
+        "Using `windowed(n, n)` expecting trailing partial data — `partialWindows=false` drops it.",
+        "Forgetting `zip` truncates to the shorter input."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Partitioning and chunking",
+          "url": "https://kotlinlang.org/docs/collection-transformations.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    }
+  ]
+}

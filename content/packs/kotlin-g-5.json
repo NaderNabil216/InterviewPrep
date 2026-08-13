@@ -1,0 +1,222 @@
+{
+  "id": "kotlin-g-5",
+  "title": "Kotlin Language",
+  "track": "kotlin",
+  "items": [
+    {
+      "id": "kt-0034",
+      "track": "kotlin",
+      "topic": "Functions",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "SAM",
+        "fun-interface",
+        "lambda"
+      ],
+      "q": "SAM conversion, `fun interface`, or a plain function type — when do you use which?",
+      "shortAnswer": [
+        "SAM conversion applies to Java single-abstract-method interfaces and, since Kotlin 1.4, to `fun interface` — a normal Kotlin interface can never be built from a lambda.",
+        "A `fun interface` buys a named type with default methods and room to grow; `(T) -> R` buys composability with no wrapper.",
+        "The trap is identity: converting the same lambda twice produces different instances, so `removeListener { … }` never unregisters anything."
+      ],
+      "answer": "Three tools for 'a function with a name'. The rules:\n\n- **Java interfaces with one abstract method** (e.g. `Runnable`) support SAM conversion — a lambda where the interface is expected. This has always worked.\n- **Kotlin `fun interface`** (since 1.4) is the same for Kotlin types. `fun interface ClickHandler { fun onClick(v: View) }` then builds from a lambda.\n- **A plain Kotlin `interface`** with one method does **not** convert from a lambda — no implicit SAM for normal interfaces; you must write `object : Listener { ... }`. This asymmetry trips people who assume SAM conversion is universal.\n\n#### When to choose which\n- **`fun interface`**: you want a *named, documented type* — meaningful parameter names, default methods you can add later, good public-API reading. Also a path to growing multiple abstract methods later (a deliberate breaking change).\n- **Plain function type `(T) -> R`**: composability — `map`, `filter`, higher-order helpers, chains — and zero wrapper object. Downside: no descriptive type name, no default members.\n\n#### The identity trap\nSAM conversion is **not caching**. `list.removeListener { ... }` writes a fresh instance each time, passing a *different* instance than was added — nothing is ever removed. Save the converted instance: `val l = ClickHandler { ... }` once, add and remove the same reference. Function types have the same problem — capture the lambda in a field.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "fun interface vs function type, and the identity trap",
+          "src": "fun interface ClickHandler { fun onClick(v: View) }\n\n// Where each fits\nview.setOnClick(ClickHandler { it.dismiss() })     // fun interface — named type\nview.setAction { it.dismiss() }                    // (View) -> Unit — composable\n\n// Normal interface — lambda NOT allowed:\n// interface Listener { fun a() }; view.add(object : Listener { ... })\n\n// The identity trap:\n// view.addOnClick { dismiss() }      // instance A\n// view.removeOnClick { dismiss() }   // instance B — never matches A!\n\nval handler = ClickHandler { dismiss() }\nview.addOnClick(handler)\nview.removeOnClick(handler)   // works — same reference"
+        }
+      ],
+      "followUps": [
+        "Can a normal Kotlin interface be used as a SAM type?",
+        "What happens to SAM conversion if the interface grows a second abstract method?",
+        "Why are function types preferred in collection operators?"
+      ],
+      "traps": [
+        "Claiming SAM conversion works for any single-method Kotlin interface — only `fun interface`.",
+        "Adding a listener with a fresh lambda and expecting removeListener to match — identity is the trap."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Functional (SAM) interfaces",
+          "url": "https://kotlinlang.org/docs/fun-interfaces.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0035",
+      "track": "kotlin",
+      "topic": "Functions",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "default-args",
+        "named-args",
+        "bitmask"
+      ],
+      "q": "How do default and named arguments compile, and what breaks when you override a function that has them?",
+      "shortAnswer": [
+        "The compiler emits a synthetic `foo$default` method taking an int bitmask alongside the real method.",
+        "Defaults are re-evaluated on every call, so a `mutableListOf()` default is a fresh list each time.",
+        "An override may not redeclare defaults, so a virtual call always takes the base declaration's values — and Java callers get nothing without `@JvmOverloads`."
+      ],
+      "answer": "For `fun foo(a: Int, b: Int = 2)`, the compiler emits the real `foo(int, int)` plus a synthetic `foo$default(int, int, int, Object)`. The extra `int` is a **bitmask**: bit 0 means 'a omitted', bit 1 means 'b omitted' — the caller passes the default for omitted bits. (Every 32 parameters adds another mask `int`; the trailing `Object` is a Kotlin-caller sentinel.) That is why *adding or reordering parameters is a binary-compatibility break* — the `$default` signature changes.\n\n#### Defaults are re-evaluated per call\n`fun rows(count: Int = mutableListOf<String>().size)` — the default expression runs **on every call that omits the argument**, producing a fresh value each time. A default of `mutableListOf()` is not a shared singleton; it is a new list per call.\n\n#### Overrides and defaults\nAn **override cannot redeclare default values**: `override fun foo(a: Int, b: Int = 9)` is an error. A virtual call always uses the *base declaration's* defaults. So you cannot change a default in an override — you get the base's values, always.\n\n#### Java callers\nJava has no named arguments and ignores `$default`. Without `@JvmOverloads`, a Java caller must supply every parameter. `@JvmOverloads` generates real overloads — the reason Android custom views use it, so `LayoutInflater` finds constructor overloads.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The $default bitmask and re-evaluation",
+          "src": "fun foo(a: Int, b: Int = 2) = a + b\n// emits: foo(int, int)  +  foo$default(int, int, int, Object)\n// foo(1)      -> foo$default(1, 2, 0b10, null)\n// foo(1, 9)   -> foo(1, 9)\n\nfun fresh(): MutableList<String> {\n    fun rows(n: Int = mutableListOf<String>().size) = n\n    return mutableListOf()          // fresh per call when defaulted\n}\n\nopen class A { open fun f(x: Int = 1) = x }\nclass B : A() {\n    // override fun f(x: Int = 9) = x  // ERROR: overrides can't redeclare defaults\n    override fun f(x: Int): Int = x * 2\n}\n\n@JvmOverloads\nclass CustomView @JvmOverloads constructor(\n    ctx: Context, attrs: AttributeSet? = null, defStyle: Int = 0\n)"
+        }
+      ],
+      "followUps": [
+        "Why is adding a defaulted parameter a binary-compat break?",
+        "How does `@JvmOverloads` generate constructors?",
+        "When is a default expression evaluated?"
+      ],
+      "traps": [
+        "Thinking defaults are evaluated once — they re-evaluate per omitted call.",
+        "Forgetting `@JvmOverloads` for Java callers and Android custom views."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Functions (default and named arguments)",
+          "url": "https://kotlinlang.org/docs/functions.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0036",
+      "track": "kotlin",
+      "topic": "Functions",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "operators",
+        "plusAssign",
+        "complexity"
+      ],
+      "q": "Which operators can you overload, and why is `+=` on a list a performance trap?",
+      "shortAnswer": [
+        "Overloading is a fixed name mapping: `plus`/`minus`/`times`/`div`/`rem`, `inc`, `get`/`set`, `invoke`, `contains`, `rangeTo`, `compareTo`, `iterator`, `componentN`.",
+        "For `+=` the compiler prefers `plusAssign` (in-place, works on `val` receiver) over `plus`+reassign (works on `var`), and errors when both apply.",
+        "`var items: List<T>` with `items += x` in a loop copies the entire list each iteration — O(n²) — where `val items = mutableListOf()` mutates in place."
+      ],
+      "answer": "Operator overloading is **name-based, not symbol-based**: the compiler maps `a + b` to a function named `plus`, `a in b` to `contains`, `a[i]` to `get`, `a[i] = v` to `set`, `a()` to `invoke`, `a..b` to `rangeTo`, `a < b` to `compareTo`, `for (x in a)` to `iterator`, `a++` to `inc`, `!a` to `not`. These must be `operator` functions — member or extension. You cannot invent new symbols; only the fixed set overloads.\n\n#### `+=` and the `plusAssign` trap\nFor `a += b` the compiler searches, in preference order:\n1. `a.plusAssign(b)` — **in-place**, works on a `val` receiver.\n2. `a = a.plus(b)` — **reassigning**, works only on a `var` receiver.\n3. If both exist, it's a **compile error** (ambiguous).\n\nNow the trap: `var items: List<Int> = listOf(1, 2)` followed by `items += 3` — there is no `plusAssign` on `List`, so the compiler desugars it to `items = items.plus(3)`, which copies. Each `+=` builds a **new list** copying every element, then rebinds `items`; in a loop that is **O(n²)** — `var list: List<Int> = emptyList()` with `repeat(10_000) { list += it }` makes ~10k copies and ~50M element moves.\n\nThe fix is the mutable collection: `val items = mutableListOf<Int>()` then `items += x` calls `MutableList.plusAssign` → in-place `add`, O(1). The choice between `List` and `MutableList` isn't cosmetic — it's the difference between quadratic and linear building.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "O(n²) List building vs O(1) MutableList",
+          "src": "// Quadratic — plus() copies the whole list each time\nvar list: List<Int> = emptyList()\nrepeat(10_000) { i -> list += i }\n\n// Linear — plusAssign() mutates in place\nval list2 = mutableListOf<Int>()\nrepeat(10_000) { i -> list2 += i }\n\n// Operator mapping\nclass Vec(val x: Int) {\n    operator fun plus(o: Vec) = Vec(x + o.x)\n    operator fun contains(n: Int) = x == n\n}\nval v = Vec(1) + Vec(2)     // -> Vec.plus\nif (3 in v) {}               // -> Vec.contains"
+        }
+      ],
+      "followUps": [
+        "Why does `+=` prefer `plusAssign` over `plus`+reassign?",
+        "When do you get an ambiguity error with `+=`?",
+        "Which operators can you define as extensions?"
+      ],
+      "traps": [
+        "Using `var list: List<T>` and `+=` in loops — the O(n²) copy is the whole point.",
+        "Claiming you can invent operator symbols — overloading is a fixed name mapping."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Operator overloading",
+          "url": "https://kotlinlang.org/docs/operator-overloading.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0037",
+      "track": "kotlin",
+      "topic": "Functions",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "infix",
+        "tailrec",
+        "precedence"
+      ],
+      "q": "What are the rules for `infix` and `tailrec`, and when does each actually matter?",
+      "shortAnswer": [
+        "`infix` needs a single non-vararg, non-default parameter on a member or extension, and its precedence sits below arithmetic but above comparison.",
+        "`tailrec` rewrites self-recursion into a loop only when the recursive call is the last operation and is not inside try/catch/finally.",
+        "Otherwise you get a warning and a StackOverflowError on deep input — Android thread stacks are on the order of 1 MB / a few thousand frames."
+      ],
+      "answer": "#### `infix`\nRules: the function must be a **member or extension** with **exactly one parameter**, not vararg, with **no default value**. `infix fun Int.shl2(x: Int) = this shl x`. Precedence: infix calls sit **below arithmetic but above comparison** — `1 shl 2 + 3` parses as `1 shl (2 + 3)` (i.e. `1 shl 5`), and `a and b == c` parses as `a and (b == c)`. The classic bit-twiddling bug. `mapOf(1 to \"a\")` — `to` is infix. The practical rule: use infix sparingly; the readability win must outweigh the precedence subtlety.\n\n#### `tailrec`\nThe compiler rewrites self-recursion into a **loop** when: the recursive call is the **last operation** in the function (a tail position), and it's not inside `try`/`catch`/`finally`, and the recursion is a direct self-call (not through a local lambda — non-inline lambda calls cannot be tail-recursed). The generated code is a `while` loop with variables reassigned — no stack growth.\n\nWhen it matters: **Android's thread stack is ~1 MB** (few thousand frames), so a naive recursion on deep input (`fib`, tree traversal, JSON nesting) blows the stack quickly. `tailrec` turns a potential `StackOverflowError` into a loop. But it only helps *self*-recursion in tail position — a recursive helper that does work after the call cannot be optimized, and the compiler emits a **warning** `A function is marked as tail-recursive but no tail calls are found` when it can't apply.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Precedence gotcha and tailrec vs stack overflow",
+          "src": "// infix precedence: below arithmetic, above comparison\ninfix fun Int.xor2(o: Int) = this xor o\nval bad = 1 xor2 2 + 3     // 1 xor2 (2+3) = 1 xor2 5 = 4, not (1 xor2 2)+3 = 2\n\n// tailrec — the recursive call is the last statement\nfun sum(n: Long, acc: Long = 0): Long =\n    if (n == 0L) acc else sum(n - 1, acc + n)   // tail call -> loop\n\n// Not tail-recursive: work after the call\nfun depth(tree: Tree?): Int = if (tree == null) 0\n    else 1 + maxOf(depth(tree.left), depth(tree.right))  // after-call work"
+        }
+      ],
+      "followUps": [
+        "Why does an infix call sit at that precedence level?",
+        "Can `tailrec` optimize recursion through a lambda?",
+        "Why is stack depth a practical concern on Android?"
+      ],
+      "traps": [
+        "Getting infix precedence wrong — `1 shl 2 + 3` is the canonical bug.",
+        "Assuming `tailrec` works through non-inline lambdas or try/catch."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Functions (infix, tailrec)",
+          "url": "https://kotlinlang.org/docs/functions.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0038",
+      "track": "kotlin",
+      "topic": "Functions",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "contracts",
+        "callsInPlace",
+        "smart-cast"
+      ],
+      "q": "What is a `contract`, and what does `callsInPlace` let the compiler prove?",
+      "shortAnswer": [
+        "`contract { returns(true) implies (x is String) }` is how `isNullOrEmpty()`, `require()` and `check()` enable smart casts across a function boundary.",
+        "`callsInPlace(block, InvocationKind.EXACTLY_ONCE)` is why you may assign a `val` inside a `run {}`/`with {}` lambda.",
+        "The compiler does not verify contracts — a wrong one makes smart casts unsound — and the API is still opt-in with hard restrictions."
+      ],
+      "answer": "A `contract` is a **compiler hint** you declare about your own function: it tells the compiler what a successful call implies, so smart casts work across the function boundary. The two big families:\n\n- **`returns(true) implies (x is String)`** — used by `isNullOrEmpty()`: the compiler learns that after `s.isNullOrEmpty()` returns false, `s` is a non-null `String`. Similarly `require(x != null)` and `check(...)` let the compiler smart-cast `x` afterwards. This is how the stdlib's assertion helpers feel 'smart'.\n- **`callsInPlace(block, InvocationKind.EXACTLY_ONCE)`** — tells the compiler a lambda is invoked exactly once, synchronously, in the calling function. That knowledge lets you write `val x = run { 42 }` — the compiler permits assigning a `val` inside the lambda because the lambda *will* run exactly once. Without the contract, `val` inside a lambda would be an error. `AT_MOST_ONCE`, `AT_LEAST_ONCE`, `UNKNOWN` are the weaker kinds.\n\n#### The restrictions and the danger\nThe **compiler does not verify contracts**. If you declare a false one, smart casts become unsound — a type safety hole. Contracts are also restricted: only on top-level or non-`open` functions, the `contract` must be the **first statement**, and the API remains `@ExperimentalContracts` (opt-in). The practical guidance: don't write your own; rely on the stdlib's (which are correct) and understand what they let you assume.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "returns-implies and callsInPlace in action",
+          "src": "@OptIn(ExperimentalContracts::class)\nfun requireName(x: String?) {\n    contract { returns() implies (x != null) }\n    if (x == null) throw IllegalArgumentException(\"null\")\n}\n\nfun greet(x: String?) {\n    requireName(x)\n    println(x.length)          // smart cast works — thanks to the contract\n}\n\n// callsInPlace enables val assignment inside run/with\nval answer: Int = run {\n    40 + 2                      // EXACTLY_ONCE -> val assignment is legal\n}"
+        }
+      ],
+      "followUps": [
+        "Why is `callsInPlace(EXACTLY_ONCE)` required for `val` inside `run {}`?",
+        "What happens if you lie in a contract?",
+        "Where is `@ExperimentalContracts` still needed?"
+      ],
+      "traps": [
+        "Claiming the compiler verifies contracts — it trusts them, which is the soundness risk.",
+        "Not mentioning `callsInPlace` — the val-in-lambda ability is its whole point."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin stdlib — kotlin.contracts",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.contracts/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    }
+  ]
+}

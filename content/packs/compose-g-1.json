@@ -1,0 +1,360 @@
+{
+  "id": "compose-g-1",
+  "title": "Jetpack Compose",
+  "track": "compose",
+  "items": [
+    {
+      "id": "cmp-0012",
+      "track": "compose",
+      "topic": "Compiler & internals",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "compiler",
+        "recomposition"
+      ],
+      "q": "Why can a `@Composable` function only be called from another `@Composable` function?",
+      "shortAnswer": [
+        "The compiler threads a hidden `$composer` parameter through every composable call.",
+        "Only another composable has that composer in scope, so there must be a composable calling context.",
+        "Composables and plain lambdas are distinct types: `@Composable () -> Unit` is not `() -> Unit`."
+      ],
+      "answer": "The Compose compiler rewrites every `@Composable` function to take an extra trailing `$composer: Composer<*>` parameter plus a `$changed` bitmask. That composer is what records the call in the slot table and lets later recomposition find and restart the group. Since only code the compiler has also transformed has a composer in scope, a composable can only be invoked from another composable — the Kotlin compiler enforces this as a calling-context check.\n\n#### The bridges you can name\nPlain callbacks have no composer, which is why `onClick` cannot call a composable directly: you bridge out with `rememberCoroutineScope` or `LaunchedEffect` for work, and you bridge in through `setContent`, `ComposeView`, or a slot like `content: @Composable () -> Unit`. That last one matters: `@Composable () -> Unit` is a distinct type from `() -> Unit`, so a composable lambda cannot be passed where a normal lambda is expected and vice versa. The rule is not ceremony — it exists so the compiler can prove every composable call site has a composer to record into.",
+      "followUps": [
+        "What does the `$composer` do with the calls it records?",
+        "How do you call a composable from a non-composable context?"
+      ],
+      "traps": [
+        "Saying it is a runtime rule — it is a compile-time calling-context restriction enforced by the Kotlin compiler plugin.",
+        "Claiming suspend functions can call composables because both are restricted types — they are different restrictions with different mechanisms."
+      ],
+      "refs": [
+        {
+          "title": "Compose compiler under the hood — Recomposer / composer parameter",
+          "url": "https://developer.android.com/develop/ui/compose/mental-model",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0013",
+      "track": "compose",
+      "topic": "Compiler & internals",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "compiler",
+        "skipping",
+        "slot-table"
+      ],
+      "q": "What does the Compose compiler plugin actually generate for a composable function?",
+      "shortAnswer": [
+        "It injects a `$composer` parameter and a `$changed` bitmask into every composable.",
+        "The body is wrapped in `startRestartGroup` and `endRestartGroup`, with a `if (!skipping) body else skipToGroupEnd()` guard.",
+        "The caller computes the callee's `$changed`, so skipping costs a bitmask test, not an equality walk."
+      ],
+      "answer": "The compiler transform is mechanical. A composable `fun F(a: A)` becomes `fun F(a: A, $composer: Composer<*>, $changed: Int, $default: Int)`. `$changed` uses three bits per parameter to record whether the caller could prove a value unknown, same, different, or static. The body is wrapped in `startRestartGroup()`, and the generated skip logic reads roughly: `if (!$changed or changed(a) or !composer.skipping) { body() } else { composer.skipToGroupEnd() }`, then `endRestartGroup() { ... }`.\n\n#### The key insight candidates miss\nThe `$changed` bitmask is computed by the *caller*, which has both argument values and its own recorded state. So checking whether to skip the callee is a cheap constant-time bit test on already-known bits — the callee's arguments are never walked or compared at the call site. Skippability is a property visible in the group's recorded state, and a skipped group still records that it ran so the slot table stays coherent.\n\n#### What differs with strong skipping\nWith strong skipping, unstable parameters are also compared by reference (`===`) and lambda parameters are auto-remembered, so the skip decision covers many more calls without changing the mechanism.",
+      "followUps": [
+        "Why does the caller compute `$changed` rather than the callee?",
+        "What does strong skipping change about how arguments are compared?"
+      ],
+      "traps": [
+        "Thinking skipping compares every parameter each recomposition — the decision is a bitmask test on the caller side.",
+        "Believing a non-restartable composable cannot be skippable — restartability and skippability are separate properties."
+      ],
+      "refs": [
+        {
+          "title": "Compose compiler metrics and reports",
+          "url": "https://developer.android.com/develop/ui/compose/performance/metrics",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0014",
+      "track": "compose",
+      "topic": "Compiler & internals",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "slot-table",
+        "performance"
+      ],
+      "q": "Why is the slot table a gap buffer, and when does that data structure hurt you?",
+      "shortAnswer": [
+        "It is a flat array of groups with a movable gap so sequential writes near the cursor are O(1).",
+        "Moving the gap costs O(distance), so churn far from the write cursor is the expensive kind.",
+        "`movableContentOf` exists precisely to relocate a group and its remembered state instead of rebuilding it."
+      ],
+      "answer": "Composition records calls in a `SlotTable`: a flat `Array` plus a `groupMap`, where a movable gap separates written from unwritten slots. Appending or rewriting at the cursor is O(1) because the gap absorbs the insertion. Anchors — lightweight references into the table — survive relocation by pointing at a group rather than an index, which is what lets the Applier line up against a table that has shifted.\n\n#### When it hurts\nThe gap must move to wherever writes need to happen, and that movement is O(distance). Structural churn far from the cursor — appending and removing large subtrees repeatedly, or items reordering inside a big list — forces the whole region to shuffle. That is the classic jank signature of a busy `LazyColumn` with unstable keys: the slot table is not the bottleneck by itself, but pathological key behaviour turns a cheap rebind into a table-shifting rebuild.\n\n#### The escape hatch\n`movableContentOf { }` wraps a block so the compiler tracks it as movable: when the group is relocated (say a row moves in a list), its slot-table contents and remembered state move wholesale instead of being discarded and recomposed from scratch. That is the sanctioned fix for the gap buffer's expensive move.",
+      "followUps": [
+        "How do anchors let the Applier track a table that shifted?",
+        "When is `movableContentOf` the right fix and when is it a band-aid?"
+      ],
+      "traps": [
+        "Claiming the slot table is a hash map or per-composable storage — it is one flat array plus a movable gap.",
+        "Blaming the gap buffer for every lazy-list jank without checking whether keys are stable first."
+      ],
+      "refs": [
+        {
+          "title": "Compose internals — the Composer",
+          "url": "https://developer.android.com/develop/ui/compose/mental-model",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0015",
+      "track": "compose",
+      "topic": "Compiler & internals",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "snapshot",
+        "applier",
+        "recomposer"
+      ],
+      "q": "Trace one state write all the way to pixels. Who does what — Composer, Applier, Recomposer?",
+      "shortAnswer": [
+        "A write notifies snapshot apply observers, which invalidate the recording RecomposeScopes.",
+        "The Recomposer waits for the next frame, recomposes into a change list, and the Applier mutates the LayoutNode tree.",
+        "Measure, place and draw happen in the same Choreographer frame that applied the change list."
+      ],
+      "answer": "Write `state.value = x` and the snapshot system fires an apply observer, which maps the changed `StateObject` back to the `RecomposeScope`s that read it and marks them invalid. The `Recomposer` — running on `AndroidUiDispatcher` with its `MonotonicFrameClock` — waits for the next `withFrameNanos` callback, then performs recomposition.\n\n#### Where the work actually happens\nComposition does not touch the UI tree. The Composer records the recomposed scopes' calls into a *change list*, and the `Applier` walks that list to mutate the LayoutNode tree: insert, remove, move, update. Only then does the frame continue to the layout and draw passes against the mutated tree, all inside the same Choreographer frame the recomposition was scheduled for.\n\n#### The design payoff\nBecause the Applier is an interface, the same composition output drives LayoutNodes on Android, VectorNodes for SVG-like drawing, and RemoteViews for Glance — the Composer never assumes what it is producing into. That is why Compose targets those three backends with the same runtime.",
+      "followUps": [
+        "Where does the frame clock come from, and what replaces it in Glance?",
+        "Why must recomposition and layout/draw share one frame?"
+      ],
+      "traps": [
+        "Saying the Composer directly updates views — composition produces a change list that the Applier applies.",
+        "Claiming recomposition happens synchronously on the writing thread — it is scheduled on the frame clock."
+      ],
+      "refs": [
+        {
+          "title": "Compose phases",
+          "url": "https://developer.android.com/develop/ui/compose/phases",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0016",
+      "track": "compose",
+      "topic": "Recomposition model",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "recomposition",
+        "scope",
+        "inline"
+      ],
+      "q": "You read a state value inside a `Column { }` content lambda and the entire enclosing screen re-runs. Why?",
+      "shortAnswer": [
+        "`Column`, `Row` and `Box` are inline, so their content lambdas have no restart group of their own.",
+        "The nearest enclosing restartable scope is the caller of `Column`, so a read there restarts the whole screen.",
+        "The fix is to extract a small composable, or take a `() -> T` slot so the read lands in a tighter scope."
+      ],
+      "answer": "Restart groups are what recomposition targets, and inline composables do not create one. `Column` is declared `inline fun Column(...)`, so its `content` lambda is inlined into the caller and shares the caller's group. Reading a `State` inside that lambda is therefore attributed to the nearest *non-inline* restartable ancestor — usually the screen's own group — and a write invalidates the whole screen.\n\n#### Contrast the cases\nA non-inline composable taking a composable lambda gets its own scope for the parameter, so reads inside it restart only that subtree. A composable that returns a value is never restartable at all — the caller owns its groups. The deliberate fix is to make the read small: extract a composable that reads the state into its own group, or pass content as `() -> T` so the *caller* controls the slot while the read stays in the leaf.\n\n#### The intuition\nInline is a hoisting win for the common case — no extra group per layout node — and a trap exactly when you hide a state read inside a convenience lambda. Donut-hole skipping is the same model viewed from the other side.",
+      "followUps": [
+        "What is the difference between a restartable and a skippable group?",
+        "Why is a composable that returns a value never restartable?"
+      ],
+      "traps": [
+        "Assuming every composable lambda gets its own restart scope — inline ones share the caller's.",
+        "Fixing it by hoisting the read higher — that widens the invalidated scope rather than narrowing it."
+      ],
+      "refs": [
+        {
+          "title": "Compose mental model — recomposition",
+          "url": "https://developer.android.com/develop/ui/compose/mental-model",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0017",
+      "track": "compose",
+      "topic": "Recomposition model",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "recomposition",
+        "skipping"
+      ],
+      "q": "What is donut-hole skipping, and how do you engineer one on purpose?",
+      "shortAnswer": [
+        "The parent recomposes but every child skips because its arguments are unchanged.",
+        "The 'hole' is wherever the changing state is actually read, so the cost collapses to that scope.",
+        "Passing the changing value down as a parameter or reading a CompositionLocal high up closes the hole."
+      ],
+      "answer": "When the parent restarts and each child's `$changed` bits report unchanged arguments, the children take the `skipToGroupEnd()` path — the parent's body runs but the subtree cost collapses to a bitmask test per child. The expensive work sits only in the scopes that actually read the changing state, and everything around it is a cheap 'hole' of skipped groups.\n\n#### Building one on purpose\nThe recipe is to isolate reads: hold the volatile state high (in a ViewModel or a top composable), read it once, and pass stable data down. Children that receive stable parameters skip. Two patterns engineer it deliberately — content slots: `Scaffold(topBar = { TopBar() })` where a changing lambda is hoisted out so it does not re-instantiate per recomposition; and `() -> T` parameters that let a child decide when to recompose itself.\n\n#### What closes the hole\nPassing the changing value down as a parameter makes its readers non-skippable on change. A non-skippable child defeats it. And a `CompositionLocal` read high in the tree invalidates the local's readers — wide scopes again — which is why locals should hold rarely-changing config.",
+      "followUps": [
+        "Why does hoisting a lambda parameter out of a changing scope preserve skipping?",
+        "What role do CompositionLocals play in accidentally closing the hole?"
+      ],
+      "traps": [
+        "Assuming skipped children still pay for their body — a skipped group runs only the skip test.",
+        "Treating a CompositionLocal as a free way to pass changing values — it invalidates all its readers."
+      ],
+      "refs": [
+        {
+          "title": "Compose recomposition and skipping",
+          "url": "https://developer.android.com/develop/ui/compose/performance/bestpractices",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0018",
+      "track": "compose",
+      "topic": "Stability & skipping",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "stability",
+        "tooling"
+      ],
+      "q": "Turn on the Compose compiler reports. What do you look at first?",
+      "shortAnswer": [
+        "Enable `composeCompiler { metricsDestination / reportsDestination }` and run a release build.",
+        "Read `composables.txt` for restartable/skippable columns and `classes.txt` for unstable classes.",
+        "Then loop: find one offending field, fix it, re-run, and diff the counts."
+      ],
+      "answer": "The compiler reports are the ground truth for why your composables are not skipping. Under AGP 9.3's built-in Kotlin support you enable them in the `composeCompiler {}` DSL — `metricsDestination` for the flat files and `reportsDestination` for the interactive HTML pages — building against the release variant so shrinking and the real config apply.\n\n#### Reading `composables.txt`\nEach composable gets a row with a `scheme` column, the restartable and skippable flags, and the number of parameters. A `*` marks an unstable parameter. The first pass is a scan: which hot composables are marked *not* skippable, and which of their parameters carry the `*`. That names the offender.\n\n#### Reading `classes.txt`\nThe same report lists every class and why it is stable or not — `unstable class Foo { unstable val bar }` tells you the exact field that poisoned it. The workflow is a loop: find the single worst field, fix it (make it a `val`, mark the holder `@Immutable`, or add it to the stability config), rebuild, and diff the counts. Diffing the totals is the fastest way to prove the fix worked.",
+      "followUps": [
+        "What distinguishes the `restartable` and `skippable` flags?",
+        "When should you trust the report over intuition?"
+      ],
+      "traps": [
+        "Running the reports against a debug build and reasoning about release behaviour — always use a release variant.",
+        "Treating an unstable *class* report as fatal — the report is a signal, not a verdict."
+      ],
+      "refs": [
+        {
+          "title": "Compose compiler metrics",
+          "url": "https://developer.android.com/develop/ui/compose/performance/metrics",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0019",
+      "track": "compose",
+      "topic": "Stability & skipping",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "stability",
+        "modules"
+      ],
+      "q": "A model class from our `:domain` module is reported unstable even though every property is a `val`. Why, and what are your options?",
+      "shortAnswer": [
+        "Stability is inferred at compile time and only for classes the Compose compiler itself compiled.",
+        "A class compiled by plain Kotlin is treated as unstable because the inference never ran.",
+        "`@Stable` promises consistent equality plus change notification; `@Immutable` promises no change at all."
+      ],
+      "answer": "The Compose compiler infers stability as a side-effect of compilation, and only for the code it compiles. A `val`-only data class in `:domain` is built by the plain Kotlin compiler, so no inference ran — the class defaults to unstable, and every composable parameter typed with it stops skipping. The report is not telling you the class mutates; it is telling you the compiler has no proof either way.\n\n#### The two annotations\n`@Stable` is a contract: the object's `equals` is consistent for its lifetime and property changes notify the composition. That is a real obligation — a mutable list inside an `@Stable` holder that mutates in place breaks the promise. `@Immutable` is stronger: nothing changes after construction, so a parameter can be compared by reference forever.\n\n#### The config file\n`stabilityConfigurationFile` accepts wildcards like `my.domain.*` to force stability without editing the library. The senior caution: listing a type that genuinely mutates silently freezes stale UI. Prefer fixing the field or the module. Compiling the model module with the Compose compiler is the blanket option, at the cost of coupling build config to Compose.",
+      "followUps": [
+        "What breaks when you `@Immutable` a type that actually mutates?",
+        "When is the stability config file the right tool over annotations?"
+      ],
+      "traps": [
+        "Claiming `@Stable` is a performance hint — it is a correctness contract the compiler trusts.",
+        "Adding the config wildcard without verifying the type is truly immutable."
+      ],
+      "refs": [
+        {
+          "title": "Compose stability documentation",
+          "url": "https://developer.android.com/develop/ui/compose/performance/stability",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0020",
+      "track": "compose",
+      "topic": "Stability & skipping",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "strong-skipping",
+        "bug"
+      ],
+      "q": "Strong skipping is on and one screen stopped updating. Diagnose it.",
+      "shortAnswer": [
+        "Strong skipping compares unstable parameters with `===`, so a mutated-in-place object is the same reference.",
+        "The call is skipped as unchanged and the UI goes stale — that is the exact trade the mode buys.",
+        "Copy to a new instance, or make the type genuinely immutable, rather than disabling skipping."
+      ],
+      "answer": "Strong skipping — the default since Compose 1.7 — extends skipping to unstable parameters by comparing them with reference equality instead of bailing out. That is where the 'screen stopped updating' bug lives: an object like `MutableStateFlow` value holder that is mutated in place never changes its reference, so the composable's `$changed` bits report 'same' and the group takes the skip path. The UI is not broken; it is correctly concluding nothing changed.\n\n#### The usual suspects\nThe fix starts by identifying who holds the reference: a ViewModel property mutated in place, a list you `add` to, a mutable map. Any of those defeats both equality styles. The honest fixes are to make the data genuinely immutable — copy on write, `ImmutableList`, or a fresh holder instance per update — so reference change and value change coincide.\n\n#### The escape hatches\n`@NonSkippableComposable` forces a body to always run, and `@NonRestartableComposable` keeps skipping while removing restart scopes. They are diagnostics and surgical exits, not a policy: disabling skipping globally to hide one mutable object throws away the performance you enabled the mode for.",
+      "followUps": [
+        "Why does mutating an `@Stable` object's list in place also go stale without strong skipping?",
+        "When would you reach for `@NonSkippableComposable` deliberately?"
+      ],
+      "traps": [
+        "Disabling strong skipping project-wide because one class mutates in place.",
+        "Believing reference equality is a bug — it is the intended, documented cost of the mode."
+      ],
+      "refs": [
+        {
+          "title": "Strong skipping mode",
+          "url": "https://developer.android.com/develop/ui/compose/performance/stability",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0021",
+      "track": "compose",
+      "topic": "Stability & skipping",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "stability",
+        "lists"
+      ],
+      "q": "`List<T>` is unstable. What do you actually do about it — and when is the right answer 'nothing'?",
+      "shortAnswer": [
+        "Options in cost order: leave it, mark the holder `@Immutable`, use the stability config, or switch to `ImmutableList`.",
+        "A re-executed composable is microseconds of function calls, not a redraw.",
+        "Demand a compiler report plus a trace before adding a dependency to every module."
+      ],
+      "answer": "`List<T>` is unstable because the compiler cannot prove the interface's implementation is immutable. The corrective options, cheapest first: leave it alone; wrap the holder in `@Immutable`; add `kotlin.collections.List` to the stability config; or adopt `kotlinx.collections.immutable` with `ImmutableList` / `persistentListOf`. Each is a real cost, and the decision must be driven by evidence.\n\n#### The cost model most people get wrong\nA composable that does not skip re-executes its body — microseconds of function calls — while a redraw is milliseconds of measure, layout and draw. 'Unstable, therefore slow' is only true when the non-skipping body is expensive. A hot list item recomposing occasionally is invisible; the same item running measure and draw per frame is the real problem, and skipping alone rarely fixes the expensive part.\n\n#### When the answer is nothing\nIf the compiler report shows the item is already skippable (because the list parameter is the only unstable one and callers recreate it rarely), and a trace shows no recomposition storm, adding `ImmutableList` is pure dependency and churn. The disciplined answer: instrument first — compiler metrics plus a Perfetto frame trace — then pick the cheapest option that removes the measured cost.",
+      "followUps": [
+        "How does `persistentListOf` differ from `arrayListOf` under the hood?",
+        "What does a compiler report actually prove about a lazy list's behaviour?"
+      ],
+      "traps": [
+        "Adding `ImmutableList` to every module because a report flagged one unstable parameter.",
+        "Confusing 'recomposes' with 'is janky' — measure before optimizing."
+      ],
+      "refs": [
+        {
+          "title": "Compose stability — immutable collections",
+          "url": "https://developer.android.com/develop/ui/compose/performance/stability",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    }
+  ]
+}

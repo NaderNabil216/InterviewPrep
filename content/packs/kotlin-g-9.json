@@ -1,0 +1,220 @@
+{
+  "id": "kotlin-g-9",
+  "title": "Kotlin Language",
+  "track": "kotlin",
+  "items": [
+    {
+      "id": "kt-0054",
+      "track": "kotlin",
+      "topic": "Java interop",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "JvmName",
+        "JvmStatic",
+        "JvmField"
+      ],
+      "q": "You expose a Kotlin module to a Java team. What has to be annotated, and why?",
+      "shortAnswer": [
+        "Top-level declarations land in `FooKt` — rename with `@file:JvmName`; default arguments don't exist for Java without `@JvmOverloads`.",
+        "Companion members need `@JvmStatic` or Java writes `Foo.Companion.bar()`; properties surface as `getX`/`setX` unless `@JvmField`.",
+        "`internal` appears mangled, extension functions become statics with the receiver as first parameter, and a `suspend fun` shows up as a method taking a trailing `Continuation` returning `Object`/`COROUTINE_SUSPENDED`."
+      ],
+      "answer": "Kotlin's sugar has no Java equivalent, so the seam needs explicit annotations. What Java actually sees:\n\n#### Top-level functions and the facade class\n`fun doWork()` at the top level lands in a class named after the file: `WorkKt.doWork()`. Rename it deliberately with `@file:JvmName(\"WorkUtils\")` — and add `@file:JvmMultifileClass` when multiple files share a name.\n\n#### Default arguments\nJava has no named/default args; a `fun f(a: Int = 1)` is `f(int)` + the synthetic `$default`. Without `@JvmOverloads`, a Java caller must pass **every** parameter. `@JvmOverloads` generates real overloads.\n\n#### Companion members\nJava sees `Foo.Companion.bar()` — the nested `Companion` instance. `@JvmStatic` hoists `bar()` onto `Foo` itself, and `@JvmField` exposes a static field.\n\n#### Properties\nA Kotlin property `val name: String` becomes `getName()`/`setName()` methods. `@JvmField` replaces them with a public field — only when there's no custom accessor and no `lateinit`-style constraint.\n\n#### `internal`, extensions, suspend\n- `internal` members are **mangled** (`foo$module`) — Java callers see a weird name, not an error.\n- An extension `fun String.pad()` becomes a **static** `pad(String)` — receiver is the first parameter.\n- A `suspend fun load()` becomes a method `load(Continuation)` returning `Object` — either the result or `COROUTINE_SUSPENDED`. Java callers must use callbacks or the `kotlinx-coroutines-jvm` helpers.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The annotations a Java seam needs",
+          "src": "@file:JvmName(\"WorkUtils\")\n\n@JvmOverloads\nfun fetch(url: String, retries: Int = 3) { }   // fetch(String), fetch(String, int)\n\nclass Config {\n    companion object {\n        @JvmStatic fun create(): Config = Config()   // Config.create()\n        @JvmField val DEFAULT = Config()             // Config.DEFAULT field\n    }\n}\n\ninternal fun secret() {}      // secret$module in Java\nfun String.pad() = this       // static pad(String)\nsuspend fun load(): Int = 1   // load(Continuation): Object"
+        }
+      ],
+      "followUps": [
+        "When is `@JvmField` legal on a property?",
+        "What does `@JvmMultifileClass` do?",
+        "How do Java callers consume a suspend function?"
+      ],
+      "traps": [
+        "Assuming Java sees friendly `Foo.bar()` for companion members without `@JvmStatic`.",
+        "Forgetting `@JvmOverloads` for default arguments consumed by Java."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Calling Kotlin from Java",
+          "url": "https://kotlinlang.org/docs/java-to-kotlin-interop.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0055",
+      "track": "kotlin",
+      "topic": "Java interop",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "JvmSuppressWildcards",
+        "Java-friendly"
+      ],
+      "q": "Design rules for a Kotlin library whose main consumers write Java — what do you keep out of the public surface?",
+      "shortAnswer": [
+        "A Kotlin `List<out T>` parameter becomes `List<? extends T>` in Java signatures, which breaks Java callers and Dagger multibindings — `@JvmSuppressWildcards`/`@JvmWildcard` are the levers.",
+        "Value classes mangle method names; `Result`, inline+reified, default arguments and sealed exhaustiveness are unusable or hostile from Java.",
+        "A Java-friendly facade plus `@JvmOverloads` bridges is often worth the ABI you then have to keep."
+      ],
+      "answer": "Designing a library for Java consumers means predicting what the bytecode shows them — not what Kotlin syntax feels like.\n\n#### Wildcards\nKotlin's `List<out T>` compiles to a Java signature `List<? extends T>`. That causes variance friction for Java callers, and **Dagger multibindings** (`@ElementsIntoSet`/`@IntoMap` with generic collection keys) fail on wildcards because the generic type must match exactly. Levers: `@JvmSuppressWildcards` (strip `? extends` on a collection-typed parameter) and `@JvmWildcard` (force it, for return types you want to widen). Choose per declaration based on who calls it.\n\n#### Keep OUT of the public surface\n- **`value class`** — method names are mangled (`UserId-<init>`), so Java callers see incomprehensible symbols.\n- **`Result<T>`** — no `.get()` ergonomics from Java; surfaces as `Result<Object>`.\n- **`inline` + `reified`** — inlined into consumer bytecode; Java can't call `reified` functions at all.\n- **Default arguments** — Java sees only the full-arity method (bridged with `@JvmOverloads` if you care).\n- **Sealed exhaustiveness** — Java has no exhaustiveness; the `when`-contract is invisible to Java consumers.\n- **`suspend`** — callable only via `Continuation` callbacks.\n\n#### The design decision\nEither keep those features off the public surface, or wrap them behind a **Java-friendly facade** (`@JvmName`'d statics, `@JvmOverloads`, plain return types) — and then treat that facade as ABI you must keep. Every Kotlin-idiomatic API you expose to Java is a promise you now own.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Wildcard control and what to hide",
+          "src": "// Kotlin: fun consume(items: List<String>)\n// Java signature: consume(List<? extends String>)\n\n@JvmSuppressWildcards\nfun consume(items: List<String>) { }   // signature: consume(List)\n\n@JvmWildcard\nfun produce(): List<String> = ...       // signature: List<? extends String>\n\n// Keep off the seam:\n// @JvmInline value class UserId(...)        -> mangled names in Java\n// suspend fun load(): User                  -> Continuation in Java\n// sealed class Result                       -> no exhaustiveness for Java\n// fun <reified T> json(): T                 -> not callable from Java"
+        }
+      ],
+      "followUps": [
+        "Why do wildcards break Dagger multibindings?",
+        "When would you keep a value class off a public API?",
+        "What is the ABI cost of a Java-friendly facade?"
+      ],
+      "traps": [
+        "Forgetting Kotlin `out` parameters become `? extends` in Java signatures.",
+        "Exposing `value class`/`Result` to Java and ignoring mangling/ergonomics."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Java interop (wildcards)",
+          "url": "https://kotlinlang.org/docs/java-to-kotlin-interop.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0056",
+      "track": "kotlin",
+      "topic": "Annotations",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "use-site-targets",
+        "annotation"
+      ],
+      "q": "What are annotation use-site targets, and which bug do they fix?",
+      "shortAnswer": [
+        "`@Json val name: String` on a constructor property defaults to the `param` target, so a reflective library that reads FIELDS finds nothing and your JSON key silently falls back to the property name.",
+        "`@field:`, `@get:`, `@set:`, `@setparam:`, `@delegate:`, `@receiver:` choose the target explicitly.",
+        "This is the Moshi/Gson/Room/Dagger-qualifier class of bug, and the grouped form is `@field:[A B]`."
+      ],
+      "answer": "A constructor property `@Json val name: String` produces **four Java elements**: the constructor parameter, the field, the getter, and the setter. Without a use-site target, the annotation goes to a single default target, and the precedence is **`param` > `property` > `field`**. For `@Json`, the annotation lands on the constructor *parameter*.\n\n#### The bug it fixes\nLibraries differ in what they reflectively read:\n- **Gson/Moshi** (reflective mode) read **fields** → a `@Json` on the param is invisible to them, so the key silently falls back to the property name. If the JSON key differs from the Kotlin name, the parse quietly fails.\n- **Dagger qualifiers** (`@Named`) can bind on the parameter — which is sometimes right, sometimes not.\n- **Room**, **Retrofit**, **kotlinx.serialization** and the Compose `@Composable`-adjacent annotations each have a preferred target.\n\nThe fix is an explicit target:\n- `@field:Json(\"user_id\")` — annotate the field (Moshi/Gson reflective).\n- `@get:Json(...)` — annotate the getter (for serializers that read getters).\n- `@set:`, `@setparam:`, `@delegate:` (delegated properties), `@receiver:` (extension functions), `@property:` — the full menu.\n- **Grouped form**: `@field:[Json A Json B]` applies several annotations to one target.\n\n#### The rule\nWhen an annotation's behavior depends on the Java element it reaches, state the target explicitly. 'It worked in Java' is never a guarantee for the same annotation on a Kotlin property.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Default param target vs explicit field target",
+          "src": "// Without target — lands on the CONSTRUCTOR PARAMETER\nclass User(@Json(\"user_id\") val id: String)\n// Moshi reflective reads FIELDS -> no Json found -> key falls back to \"id\"\n\n// Explicit field target — what Moshi/Gson reflective expects\nclass User(@field:Json(\"user_id\") val id: String)\n\n// Other targets and the grouped form\nclass C(\n    @get:Json(\"v\") val v: Int,\n    @field:[SerialName(\"x\") Transient] val x: Int,\n    val d: Int by @delegate:SoftRef(\"d\") SoftRef(0)\n)"
+        }
+      ],
+      "followUps": [
+        "What is the default target precedence for a constructor property?",
+        "Which libraries read fields vs params vs getters?",
+        "How does the grouped `@field:[A B]` syntax work?"
+      ],
+      "traps": [
+        "Assuming an annotation lands on the field — the default is the parameter.",
+        "Thinking use-site targets are only a Moshi thing — the mechanism is universal."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Annotations (use-site targets)",
+          "url": "https://kotlinlang.org/docs/annotations.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0057",
+      "track": "kotlin",
+      "topic": "Annotations",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "RequiresOptIn",
+        "OptIn",
+        "preview"
+      ],
+      "q": "How do you gate an unstable API in Kotlin, and how do you decide to adopt a preview language feature in a shipping app?",
+      "shortAnswer": [
+        "`@RequiresOptIn` defines the marker; `@OptIn(X::class)` accepts locally; propagating the marker pushes the decision to callers; `-opt-in=` accepts module-wide.",
+        "A preview language feature needs a compiler flag, can change syntax between releases and leaks into your ABI, while a stabilized one is safe to adopt.",
+        "`@Target`/`@Retention` matter too — SOURCE retention keeps KSP-only annotations out of the binary."
+      ],
+      "answer": "#### Gating an API\n- **`@RequiresOptIn(level = ERROR or WARNING)`** on a marker annotation declares 'this API is experimental'. Consumers touching it get a compile error/warning until they opt in.\n- **`@OptIn(X::class)`** — local acceptance at a declaration (function, class, file).\n- **Propagation** — annotating your own function with the marker *propagates* the requirement to your callers: useful when you wrap experimental API in an experimental facade.\n- **`-opt-in=`** (Gradle `freeCompilerArgs`) opts the whole module in — fine for internal modules, dangerous for a library (you push the experimental API into your public surface).\n\n#### Preview language features\nA *preview* feature (requires a compiler flag, e.g. `-Xcontext-parameters`) is a different risk class from a *stabilized* one (e.g. nested typealiases, explicit backing fields in 2.3):\n- **Syntax can change between releases** — code you write today may not compile against next quarter's compiler.\n- **It leaks into your ABI** — the feature's constructs appear in bytecode and `.api` dumps, and you're committed once published.\n- So the rule: adopt a **stabilized** feature immediately; adopt a **preview** one only in throwaway/experimental modules, never in a shipped library. When in doubt, wait for stabilization.\n\n#### Retention\n`@Target` restricts where an annotation applies; `@Retention` (SOURCE/BINARY/RUNTIME) decides whether it survives. KSP-only marker annotations can be `@Retention(AnnotationRetention.SOURCE)` — they never reach the `.class` file, shrinking the binary and hiding internal contracts.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Opt-in mechanics and retention",
+          "src": "@RequiresOptIn(level = RequiresOptIn.Level.ERROR)\nannotation class ExperimentalApi\n\n@ExperimentalApi\nclass Unstable()\n\n@OptIn(ExperimentalApi::class)      // local acceptance\nfun local() = Unstable()\n\n@ExperimentalApi\nfun propagates() = Unstable()        // forces callers to opt in too\n\n// Gradle: freeCompilerArgs += \"-opt-in=com.lib.ExperimentalApi\"\n\n@Target(AnnotationTarget.PROPERTY)\n@Retention(AnnotationRetention.SOURCE)   // KSP-only, stripped from bytecode\nannotation class Compiled\n\n// preview: -Xcontext-parameters flag needed — syntax may change, keep out of ABI"
+        }
+      ],
+      "followUps": [
+        "When would you propagate an opt-in marker?",
+        "What is the risk of `-opt-in=` on a published library?",
+        "How does SOURCE retention differ from RUNTIME?"
+      ],
+      "traps": [
+        "Using `-opt-in=` on a library you publish — you leak the experimental API into your contract.",
+        "Adopting a preview feature in a shipping app without weighing the syntax-change risk."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Opt-in requirements",
+          "url": "https://kotlinlang.org/docs/opt-in-requirements.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0058",
+      "track": "kotlin",
+      "topic": "Language features",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "Any",
+        "Unit",
+        "Nothing"
+      ],
+      "q": "`Any`, `Unit`, `Nothing` — how does Kotlin's type hierarchy differ from Java's?",
+      "shortAnswer": [
+        "`Any` is the top type but carries only equals/hashCode/toString — no wait/notify — and `Any?` sits above it.",
+        "`Unit` is a real singleton returned by 'void' functions, which is why `(T) -> Unit` works as a generic function type.",
+        "`Nothing` is the uninhabited bottom type and a subtype of everything — that's what makes `throw`/`return`/`TODO()` usable as expressions and `UiState<Nothing>` assignable anywhere."
+      ],
+      "answer": "Kotlin's hierarchy has three players Java lacks.\n\n#### `Any` — the top type\n`Any` is the supertype of every non-null type, roughly Java's `Object` minus the baggage: it declares only `equals`, `hashCode`, `toString` — no `wait`/`notify`/`getClass`. `Any?` sits **above** `Any` and admits `null`. This split is why Kotlin functions are null-safe by default where Java's are implicitly nullable.\n\n#### `Unit` — 'void' as a value\nA function with no meaningful return is `Unit` — a **real singleton object**, not Java's `void` keyword. The payoff is that `Unit` is a *type*: `(T) -> Unit` is a valid generic function type, and `{ }`-style blocks can be used wherever a `() -> Unit` is expected. Callbacks, `run { }`, and generic wrappers over 'no result' all depend on Unit being a value.\n\n#### `Nothing` — the bottom type\n`Nothing` is the **uninhabited type** — no value exists. Because it is a subtype of *every* type (bottom), expressions typed `Nothing` are assignable anywhere. That is what makes these legal:\n- `throw` / `return` as expressions: `val x = value ?: throw IllegalStateException()` — `throw` has type `Nothing`, so it satisfies `String`.\n- `TODO()` in a stub: it returns `Nothing`.\n- `UiState<Nothing>` (empty flow state) is assignable to any `UiState<T>`.\n\nThe flip side: `val x = listOf()` fails to infer a type because without context `List<Nothing>` is the best guess — usually not what you want.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Unit as a value, Nothing as bottom",
+          "src": "fun f(): Unit { }          // like void, but a real value\nval callback: () -> Unit = { println(\"hi\") }\n\nfun error(msg: String): Nothing = throw IllegalStateException(msg)\n\nval x: String = if (cond) \"ok\" else error(\"nope\")   // Nothing satisfies String\nfun todo(): Int = TODO(\"not implemented\")            // TODO(): Nothing\n\nsealed class UiState<out T>\nobject Empty : UiState<Nothing>()   // assignable to UiState<Any>\n\n// listOf() without context -> List<Nothing> — usually not what you want\nval guessed = listOf()"
+        }
+      ],
+      "followUps": [
+        "Why does `Unit` matter for generic function types?",
+        "What makes `throw` usable as an expression?",
+        "Why does `listOf()` fail type inference without context?"
+      ],
+      "traps": [
+        "Equating `Any` with `Object` — Any drops wait/notify and getClass.",
+        "Thinking `Unit` is void — it's a value, which is the point."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Basic types (Any, Unit, Nothing)",
+          "url": "https://kotlinlang.org/docs/basic-types.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    }
+  ]
+}

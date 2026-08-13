@@ -1,0 +1,172 @@
+{
+  "track": "dsa",
+  "scope": [
+    "arrays & hashing — group anagrams (L2)",
+    "two pointers (opposite ends) — container with most water (L2)",
+    "sliding window (fixed size) — maximum sum of a subarray of size k (L1)",
+    "sliding window (variable) — longest substring with at most K distinct characters (L2)",
+    "prefix sums — subarray sum equals K (L2)",
+    "binary search on a sorted array — search in a rotated sorted array (L3)",
+    "binary search on the answer — minimum capacity to ship packages (L3)",
+    "sorting & custom comparators — sort characters by frequency (L2)",
+    "intervals — insert interval (L2)",
+    "intervals — minimum number of meeting rooms (L3)",
+    "monotonic stack — largest rectangle in a histogram (L4)",
+    "monotonic deque — sliding window maximum (L3)",
+    "stacks & parsing — evaluate reverse Polish notation (L2)",
+    "heaps & top-K — k closest points to origin (L2)",
+    "two heaps — find median from a data stream (L4)",
+    "linked lists — merge k sorted lists (L3)",
+    "linked lists — copy list with random pointer (L3)",
+    "trees — validate a binary search tree (L3)",
+    "trees — lowest common ancestor (L3)",
+    "trees — diameter of a binary tree (L2)",
+    "trees — serialize and deserialize (L4)",
+    "tries — word search II (L4)",
+    "graphs — clone graph (L3)",
+    "graphs — shortest path in an unweighted graph (word ladder) (L4)",
+    "graphs — Dijkstra (network delay time) (L3)",
+    "graphs — topological sort (course schedule II) (L3)",
+    "graphs — union-find with path compression (redundant connection) (L3)",
+    "backtracking — N-queens (L4)",
+    "greedy — task scheduler (L3)",
+    "dynamic programming 1-D — coin change (L3)",
+    "dynamic programming 1-D — longest increasing subsequence (L3)",
+    "dynamic programming — 0/1 knapsack (L3)",
+    "dynamic programming 2-D — unique paths in a grid (L1)",
+    "dynamic programming — longest palindromic substring (L3)",
+    "design — rate limiter (L3)",
+    "Android — image memory cache with LRU eviction (L3)",
+    "Android — custom Compose layout (L3)",
+    "Android — a minimal StateFlow implementation (L2)",
+    "Android — a thread-safe in-memory store (L3)",
+    "Android — exponential backoff with jitter (L1)",
+    "Android — a bounded work queue (L3)"
+  ],
+  "specs": [],
+  "coverage": {
+    "arrays & hashing — group anagrams (L2)": [
+      "ds-0020"
+    ],
+    "two pointers (opposite ends) — container with most water (L2)": [
+      "ds-0021"
+    ],
+    "sliding window (fixed size) — maximum sum of a subarray of size k (L1)": [
+      "ds-0022"
+    ],
+    "sliding window (variable) — longest substring with at most K distinct characters (L2)": [
+      "ds-0023"
+    ],
+    "prefix sums — subarray sum equals K (L2)": [
+      "ds-0024"
+    ],
+    "binary search on a sorted array — search in a rotated sorted array (L3)": [
+      "ds-0025"
+    ],
+    "binary search on the answer — minimum capacity to ship packages (L3)": [
+      "ds-0026"
+    ],
+    "sorting & custom comparators — sort characters by frequency (L2)": [
+      "ds-0027"
+    ],
+    "intervals — insert interval (L2)": [
+      "ds-0028"
+    ],
+    "intervals — minimum number of meeting rooms (L3)": [
+      "ds-0029"
+    ],
+    "monotonic stack — largest rectangle in a histogram (L4)": [
+      "ds-0030"
+    ],
+    "monotonic deque — sliding window maximum (L3)": [
+      "ds-0031"
+    ],
+    "stacks & parsing — evaluate reverse Polish notation (L2)": [
+      "ds-0032"
+    ],
+    "heaps & top-K — k closest points to origin (L2)": [
+      "ds-0033"
+    ],
+    "two heaps — find median from a data stream (L4)": [
+      "ds-0034"
+    ],
+    "linked lists — merge k sorted lists (L3)": [
+      "ds-0035"
+    ],
+    "linked lists — copy list with random pointer (L3)": [
+      "ds-0036"
+    ],
+    "trees — validate a binary search tree (L3)": [
+      "ds-0037"
+    ],
+    "trees — lowest common ancestor (L3)": [
+      "ds-0038"
+    ],
+    "trees — diameter of a binary tree (L2)": [
+      "ds-0039"
+    ],
+    "trees — serialize and deserialize (L4)": [
+      "ds-0040"
+    ],
+    "tries — word search II (L4)": [
+      "ds-0041"
+    ],
+    "graphs — clone graph (L3)": [
+      "ds-0042"
+    ],
+    "graphs — shortest path in an unweighted graph (word ladder) (L4)": [
+      "ds-0043"
+    ],
+    "graphs — Dijkstra (network delay time) (L3)": [
+      "ds-0044"
+    ],
+    "graphs — topological sort (course schedule II) (L3)": [
+      "ds-0045"
+    ],
+    "graphs — union-find with path compression (redundant connection) (L3)": [
+      "ds-0046"
+    ],
+    "backtracking — N-queens (L4)": [
+      "ds-0047"
+    ],
+    "greedy — task scheduler (L3)": [
+      "ds-0048"
+    ],
+    "dynamic programming 1-D — coin change (L3)": [
+      "ds-0049"
+    ],
+    "dynamic programming 1-D — longest increasing subsequence (L3)": [
+      "ds-0050"
+    ],
+    "dynamic programming — 0/1 knapsack (L3)": [
+      "ds-0051"
+    ],
+    "dynamic programming 2-D — unique paths in a grid (L1)": [
+      "ds-0052"
+    ],
+    "dynamic programming — longest palindromic substring (L3)": [
+      "ds-0053"
+    ],
+    "design — rate limiter (L3)": [
+      "ds-0054"
+    ],
+    "Android — image memory cache with LRU eviction (L3)": [
+      "ds-0055"
+    ],
+    "Android — custom Compose layout (L3)": [
+      "ds-0056"
+    ],
+    "Android — a minimal StateFlow implementation (L2)": [
+      "ds-0057"
+    ],
+    "Android — a thread-safe in-memory store (L3)": [
+      "ds-0058"
+    ],
+    "Android — exponential backoff with jitter (L1)": [
+      "ds-0059"
+    ],
+    "Android — a bounded work queue (L3)": [
+      "ds-0060"
+    ]
+  }
+}

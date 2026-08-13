@@ -1,0 +1,265 @@
+{
+  "id": "dsa-c",
+  "title": "Problem Solving",
+  "track": "dsa",
+  "items": [
+    {
+      "id": "ds-0015",
+      "track": "dsa",
+      "topic": "Dynamic programming",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Dynamic programming (2D)",
+      "tags": [
+        "dp",
+        "string"
+      ],
+      "q": "Longest common subsequence and edit distance — the 2D DP template",
+      "prompt": "Two string DP problems that share one grid:\n\n1. **LCS** — length of the longest subsequence present in both strings (not necessarily contiguous).\n2. **Edit distance** — minimum insert/delete/replace operations to turn `a` into `b`.\n\nIf you can derive the grid and the recurrence for one, the other is a small edit. This pattern also covers regex matching, distinct subsequences, and longest palindromic subsequence.",
+      "hints": [
+        "Define `dp[i][j]` in terms of *prefixes*: the answer for the first `i` characters of `a` and the first `j` characters of `b`. Almost every string DP uses this state.",
+        "Split on whether the last characters match. If `a[i-1] == b[j-1]`, you extend the diagonal. If not, you take the best of the two ways to shrink the problem.",
+        "Row 0 and column 0 are the base cases: comparing against an empty string. For LCS that's 0; for edit distance it's `i` (delete everything) or `j` (insert everything)."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "LCS — the base template",
+          "src": "fun longestCommonSubsequence(a: String, b: String): Int {\n    // dp[i][j] = LCS of a.take(i) and b.take(j)\n    val dp = Array(a.length + 1) { IntArray(b.length + 1) }\n\n    for (i in 1..a.length) {\n        for (j in 1..b.length) {\n            dp[i][j] = if (a[i - 1] == b[j - 1]) {\n                dp[i - 1][j - 1] + 1                       // match: extend the diagonal\n            } else {\n                maxOf(dp[i - 1][j], dp[i][j - 1])          // drop one char from either\n            }\n        }\n    }\n    return dp[a.length][b.length]\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "Edit distance — same grid, different base case and recurrence",
+          "src": "fun minDistance(a: String, b: String): Int {\n    val dp = Array(a.length + 1) { IntArray(b.length + 1) }\n\n    for (i in 0..a.length) dp[i][0] = i        // delete every char of a\n    for (j in 0..b.length) dp[0][j] = j        // insert every char of b\n\n    for (i in 1..a.length) {\n        for (j in 1..b.length) {\n            dp[i][j] = if (a[i - 1] == b[j - 1]) {\n                dp[i - 1][j - 1]                            // free — no operation needed\n            } else {\n                1 + minOf(\n                    dp[i - 1][j - 1],   // replace\n                    dp[i - 1][j],       // delete from a\n                    dp[i][j - 1],       // insert into a\n                )\n            }\n        }\n    }\n    return dp[a.length][b.length]\n}"
+        }
+      ],
+      "complexity": "Both are O(m·n) time and O(m·n) space. Space can be reduced to O(min(m,n)) by keeping only the previous row — mention this; it's the standard follow-up. You cannot reduce it if you also need to *reconstruct* the actual subsequence or edit script.",
+      "followUps": [
+        "Reduce space to two rows. Why does that block reconstruction?",
+        "Reconstruct the actual LCS string, not just its length.",
+        "Longest palindromic subsequence — how is it LCS in disguise? (LCS of the string and its reverse.)",
+        "How would you memoize this top-down instead, and when is that preferable?"
+      ],
+      "starter": "fun longestCommonSubsequence(a: String, b: String): Int {\n    // your solution\n}\n\nfun minDistance(a: String, b: String): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin sequences",
+          "url": "https://kotlinlang.org/docs/sequences.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0016",
+      "track": "dsa",
+      "topic": "Intervals",
+      "level": 2,
+      "type": "dsa",
+      "pattern": "Intervals / greedy",
+      "tags": [
+        "intervals",
+        "sorting",
+        "greedy"
+      ],
+      "q": "Merge intervals and meeting rooms",
+      "prompt": "1. **Merge intervals** — given a collection of intervals, merge all overlapping ones.\n2. **Meeting rooms II** — given meeting intervals, return the minimum number of rooms required.\n\nInterval problems are almost always \"sort by start, then sweep\". The second one adds a heap, and it's a very common real-world-flavoured question.",
+      "hints": [
+        "Sort by start time. Now overlaps can only happen between adjacent intervals in the sorted order — that's the property that makes a single sweep sufficient.",
+        "For merging: keep the last interval in your result. If the current one starts before that ends, extend the end; otherwise append.",
+        "For meeting rooms: you need to know when the *earliest-ending* meeting frees up. A min-heap of end times gives you that in O(log n)."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Merge intervals — sort and sweep",
+          "src": "fun merge(intervals: Array<IntArray>): Array<IntArray> {\n    if (intervals.isEmpty()) return emptyArray()\n    intervals.sortBy { it[0] }\n\n    val result = mutableListOf(intervals[0])\n    for (i in 1 until intervals.size) {\n        val last = result.last()\n        val current = intervals[i]\n        if (current[0] <= last[1]) {\n            last[1] = maxOf(last[1], current[1])   // overlap: extend\n        } else {\n            result.add(current)                     // disjoint: start a new one\n        }\n    }\n    return result.toTypedArray()\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "Meeting rooms II — min-heap of end times",
+          "src": "fun minMeetingRooms(intervals: Array<IntArray>): Int {\n    if (intervals.isEmpty()) return 0\n    intervals.sortBy { it[0] }\n\n    // Min-heap of end times: the top is the room that frees up soonest\n    val endTimes = PriorityQueue<Int>()\n\n    for (meeting in intervals) {\n        // If the earliest-ending room is already free, reuse it\n        if (endTimes.isNotEmpty() && endTimes.peek() <= meeting[0]) {\n            endTimes.poll()\n        }\n        endTimes.offer(meeting[1])\n    }\n    return endTimes.size          // rooms still held == peak concurrency\n}"
+        }
+      ],
+      "complexity": "Merge: O(n log n) for the sort, O(n) sweep, O(n) output. Meeting rooms: O(n log n) — sort plus n heap operations — and O(n) space. Both are sort-dominated, so O(n log n) is the floor unless the input is already sorted.",
+      "followUps": [
+        "Insert interval into an already-sorted list — can you do it in O(n) without re-sorting?",
+        "Non-overlapping intervals: remove the minimum number to make the rest disjoint. Why do you sort by **end** time there?",
+        "Solve meeting rooms II with a sweep line over separate start/end arrays instead of a heap.",
+        "What if intervals were arriving as a stream?"
+      ],
+      "starter": "fun merge(intervals: Array<IntArray>): Array<IntArray> {\n    // your solution\n}\n\nfun minMeetingRooms(intervals: Array<IntArray>): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Kotlin collection ordering",
+          "url": "https://kotlinlang.org/docs/collection-ordering.html",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0017",
+      "track": "dsa",
+      "topic": "Trie",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Trie",
+      "tags": [
+        "trie",
+        "design",
+        "string",
+        "android"
+      ],
+      "q": "Implement a trie for autocomplete",
+      "prompt": "Implement a trie supporting `insert(word)`, `search(word)`, `startsWith(prefix)`, and `suggest(prefix, limit)` returning up to `limit` completions.\n\n**Why it matters for Android:** this is the data structure behind a local search-suggestions box. The follow-up is usually \"now rank suggestions by frequency\" or \"now it has to fit in memory on a low-end device\".",
+      "hints": [
+        "Each node holds children keyed by character plus a flag marking end-of-word. The path from the root spells the prefix, so nodes don't need to store the string.",
+        "`search` and `startsWith` are the same walk — they differ only in what you check at the final node.",
+        "For `suggest`, walk to the prefix node, then DFS collecting words until you hit the limit. To rank by frequency, store a count on terminal nodes, or cache the best completions on each node."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Trie with prefix suggestions",
+          "src": "class Trie {\n    private class Node {\n        val children = HashMap<Char, Node>()\n        var isWord = false\n        var frequency = 0\n    }\n\n    private val root = Node()\n\n    fun insert(word: String, frequency: Int = 1) {\n        var node = root\n        for (c in word) node = node.children.getOrPut(c) { Node() }\n        node.isWord = true\n        node.frequency += frequency\n    }\n\n    private fun walk(prefix: String): Node? {\n        var node = root\n        for (c in prefix) node = node.children[c] ?: return null\n        return node\n    }\n\n    fun search(word: String): Boolean = walk(word)?.isWord == true\n\n    fun startsWith(prefix: String): Boolean = walk(prefix) != null\n\n    fun suggest(prefix: String, limit: Int = 10): List<String> {\n        val start = walk(prefix) ?: return emptyList()\n        val found = mutableListOf<Pair<String, Int>>()\n\n        fun dfs(node: Node, built: StringBuilder) {\n            if (found.size >= limit * 4) return          // bound the search\n            if (node.isWord) found.add(built.toString() to node.frequency)\n            for ((c, child) in node.children) {\n                built.append(c)\n                dfs(child, built)\n                built.deleteCharAt(built.lastIndex)      // backtrack\n            }\n        }\n        dfs(start, StringBuilder(prefix))\n\n        return found.sortedByDescending { it.second }.take(limit).map { it.first }\n    }\n}"
+        }
+      ],
+      "complexity": "`insert`, `search`, `startsWith` are all O(L) where L is the word length — independent of how many words are stored, which is the trie's whole selling point over a hash set for prefix queries. `suggest` is O(L + k) where k is the size of the explored subtree. Space is O(total characters), which is the trie's weakness: a `HashMap` per node is memory-hungry.",
+      "followUps": [
+        "How would you cut the memory footprint? (Array of 26 for a fixed alphabet, or a radix/compressed trie that merges single-child chains.)",
+        "Cache the top-N completions on each node — what's the update cost when a frequency changes?",
+        "Add wildcard search (`.` matches any character) — how does the walk change?",
+        "Why a trie rather than a sorted list with binary search on prefix?"
+      ],
+      "starter": "class Trie {\n    fun insert(word: String) { TODO() }\n    fun search(word: String): Boolean { TODO() }\n    fun startsWith(prefix: String): Boolean { TODO() }\n    fun suggest(prefix: String, limit: Int = 10): List<String> { TODO() }\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Kotlin collections overview",
+          "url": "https://kotlinlang.org/docs/collections-overview.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0018",
+      "track": "dsa",
+      "topic": "Android-flavored",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Concurrency / caching",
+      "tags": [
+        "android",
+        "coroutines",
+        "cache"
+      ],
+      "q": "Build a request de-duplicating cache (single-flight)",
+      "prompt": "Implement a suspending cache: `get(key)` returns a cached value if present, otherwise fetches it. If **N callers request the same missing key concurrently, only one fetch should happen** and all N should receive the result.\n\nThis is a genuine Android problem — it's what stops ten composables from firing ten identical network calls on first render, and it's the same machinery behind the token-refresh stampede fix.",
+      "hints": [
+        "The naive `if (cache[key] != null) return it; fetch()` has a race: two coroutines both see null and both fetch. You need to make the *decision* and the *registration of the in-flight request* atomic.",
+        "Store `Deferred<V>` rather than `V`. A second caller that finds an existing `Deferred` can simply `await()` it.",
+        "Guard the map with a `Mutex` (not `synchronized` — you must not block a thread inside a coroutine). Use `async` started inside the lock, awaited outside it, so the lock isn't held for the duration of the network call."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Single-flight cache with failure eviction",
+          "src": "class SingleFlightCache<K, V>(\n    private val scope: CoroutineScope,\n    private val fetcher: suspend (K) -> V,\n) {\n    private val mutex = Mutex()\n    private val cache = HashMap<K, V>()\n    private val inFlight = HashMap<K, Deferred<V>>()\n\n    suspend fun get(key: K): V {\n        // Fast path — already cached\n        mutex.withLock { cache[key] }?.let { return it }\n\n        val deferred = mutex.withLock {\n            // Re-check inside the lock: another coroutine may have finished while we waited\n            cache[key]?.let { return it }\n\n            inFlight[key] ?: scope.async {\n                fetcher(key)\n            }.also { inFlight[key] = it }\n        }\n\n        return try {\n            val value = deferred.await()          // awaited OUTSIDE the lock\n            mutex.withLock {\n                cache[key] = value\n                inFlight.remove(key)\n            }\n            value\n        } catch (e: Throwable) {\n            // A failure must not be cached, or every future caller inherits it\n            mutex.withLock { inFlight.remove(key) }\n            throw e\n        }\n    }\n\n    suspend fun invalidate(key: K) = mutex.withLock { cache.remove(key) }\n}"
+        }
+      ],
+      "complexity": "`get` is O(1) amortized on the map operations. The point is not asymptotics — it's that N concurrent callers produce exactly **one** call to `fetcher`. Say that out loud, and say why the double-check inside the lock is required.",
+      "followUps": [
+        "Why `Mutex` rather than `synchronized`? (Blocking a dispatcher thread inside a coroutine starves the pool and can deadlock.)",
+        "Why is the `await()` deliberately outside the lock?",
+        "What happens if the caller that started the `async` is cancelled — do the other waiters lose their result? How would you fix that?",
+        "Add TTL expiry and a size bound. How does this compose with the LRU cache problem?",
+        "How would you test that only one fetch happened?"
+      ],
+      "starter": "class SingleFlightCache<K, V>(\n    private val scope: CoroutineScope,\n    private val fetcher: suspend (K) -> V,\n) {\n    suspend fun get(key: K): V {\n        TODO(\"only one fetch per key, even with N concurrent callers\")\n    }\n}",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "kotlinx.coroutines Deferred",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines/-deferred/",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Flow on Android",
+          "url": "https://developer.android.com/kotlin/flow",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    },
+    {
+      "id": "ds-0019",
+      "track": "dsa",
+      "topic": "Android-flavored",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Design / queue",
+      "tags": [
+        "android",
+        "offline",
+        "workmanager",
+        "design"
+      ],
+      "q": "Design an offline mutation queue with retry and ordering",
+      "prompt": "Design and sketch a queue that accepts user mutations while offline, persists them, and drains them in order when connectivity returns — with exponential backoff, a retry cap, and no duplicates if a response is lost.\n\nThis sits exactly between coding and system design, which is why it shows up so often in Android loops. You'll be scored on persistence, idempotency, and ordering, not on clever algorithms.",
+      "hints": [
+        "Where does the queue live? If it's in memory, a process death loses the user's work — so the queue must be a database table, not a list.",
+        "How do you avoid duplicating a mutation whose response was lost in flight? The client must generate a key the server can dedupe on.",
+        "What does 'in order' mean when one mutation fails permanently? Decide explicitly: block the queue (strict ordering) or skip and continue (independent mutations). Both are defensible — say which and why."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Persistent outbox drained by a constrained worker",
+          "src": "@Entity(tableName = \"mutations\")\ndata class MutationEntity(\n    @PrimaryKey val id: String,          // client-generated UUID == idempotency key\n    val type: String,                     // CREATE_NOTE, LIKE_POST, ...\n    val payload: String,                  // serialized body\n    val createdAt: Long,                  // preserves ordering\n    val attempts: Int = 0,\n    val status: String = \"PENDING\",      // PENDING | FAILED | DONE\n)\n\nclass OutboxWorker(\n    ctx: Context,\n    params: WorkerParameters,\n    private val dao: MutationDao,\n    private val api: Api,\n) : CoroutineWorker(ctx, params) {\n\n    override suspend fun doWork(): Result {\n        // FIFO by creation time — ordering is a property of the query, not of memory\n        val pending = dao.pending(limit = 50)\n\n        for (mutation in pending) {\n            try {\n                // The server dedupes on this key, so a lost response cannot duplicate\n                api.submit(mutation.toRequest(), idempotencyKey = mutation.id)\n                dao.markDone(mutation.id)\n            } catch (e: IOException) {\n                // Transient: stop here so strict ordering is preserved, and retry the batch\n                dao.incrementAttempts(mutation.id)\n                return if (mutation.attempts + 1 >= MAX_ATTEMPTS) {\n                    dao.markFailed(mutation.id)   // surface to the user, unblock the queue\n                    Result.retry()\n                } else {\n                    Result.retry()                 // WorkManager applies the backoff\n                }\n            } catch (e: HttpException) {\n                // 4xx is permanent — retrying forever would wedge the queue\n                if (e.code() in 400..499) dao.markFailed(mutation.id) else return Result.retry()\n            }\n        }\n        return Result.success()\n    }\n\n    companion object { const val MAX_ATTEMPTS = 5 }\n}\n\n// Enqueue: unique work so a burst of edits doesn't spawn a worker per edit\nfun schedule(wm: WorkManager) = wm.enqueueUniqueWork(\n    \"outbox\",\n    ExistingWorkPolicy.KEEP,\n    OneTimeWorkRequestBuilder<OutboxWorker>()\n        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())\n        .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)\n        .build()\n)"
+        }
+      ],
+      "complexity": "Not an asymptotic question. The scored properties are: **durability** (survives process death and reboot), **idempotency** (client-generated key), **ordering** (FIFO by `createdAt`, with an explicit policy on failure), **bounded retry** (cap + exponential backoff), and **observability** (failed rows are visible to the user, not silently dropped).",
+      "followUps": [
+        "Strict ordering blocks the queue on one permanent failure. When would you choose to skip instead?",
+        "Two mutations touch the same record — do you need to collapse them? (E.g. three rapid renames → send only the last.)",
+        "How does this interact with the conflict-resolution policy on the server?",
+        "How do you show sync state in the UI without being noisy?",
+        "How would you test this — including the lost-response case?"
+      ],
+      "starter": "// Sketch the entity, the DAO queries, and the worker.\n// Be explicit about: durability, idempotency, ordering, retry cap, failure visibility.\n\n@Entity(tableName = \"mutations\")\ndata class MutationEntity(\n    @PrimaryKey val id: String,\n    // ...\n)",
+      "addedIn": "2026.08.3",
+      "refs": [
+        {
+          "title": "Persistent work with WorkManager",
+          "url": "https://developer.android.com/develop/background-work/background-tasks/persistent",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Build an offline-first app",
+          "url": "https://developer.android.com/topic/architecture/data-layer/offline-first",
+          "checked": "2026-08-09"
+        }
+      ],
+      "updatedIn": "2026.08.8"
+    }
+  ]
+}

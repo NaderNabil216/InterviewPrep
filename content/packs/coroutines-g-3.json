@@ -1,0 +1,437 @@
+{
+  "id": "coroutines-g-3",
+  "title": "Coroutines & Flow",
+  "track": "coroutines-flow",
+  "items": [
+    {
+      "id": "co-0029",
+      "track": "coroutines-flow",
+      "topic": "Coroutine builders",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "launch",
+        "async",
+        "builders"
+      ],
+      "q": "Compare `launch`, `async`, `withContext`, `coroutineScope`, `runBlocking` and `produce`: what each returns, which ones suspend, and how each surfaces an exception.",
+      "shortAnswer": [
+        "`launch` returns a `Job` and is fire-and-forget; its exception goes straight to the parent.",
+        "`async` returns a `Deferred`; its exception is parked until `await()`.",
+        "`withContext`/`coroutineScope` suspend, return a value and rethrow to the caller; `runBlocking` blocks a thread; `produce` returns a hot `ReceiveChannel`."
+      ],
+      "answer": "Reconstruct the table from first principles.\n\n- **`launch`** — starts a coroutine, returns a `Job`, does not suspend. Fire-and-forget; an exception propagates immediately to the parent (and crashes if unhandled).\n- **`async`** — returns a `Deferred<T>` (a `Job` + a value slot), does not suspend. The exception sits in the `Deferred` until `await()` throws it; never awaited, never thrown.\n- **`withContext`** — *suspends*, switches context for the block, returns `T`, and rethrows the block's exception to its caller. Use it for a single context switch.\n- **`coroutineScope`** — suspends, runs children as its own, returns the block's `T` and rethrows the first child failure after cancelling siblings. The structured-concurrency builder.\n- **`runBlocking`** — not a suspend function: it blocks the calling thread and runs an event loop on it until the block finishes.\n- **`produce`** — returns a hot `ReceiveChannel`; the producer coroutine sends into the channel, an exception closes it.\n\nPlus the four `CoroutineStart` modes (`DEFAULT`, `LAZY`, `ATOMIC`, `UNDISPATCHED`), and the rule: a single value from a single call means `withContext`, never `async { }.await()`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The builders at a glance",
+          "src": "val job: Job = launch { doFireAndForget() }\n\nval deferred: Deferred<String> = async { fetchString() }\nval s: String = deferred.await()              // exception thrown here\n\nval t: String = withContext(Dispatchers.IO) { compute() }\n\nval u: String = coroutineScope { fetchOne() }\n\nrunBlocking { println(\"blocks the thread\") }   // not suspend\n\nval channel: ReceiveChannel<Int> = produce {\n    for (i in 1..3) send(i)\n}"
+        }
+      ],
+      "followUps": [
+        "Which builder is right when you want a value from a single suspend call?",
+        "Where does an unhandled `launch` exception go?",
+        "What are the four `CoroutineStart` modes?"
+      ],
+      "traps": [
+        "Claiming `async { }.await()` is idiomatic for a single call — that is `withContext`'s job.",
+        "Calling `runBlocking` a suspend function — it blocks."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — coroutines and channels: coroutine builders",
+          "url": "https://kotlinlang.org/docs/coroutines-and-channels.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0030",
+      "track": "coroutines-flow",
+      "topic": "Coroutine builders",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "run-blocking",
+        "anr",
+        "anti-pattern"
+      ],
+      "q": "Why is `runBlocking` banned in production Android code, and where is it legitimately correct?",
+      "shortAnswer": [
+        "It blocks the calling thread and runs an event loop on it until the block finishes — on Main that is a guaranteed ANR.",
+        "Called from the main thread it can deadlock on `withContext(Dispatchers.Main)`.",
+        "Legitimate: `fun main()`, JUnit tests, and framework entry points that must return synchronously."
+      ],
+      "answer": "`runBlocking` is the bridge from blocking world to coroutine world: it blocks the calling thread and runs an event loop *on that thread* until the block completes. On Android's main thread that is a guaranteed ANR the moment the block does anything slower than a tick.\n\n#### The killer detail\n`runBlocking { withContext(Dispatchers.Main) { } }` invoked *from* the main thread deadlocks. The event loop of `runBlocking` is running on the main thread, and the inner block needs the main looper to dispatch — but the looper is blocked inside `runBlocking` and can never service the post. Both sides wait forever. Any `Main` dispatch inside a main-thread `runBlocking` hangs the app.\n\n#### Where it is correct\n- `fun main()` — the JVM entry point has no looper and blocking is expected.\n- Plain JUnit tests and `kotlinx.coroutines.test` `runTest` wrappers.\n- Framework entry points that must return synchronously — a `ContentProvider.onCreate`, a legacy `Worker`, an AIDL callback — where the platform offers no suspend surface.\n\nEverywhere else, `runBlocking` means the calling code should have been a suspend function with a real scope. If the caller cannot suspend, you are at one of the legitimate seams.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The deadlock and the legitimate seam",
+          "src": "// Deadlock: main thread blocks in runBlocking, then needs Main\nrunBlocking {\n    withContext(Dispatchers.Main) { updateUi() }\n}\n\n// Legitimate: a JVM entry point\nfun main() = runBlocking {\n    launch { fetch() }\n}\n\n// Legitimate: a ContentProvider that must return synchronously\noverride fun onCreate(): Boolean {\n    runBlocking { warmup() }\n    return true\n}"
+        }
+      ],
+      "followUps": [
+        "Exactly why does the main-thread variant deadlock?",
+        "What distinguishes the legitimate entry-point cases?",
+        "What does `runTest` do that `runBlocking` cannot?"
+      ],
+      "traps": [
+        "Calling `runBlocking` 'just a blocking launch'. It changes threading for everything inside.",
+        "Forgetting the `Main` deadlock when asked for a detail."
+      ],
+      "refs": [
+        {
+          "title": "kotlinx.coroutines — runBlocking",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines/run-blocking.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0031",
+      "track": "coroutines-flow",
+      "topic": "Dispatchers",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "with-context",
+        "dispatcher-io",
+        "performance"
+      ],
+      "q": "What does `withContext(Dispatchers.IO)` actually do, and what does it cost?",
+      "shortAnswer": [
+        "It suspends, creates a child coroutine with the merged context, dispatches, runs, then dispatches back — up to two hand-offs per call.",
+        "It is strictly sequential, never a concurrency tool.",
+        "A `Job` you pass in is replaced by the new coroutine's own Job."
+      ],
+      "answer": "`withContext(newContext) { ... }` suspends the caller, launches a child coroutine whose context is the merged result (the caller's context with the new dispatcher's element winning), runs the block, and then dispatches back to the caller's context to return the value. That is potentially **two thread hand-offs** per call — onto the IO pool, then back to the original dispatcher.\n\n#### The cost in loops\nThe per-call price (a child coroutine allocation, up to two dispatches, a state-machine frame) is why calling `withContext(IO)` *inside* a loop per item is a measurable regression versus hoisting it around the loop: one hand-off pair instead of N.\n\n#### Three semantics to nail\n1. **Strictly sequential** — it switches context and runs one block; it never runs things concurrently. Use it where the shape is 'go do this, come back with the value'.\n2. **Cancelled with its caller** — the child coroutine is a child; cancelling the caller cancels the block.\n3. **The `Job` is replaced** — the context you pass is merged, but the child coroutine always installs its *own* `Job`. `withContext(Dispatchers.IO + Job())` does not detach anything from the parent; the Job you passed is simply overwritten.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Hoist the switch, don't nest it",
+          "src": "// Two hand-offs PER ITEM\nitems.forEach { item ->\n    val v = withContext(Dispatchers.IO) { slow(item) }\n    acc += v\n}\n\n// Two hand-offs TOTAL\nval acc2 = withContext(Dispatchers.IO) {\n    items.sumOf { slow(it) }\n}"
+        }
+      ],
+      "followUps": [
+        "How many dispatches does one `withContext(IO)` round trip cost?",
+        "Why is `withContext` not a way to parallelise work?",
+        "What happens to a `Job` passed inside the new context?"
+      ],
+      "traps": [
+        "Using `withContext` per item inside a loop and claiming it is fine.",
+        "Believing `withContext` runs the block concurrently with the caller."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — exception handling and withContext",
+          "url": "https://kotlinlang.org/docs/coroutine-context-and-dispatchers.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0032",
+      "track": "coroutines-flow",
+      "topic": "Dispatchers",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "limited-parallelism",
+        "semaphore",
+        "scheduler"
+      ],
+      "q": "You need at most 4 concurrent uploads. `Dispatchers.IO.limitedParallelism(4)`, a `Semaphore(4)`, or `flatMapMerge(concurrency = 4)`?",
+      "shortAnswer": [
+        "`limitedParallelism` caps how many tasks are *dispatched simultaneously*, not how many run concurrently — a suspended upload releases its slot.",
+        "`Semaphore(4)` or `flatMapMerge(4)` actually bound logical concurrency.",
+        "IO's 64-thread elasticity and the shared IO/Default pool explain why."
+      ],
+      "answer": "`limitedParallelism(4)` creates a *view* over the shared `CoroutineScheduler` that allows at most 4 tasks to be dispatched onto threads at once. That bounds active threads, not logical concurrency: an upload that suspends while awaiting a socket has no task running on a thread, so its slot is free and a fifth upload starts. If 'at most 4 concurrent' means four in-flight logical operations, `limitedParallelism` does not give it to you.\n\n#### What actually bounds concurrency\n- `Semaphore(4)` — each upload acquires before starting; a suspended upload still holds its permit, so you truly cap in-flight work.\n- `flatMapMerge(concurrency = 4)` — caps how many inner flows run at once; the natural tool for a flow of URLs.\n\n#### The pool model worth explaining\n`Dispatchers.IO` is a view over the shared `CoroutineScheduler` with a CPU-permit layer plus an elastic 64-thread limit (`kotlinx.coroutines.io.parallelism`) for blocking calls. `Default` shares the same underlying pool. A blocking call inside `Default` starves the pool, which is why blocking goes through `IO`. For a genuine single-thread confinement you can use `limitedParallelism(1)` — that one *does* bound execution because only one task can run at a time. And `Executor.asCoroutineDispatcher()` — which you must `close()` — is the escape hatch when you need a real custom pool.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Bounding logical concurrency",
+          "src": "// Bounds active threads, not in-flight uploads:\nval io4 = Dispatchers.IO.limitedParallelism(4)\nuploads.forEach { launch(io4) { upload(it) } }   // 5th starts as soon as one suspends\n\n// Actually caps in-flight work:\nval semaphore = Semaphore(4)\nuploads.forEach { launch(Dispatchers.IO) { semaphore.withPermit { upload(it) } } }\n\n// Flow-native:\nurlFlow.flatMapMerge(concurrency = 4) { upload(it) }"
+        }
+      ],
+      "followUps": [
+        "What does 'dispatched simultaneously' mean versus 'running'?",
+        "Why does a suspended upload not hold a dispatch slot?",
+        "When does `limitedParallelism(1)` genuinely confine execution?"
+      ],
+      "traps": [
+        "Claiming `limitedParallelism(4)` caps four concurrent coroutines. It caps running tasks.",
+        "Forgetting you must close a hand-built `Executor.asCoroutineDispatcher()`."
+      ],
+      "refs": [
+        {
+          "title": "kotlinx.coroutines — limitedParallelism",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines/-coroutine-dispatcher/limited-parallelism.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0033",
+      "track": "coroutines-flow",
+      "topic": "Shared state",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "mutex",
+        "synchronized",
+        "shared-state"
+      ],
+      "q": "`Mutex` vs `synchronized` in suspending code.",
+      "shortAnswer": [
+        "`synchronized` takes a JVM monitor bound to a *thread*; the compiler refuses a suspension point inside it.",
+        "`Mutex.withLock` is suspending, cancellation-aware and FIFO-fair — but explicitly not reentrant.",
+        "A nested `withLock` on the same mutex deadlocks permanently."
+      ],
+      "answer": "`synchronized` locks a JVM monitor, and monitors are owned by *threads*. Inside a coroutine that is wrong in two ways: the compiler forbids a suspension point inside a `synchronized` block (inlining would otherwise suspend while holding a monitor), and even if it compiled, a coroutine suspended on one thread and resumed on another could not release a monitor owned by a different thread. So `synchronized` is fine for short critical sections that never suspend, and useless as a coroutine locking primitive.\n\n#### `Mutex`\n`Mutex.withLock { }` is a suspending lock designed for this world: it suspends the *coroutine* while waiting, is cancellation-aware (a cancelled waiter does not take the lock), and is FIFO-fair — waiters resume in order. That makes it the right tool around IO or a state transaction that must stay atomic across a suspension.\n\n#### The trap\n`Mutex` is explicitly **not reentrant**. Calling `withLock` again inside the same `withLock` block — directly or through a helper — deadlocks permanently, because the second lock waits for the first, which is held by the same coroutine that is now waiting. `synchronized` is reentrant; `Mutex` is not, and that asymmetry is what interviewers probe.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Mutex usage and the reentrancy trap",
+          "src": "val mutex = Mutex()\n\nsuspend fun safeUpdate() = mutex.withLock {\n    repo.update()   // may suspend — allowed inside Mutex\n}\n\n// DEADLOCK: Mutex is not reentrant\nsuspend fun deadlock() = mutex.withLock {\n    mutex.withLock { }   // waits forever on itself\n}\n\n// synchronized: fine only with no suspension point\nval lock = Any()\nfun quick() = synchronized(lock) { counter++ }"
+        }
+      ],
+      "followUps": [
+        "Why can't a suspension point sit inside a `synchronized` block?",
+        "What does FIFO-fair mean for waiters?",
+        "How is `Mutex` different from `Semaphore(1)`?"
+      ],
+      "traps": [
+        "Nesting `withLock` and calling it a reentrant lock — it deadlocks.",
+        "Reaching for `synchronized` around suspending work."
+      ],
+      "refs": [
+        {
+          "title": "kotlinx.coroutines — Mutex",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.sync/-mutex.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0034",
+      "track": "coroutines-flow",
+      "topic": "Shared state",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "atomic",
+        "stateflow",
+        "race"
+      ],
+      "q": "Three coroutines increment a shared counter and you get the wrong number. Rank the fixes.",
+      "shortAnswer": [
+        "Don't share: confine the state to one coroutine or a `limitedParallelism(1)` dispatcher.",
+        "Then immutable state behind `MutableStateFlow.update {}`, then atomics, and only then `Mutex`.",
+        "`update {}` is a CAS loop — its lambda can run more than once and must be side-effect-free."
+      ],
+      "answer": "The wrong number is a lost update: three coroutines read the same value, each increments, and two of the writes are overwritten. Rank the fixes by how much concurrency they introduce.\n\n1. **Don't share.** Confine the mutable state to a single coroutine, or run the mutation on a `limitedParallelism(1)` dispatcher so increments serialize naturally. Zero locks, zero atomics, easiest to reason about.\n2. **Immutable state behind a CAS primitive.** `MutableStateFlow.update { it + 1 }` or `mutableStateOf.update { }`. The update is a compare-and-set loop that retries when another writer beat it — which means the **lambda can run more than once**, so it must be pure. This is why you never put a side effect inside `update {}`.\n3. **`AtomicInteger`/`AtomicReference`** — `incrementAndGet()` is the classic lock-free counter. Fine for a single primitive, awkward for composite state.\n4. **`Mutex`** — last resort; it serialises all access and is slowest under contention.\n\nTwo traps must be named: `state.value = state.value + 1` is precisely the lost-update race the other options exist to avoid, and `update {}` being re-run means the increment happens possibly multiple times under contention — safe only when the operation is idempotent.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Ranked counter fixes",
+          "src": "// Race:\nvar count = 0\nscope.launch { count++ }   // read-modify-write, lost updates\n\n// Better: atomic primitive\nval count = AtomicInteger(0)\ncount.incrementAndGet()\n\n// Better for state: CAS loop, lambda may run more than once\nval state = MutableStateFlow(0)\nstate.update { it + 1 }   // never `state.value = state.value + 1`\n\n// Confinement beats all:\nval single = Dispatchers.Default.limitedParallelism(1)\nscope.launch(single) { count++ }"
+        }
+      ],
+      "followUps": [
+        "Why is `update {}` safe against lost updates?",
+        "What goes wrong if the `update` lambda has a side effect?",
+        "When does `Mutex` win over the atomics?"
+      ],
+      "traps": [
+        "Writing `state.value = state.value + 1` in a concurrent path.",
+        "Putting a side effect inside `update {}` because 'it's atomic'."
+      ],
+      "refs": [
+        {
+          "title": "kotlinx.coroutines — shared mutable state and concurrency",
+          "url": "https://kotlinlang.org/docs/shared-mutable-state-and-concurrency.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0035",
+      "track": "coroutines-flow",
+      "topic": "Flow basics",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "flow",
+        "cold-stream",
+        "collect"
+      ],
+      "q": "What is a Flow, and what happens the moment you call `collect`?",
+      "shortAnswer": [
+        "A Flow is essentially a suspend function that can return many values.",
+        "`collect` runs the builder block in the collector's own coroutine, and each `emit` is a direct suspending call into the collector's lambda.",
+        "Nothing runs until a terminal operator is invoked, and every new collector re-runs the whole chain."
+      ],
+      "answer": "Think of a Flow as a suspend function that can return many values. The builder block is a `suspend` lambda that calls `emit(value)`; `collect { }` is the terminal operator that runs that block in the *collector's own coroutine*, and each `emit` is a plain suspending call straight into the collector's lambda. There is no queue, no buffer, no extra thread by default — the producer and consumer are the same coroutine, alternating.\n\n#### Cold and lazy\nA Flow is **cold**: constructing it does nothing, and intermediate operators (`map`, `filter`, `onEach`…) are lazy — they just wrap the downstream collector. The work happens only when a terminal operator (`collect`, `first`, `toList`, `launchIn`) is invoked. That is why `flowOf(1,2,3).map { }` alone never prints anything.\n\n#### Re-runs per collector\nBecause the block runs for each collector, two `collect` calls run the chain twice — which is the correct behaviour for cold streams (each subscription is a fresh execution) and the reason flows are cheap to recompose with.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Cold: nothing runs until collect",
+          "src": "val numbers: Flow<Int> = flow {\n    println(\"producer running\")\n    emit(1); emit(2); emit(3)\n}\n\n// No output yet — the builder has not run.\n\n// Each collect runs the whole chain again:\nnumbers.collect { println(it) }   // producer running, 1 2 3\nnumbers.collect { println(it) }   // producer running, 1 2 3 again"
+        }
+      ],
+      "followUps": [
+        "Why is coldness the correct default for a Room query?",
+        "What does an intermediate operator do to the collector?",
+        "How does a hot flow differ?"
+      ],
+      "traps": [
+        "Saying a Flow 'starts running' when constructed.",
+        "Believing operators are hot or run eagerly."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — asynchronous Flow",
+          "url": "https://kotlinlang.org/docs/flow.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0036",
+      "track": "coroutines-flow",
+      "topic": "Flow operators",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "operators",
+        "on-completion",
+        "first"
+      ],
+      "q": "Tour the Flow operators you use daily, and name the two that people misuse.",
+      "shortAnswer": [
+        "`map`/`filter`, `transform` for 0..n emissions, `onEach`, `onStart`, `scan` for accumulation.",
+        "Terminals: `first`, `single`, `toList`, `fold`, and `launchIn` as sugar for a collect launch.",
+        "Misused: `onCompletion` — which runs on failure but cannot swallow the exception — and `first()` — which cancels upstream after one value."
+      ],
+      "answer": "**The daily set.** `map` and `filter` are the workhorses. `transform` is the escape hatch — zero to many emissions per input, when `map`'s one-to-one shape is not enough. `onEach` runs a side effect per emission (logging, analytics) without changing the value. `onStart` emits a `Loading` state before the first real value. `scan`/`runningFold` carry an accumulator, `scan(0) { acc, x -> acc + x }`.\n\n**Terminals.** `first()`, `single()`, `toList()`, `fold()`, and `launchIn(scope)` as sugar for `scope.launch { collect() }`.\n\n**The two misused.**\n1. `onCompletion` — the callback runs on normal completion *and* on failure, receiving the cause (including a `CancellationException`). People use it as a catch; it cannot swallow the exception, which still propagates past it. It is for cleanup and final-state signals, not error recovery.\n2. `first()` — it cancels the upstream the moment one value arrives. Correct for a one-shot read ('give me the current value'), silently wrong when the developer meant to observe a stream and grabbed one emission instead.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The daily operators and the two traps",
+          "src": "flow<Int> { for (i in 1..10) emit(i) }\n    .map { it * 2 }\n    .filter { it % 4 == 0 }\n    .onEach { log(it) }\n    .onStart { emit(0) }        // Loading-style initial emission\n    .scan(0) { acc, x -> acc + x }\n\n// first() cancels upstream after one value:\nval current = repo.someFlow.first()\n\n// onCompletion sees the cause but cannot swallow it:\nflow.onCompletion { cause -> log(\"done: $cause\") }"
+        }
+      ],
+      "followUps": [
+        "When is `transform` needed over `map`?",
+        "What does `onCompletion` receive on cancellation?",
+        "Why does `first()` cancel the upstream?"
+      ],
+      "traps": [
+        "Using `onCompletion` to handle errors — it cannot catch them.",
+        "Using `first()` where you meant to keep observing."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — flow: operators",
+          "url": "https://kotlinlang.org/docs/flow.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0037",
+      "track": "coroutines-flow",
+      "topic": "Flow internals",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "flowon",
+        "context",
+        "flow-invariant"
+      ],
+      "q": "`flow { withContext(Dispatchers.IO) { emit(x) } }` crashes at runtime. Why, and what is the rule?",
+      "shortAnswer": [
+        "'Flow invariant is violated: emission from another coroutine context' — `emit` must run in the same coroutine that called `collect`.",
+        "The collector's context and Job must govern emissions, or cancellation breaks.",
+        "Fix with `flowOn(Dispatchers.IO)`, which moves everything upstream of the operator into an extra coroutine and channel."
+      ],
+      "answer": "The runtime error is the flow invariant: an emission must come from the same coroutine that called the terminal operator. When you wrap an `emit` in `withContext`, the emission happens inside a different coroutine — a child of the collection coroutine — so the value no longer arrives in the collector's context and the machinery that wires cancellation and backpressure between collector and emitter cannot work.\n\n#### The fix: `flowOn`\n`flowOn(Dispatchers.IO)` changes the context of everything **upstream of that operator only**. It inserts an extra coroutine and a channel: upstream runs on IO, sends values through the channel, and the downstream (the collector) stays on its original dispatcher. That is the correct way to move producer work off the collector's thread.\n\n#### Details worth naming\n- A second `flowOn` lower in the chain does not 'undo' the first; each `flowOn` changes the context of the segment above it.\n- `channelFlow` exists for the case where you genuinely need concurrent emitters — its `send` is thread-safe.\n- `flowOn` changes *upstream context*, never the collector's own context.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "flowOn vs the invariant violation",
+          "src": "// CRASHES: emit from a different coroutine\nflow {\n    withContext(Dispatchers.IO) { emit(readFile()) }\n}\n\n// Correct: flowOn moves only the upstream onto IO\nflow { emit(readFile()) }\n    .flowOn(Dispatchers.IO)\n    .collect { render(it) }   // still on the collector's dispatcher"
+        }
+      ],
+      "followUps": [
+        "Why must the collector's context govern emissions?",
+        "What does `flowOn` do to the segment above it?",
+        "When is `channelFlow` the right replacement?"
+      ],
+      "traps": [
+        "Using `withContext` inside `flow {}` and wondering why it throws.",
+        "Believing `flowOn` also changes the collector's thread."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — flow context preservation and flowOn",
+          "url": "https://kotlinlang.org/docs/flow.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "co-0038",
+      "track": "coroutines-flow",
+      "topic": "Flow internals",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "exception-transparency",
+        "catch",
+        "retry"
+      ],
+      "q": "Exception transparency: what can `catch` catch, and what escapes it?",
+      "shortAnswer": [
+        "`catch` sees only exceptions thrown *upstream of itself* — a crash in the `collect { }` lambda flies straight past it.",
+        "Move the body into an `onEach { }` above the `catch` if you want it covered.",
+        "Wrapping your own `emit` in try/catch violates transparency because it can capture the downstream's exception."
+      ],
+      "answer": "Flow operators are transparent about exceptions: an operator sees only what happens *upstream of it*. `catch` is no exception. It handles exceptions thrown by the flow chain before it, but an exception thrown inside the `collect { }` lambda — your own rendering or handling code — happens downstream of `catch` and propagates straight past it to the caller.\n\n#### The practical consequence\nTo have `catch` cover the work you normally write in `collect`, move it into `onEach { }` placed *above* the `catch`, and put a bare `collect()` at the end. `onEach` is upstream of `catch`; the collector body is not.\n\n#### Why you must not wrap your own emit\nWrapping your own `emit` call in `try/catch` violates transparency: the exception `emit` might throw is often the *downstream's* — the collector cancelled, or the next operator failed. Catching it turns a downstream failure into a silent upstream recovery. So inside a `flow {}` builder, let `emit` throw.\n\n#### Built on the same machinery\n`catch` may emit a fallback value (e.g. `emit(Empty)`), and `retry`/`retryWhen` are implemented over exactly this transparency rule — they re-collect upstream, so their retry lambda sees upstream failures only.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Where catch can actually catch",
+          "src": "// MISSES the lambda crash:\nflowOf(1, 2).catch { emit(-1) }\n    .collect { check(it < 10) }   // throws HERE — downstream\n\n// CATCHES it: the body moves upstream of catch\nflowOf(1, 2)\n    .onEach { check(it < 10) }\n    .catch { emit(-1) }\n    .collect()\n\n// Never wrap your own emit — it may be the downstream throwing\nflow { try { emit(x) } catch (e: Exception) { emit(fallback) } } // anti-pattern"
+        }
+      ],
+      "followUps": [
+        "What does 'upstream of the operator' mean precisely?",
+        "Why does `retry` only see upstream failures?",
+        "What is the cost of wrapping your own `emit`?"
+      ],
+      "traps": [
+        "Writing a `catch` and expecting it to cover the `collect` body.",
+        "Wrapping `emit` in try/catch and calling it defensive."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — exception transparency in Flow",
+          "url": "https://kotlinlang.org/docs/flow.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    }
+  ]
+}

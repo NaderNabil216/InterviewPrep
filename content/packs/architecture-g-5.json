@@ -1,0 +1,123 @@
+{
+  "id": "architecture-g-5",
+  "title": "Architecture & DI",
+  "track": "architecture",
+  "items": [
+    {
+      "id": "ar-0048",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 3,
+      "type": "qa",
+      "tags": ["architecture-review", "design-review", "coupling", "boundaries"],
+      "q": "Here's an architecture proposal for a new feature. Walk me through how you'd read it, what you'd probe, and how you'd push back before approving it.",
+      "shortAnswer": [
+        "I read in three passes — data flow first, then boundaries, then the state and error model — so I understand what the diagram shows before I judge it.",
+        "I probe the edges hardest: whether a change stays inside one region, how errors cross boundaries, and who owns lifecycle and cancellation.",
+        "I push back by naming a concrete failure mode the proposal must survive, and I approve when I can't point at a bug or an unaffordable cost — not because the diagram looks clean."
+      ],
+      "answer": "#### Read it in three passes\nFirst pass: **data flow**. Where does the screen's state come from, who writes it, and how does it change? I trace one end-to-end scenario — a user taps, the state updates, the screen re-renders — and I check the direction of every arrow. Second pass: **boundaries**. Which modules and layers does the feature touch, and does each dependency point the way the rest of the app already points? A new module-to-module edge is a design decision, not a build detail. Third pass: **state and errors**. Is the screen state one sealed shape, and do failures cross boundaries as a typed result instead of swallowed exceptions?\n\n#### What I probe\n- **Coupling** — can a change to one region stay inside that region, or does it ripple outward?\n- **Lifecycle** — who owns long-running work, and what happens on rotation, process death, and cancellation?\n- **Testability** — could a junior write a unit test for the core logic on a plain JVM? If the seams are not visible in the proposal, they do not exist yet.\n\n#### How I push back\nI name the failure mode the proposal must survive — \"a refresh fails mid-form, what renders?\" — and I ask for the cost of the design. If I cannot point at a bug or an unaffordable cost, I approve. Review is for catching broken boundaries, not for enforcing taste.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The proposed surface with hidden coupling, vs the review's reframing",
+          "src": "// As proposed: the public surface hides its coupling and error handling\ninterface CheckoutFeature {\n    fun start(activity: Activity, orderId: String)   // UI owns the lifecycle\n    suspend fun confirm(): Boolean                   // Boolean swallows the failure\n}\n\n// What the review asks for: typed state and events crossing a real boundary\nsealed interface CheckoutState {\n    data object Idle : CheckoutState\n    data object Confirming : CheckoutState\n    data class Confirmed(val orderId: String) : CheckoutState\n    data class Failed(val reason: String, val retryable: Boolean) : CheckoutState\n}\n\ninterface CheckoutFeature {\n    fun observeState(): Flow<CheckoutState>\n    suspend fun confirm(orderId: String): Unit       // failures become state, not null\n}"
+        }
+      ],
+      "followUps": [
+        "Which one artifact tells you the most about a proposal — the diagram, the interfaces, or the state model?",
+        "When do you approve a proposal you have real objections to, and what does that decision run on?",
+        "How do you raise a structural concern without blocking a team that is ready to ship?"
+      ],
+      "traps": [
+        "Reviewing only the happy path and the diagram — the whole point is the failure modes the picture does not show.",
+        "Blocking on taste ('I don't like it') without naming a concrete bug or cost the design introduces.",
+        "Treating an implementation detail as an architecture blocker, or an architecture decision as a detail."
+      ],
+      "refs": [
+        { "title": "Guide to app architecture", "url": "https://developer.android.com/topic/architecture", "checked": "2026-08-13" },
+        { "title": "Now in Android", "url": "https://github.com/android/nowinandroid", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0049",
+      "track": "architecture",
+      "topic": "Release engineering",
+      "level": 3,
+      "type": "qa",
+      "tags": ["strangler-fig", "migration", "feature-flags", "measurement"],
+      "q": "We're replacing the legacy sync engine — not rewriting it. Walk me through the migration: how do you adopt the new path gradually, and how do you know it's actually working while you go?",
+      "shortAnswer": [
+        "I keep the legacy path live behind its interface, add an anti-corruption layer, and select consumers onto the new implementation with a per-cohort feature flag — every step is a releasable slice, never a big bang.",
+        "For data I dual-write and backfill: reads compare old and new sources until they agree, and writes go to both until the new one is the verified source of truth.",
+        "I define a comparison metric, an error budget, and a halt rule per cohort before I start — so 'the new path is at least as good' is a number I can cut over on, and a cohort I can switch off."
+      ],
+      "answer": "#### Feature-flag-driven adoption\nThe legacy path stays live behind its old interface. I build the new implementation behind the **same interface**, wrap it with an anti-corruption layer so neither side leaks its shapes, and pick which cohort uses which path with a flag evaluated at runtime. Adoption is incremental and reversible: turn a cohort on, watch it, turn it back off if it misbehaves. Because mobile cannot roll back a build, the flag *is* the rollback.\n\n#### The data half\nCode is the easy part; data is where migrations stall. For reads, **dual-read** — serve from the new source while a comparison job checks both — so nothing trusts the new path until they agree. For writes, **dual-write** to both sources until the new one is verified, then backfill history and cut the old source out. Verification is a job, not an assumption: checksummed counts and sampled diffs catch drift that a smoke test never will.\n\n#### Measuring while you go\nDefine success before you flip anything: a **comparison metric** — the new engine must match or beat legacy on sync latency and success rate — an **error budget per cohort**, and a halt rule. Ship a cohort, watch vitals and the comparison for a real window, then widen. No green dashboards and no hand-waving; the number decides.\n\n#### The exit\nSet a deletion deadline for the legacy path the day you start. A migration without one is two systems maintained forever.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "One interface, both engines, the flag choosing the cohort",
+          "src": "interface SyncEngine {\n    fun observeStatus(): Flow<SyncStatus>\n    suspend fun sync(): Outcome<SyncResult>\n}\n\nclass LegacySyncEngine(\n    private val transport: LegacyTransport,\n) : SyncEngine {\n    override fun observeStatus(): Flow<SyncStatus> = transport.observeQueue()\n    override suspend fun sync(): Outcome<SyncResult> = transport.pushPending()\n}\n\nclass NewSyncEngine(\n    private val queue: SyncQueueDao,\n    private val api: SyncApi,\n) : SyncEngine {\n    override fun observeStatus(): Flow<SyncStatus> = queue.observePending()\n    override suspend fun sync(): Outcome<SyncResult> =\n        api.pushAll(queue.drain()).also { queue.retainFailed() }\n}\n\n// The seam: one factory, a flag deciding the cohort's engine\nclass SyncEngineFactory(\n    private val flags: FeatureFlagProvider,\n    private val legacy: LegacySyncEngine,\n    private val fresh: NewSyncEngine,\n) {\n    fun engineFor(): SyncEngine =\n        if (flags.isEnabled(FeatureFlag.NEW_SYNC)) fresh else legacy\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "Dual-write and the verification job that gates cutover",
+          "src": "class MessageSync(\n    private val legacy: LegacyMessageStore,\n    private val dao: MessageDao,\n) {\n    suspend fun write(message: Message) {\n        dao.upsert(message.toEntity())      // new source of truth\n        legacy.append(message.toWire())     // dual-write until cutover\n    }\n\n    // Reconciliation: drift must reach zero before the legacy path is deleted\n    suspend fun verify(scope: String): Long {\n        val expected = legacy.count(scope)\n        val actual = dao.countForScope(scope)\n        return expected - actual            // logged; alerted when non-zero\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "How do you choose the first cohort, and how do you know a slice is genuinely done?",
+        "What makes a comparison metric trustworthy enough to cut over on — and what silently corrupts it?",
+        "When does the flag-based approach fail, and how do you recognize it before the exit date?"
+      ],
+      "traps": [
+        "Proposing a big-bang swap or a rewrite — incremental, reversible slices under a flag are the entire question.",
+        "Cutting over without a data-verification step; silent drift between the two sources corrupts the new source of truth.",
+        "A migration with no deletion deadline — that is two systems to maintain forever, not a migration."
+      ],
+      "refs": [
+        { "title": "Guide to app architecture", "url": "https://developer.android.com/topic/architecture", "checked": "2026-08-13" },
+        { "title": "Release with staged rollouts", "url": "https://support.google.com/googleplay/android-developer/answer/6346149", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0050",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 4,
+      "type": "qa",
+      "tags": ["clean-architecture", "dogma", "pragmatism", "technical-debt"],
+      "q": "A senior on your team keeps rejecting designs with 'that's not Clean Architecture.' Argue both sides honestly: where do the rules actually protect you, and where does following them hurt — with the real costs named?",
+      "shortAnswer": [
+        "The dependency rule protects a real failure mode: business rules welded to `Context` and `NavController`, so a UI change rewrites the logic and a database change rewrites the UI — that protection is the case for keeping the layers.",
+        "The dogma hurts when a thin feature becomes entities, use cases, mappers, and an adapter — four files tracing to one query, a pass-through use case that hides nothing, and a junior spending a week learning layers instead of shipping.",
+        "The staff position: name the failure mode each rule prevents in this codebase and the cost of applying it, apply the ceremony only at boundaries that are real, and keep the seam even where you collapse the layers."
+      ],
+      "answer": "#### The case for the rules\nThe dependency rule — UI calls use cases, use cases call repositories, never the reverse — prevents the actual failure mode of app code: business rules welded to `Context` and `NavController`, so a UI change rewrites the logic and a database change rewrites the UI. Entities and use cases test in milliseconds with no emulator, and the layers let a payment flow survive a backend rewrite that would otherwise redraw every screen. For security-critical, long-lived code, it is the boundary working, not ceremony.\n\n#### The case against the dogma\nApplied as a checklist, the same rules manufacture their own costs. A form-plus-list screen becomes entities, use cases, mappers, and an adapter — four files tracing one query, and a newcomer spends the first week tracing layers instead of shipping. A pass-through use case (`invoke() = repo.get()`) adds a hop that hides nothing, and speculative mapper pairs protect a divergence that hasn't happened. Every layer is another place a bug can hide and a reader must open — a compile-time cost, a tracing cost, an onboarding cost.\n\n#### The resolution\nThe senior test is two questions: *what failure mode does this rule prevent here*, and *what does applying it cost here*? Where the boundary is real — security, ownership, a contract that outlives a team — the ceremony earns its keep. Where the code is a pass-through, collapse the layers but keep the seam for when the second consumer arrives. Dogma is answering \"which pattern?\" before \"what is this boundary for?\"",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The same one-line operation, done two ways",
+          "src": "// DOGMA: the full onion for a single pass-through\ninterface NoteDataSource {\n    suspend fun all(): List<Note>\n}\n\nclass RoomNoteDataSource(private val dao: NoteDao) : NoteDataSource {\n    override suspend fun all(): List<Note> = dao.all()\n}\n\nclass GetNotesUseCase(private val source: NoteDataSource) {\n    suspend operator fun invoke(): List<Note> = source.all()   // pass-through\n}\n\n// PRAGMATIC: the seam kept, the ceremony collapsed\nclass NotesRepository(private val dao: NoteDao) {\n    suspend fun all(): List<Note> = dao.all()\n}\n\n// Both access the same data; the second is two files fewer to read.\n// The first still wins the day a second consumer or a real rule appears."
+        }
+      ],
+      "followUps": [
+        "Give me one boundary where you'd refuse to collapse the layers, and one where you'd refuse to build them.",
+        "How do you keep a team on the pragmatic path without being a dictator, when Clean Architecture is the comfortable default?",
+        "What is the actual, measurable cost of too many layers, and how would you detect it in a codebase?"
+      ],
+      "traps": [
+        "Declaring clean architecture always wrong — you must be able to name the failure mode the dependency rule actually prevents.",
+        "Declaring it always right — the question is explicitly about the costs of following it, and those must be named, not waved away.",
+        "Critiquing the ceremony without offering the alternative seam that keeps the boundary alive for later."
+      ],
+      "refs": [
+        { "title": "Guide to app architecture", "url": "https://developer.android.com/topic/architecture", "checked": "2026-08-13" },
+        { "title": "Now in Android", "url": "https://github.com/android/nowinandroid", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    }
+  ]
+}

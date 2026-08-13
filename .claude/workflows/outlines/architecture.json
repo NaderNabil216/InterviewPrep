@@ -1,0 +1,146 @@
+{
+  "track": "architecture",
+  "scope": [
+    "unidirectional data flow, what state means and where it lives",
+    "MVVM vs MVI vs MVP compared, with when each is wrong",
+    "state holders — ViewModel vs plain state holder vs remembered holder",
+    "modeling UI state (single sealed state vs multiple fields), loading/error/empty, partial state",
+    "reducing state explosions",
+    "one-shot events and why SingleLiveEvent is an anti-pattern",
+    "navigation as state",
+    "SavedStateHandle and process death",
+    "the repository pattern — what belongs in it and what does not",
+    "single source of truth and NetworkBoundResource-style flows",
+    "whether a domain layer / use cases earn their place, argued both directions",
+    "mappers and the layer-boundary model problem (DTO vs domain vs UI model)",
+    "error propagation across layers",
+    "offline-first architecture, sync strategies, conflict resolution, outbox and idempotency keys",
+    "caching policy and invalidation",
+    "dependency injection concepts — constructor injection, service locator vs DI, why not singletons",
+    "Hilt — components, scopes, entry points, assisted injection, qualifiers, testing, compile errors",
+    "Koin vs Hilt vs manual DI trade-offs",
+    "DI in KMP",
+    "multibindings and plugin architectures",
+    "modularization — by layer vs by feature, api vs implementation, dependency graph, convention plugins",
+    "public API surface of a module",
+    "feature toggles, staged rollout, kill switches",
+    "app scalability with many teams",
+    "the God ViewModel smell and how to split",
+    "threading policy in architecture",
+    "testability as an architectural property",
+    "clean-architecture dogma vs pragmatism at staff level",
+    "migrating a legacy codebase incrementally",
+    "how you would review an architecture proposal"
+  ],
+  "specs": [],
+  "coverage": {
+    "unidirectional data flow, what state means and where it lives": [
+      "ar-0008"
+    ],
+    "MVVM vs MVI vs MVP compared, with when each is wrong": [
+      "ar-0001",
+      "ar-0012"
+    ],
+    "state holders — ViewModel vs plain state holder vs remembered holder": [
+      "ar-0009",
+      "ar-0042"
+    ],
+    "modeling UI state (single sealed state vs multiple fields), loading/error/empty, partial state": [
+      "ar-0010"
+    ],
+    "reducing state explosions": [
+      "ar-0011"
+    ],
+    "one-shot events and why SingleLiveEvent is an anti-pattern": [
+      "ar-0005",
+      "ar-0013"
+    ],
+    "navigation as state": [
+      "ar-0014"
+    ],
+    "SavedStateHandle and process death": [
+      "ar-0017",
+      "ar-0040"
+    ],
+    "the repository pattern — what belongs in it and what does not": [
+      "ar-0015"
+    ],
+    "single source of truth and NetworkBoundResource-style flows": [
+      "ar-0016",
+      "ar-0046"
+    ],
+    "whether a domain layer / use cases earn their place, argued both directions": [
+      "ar-0006",
+      "ar-0018"
+    ],
+    "mappers and the layer-boundary model problem (DTO vs domain vs UI model)": [
+      "ar-0019"
+    ],
+    "error propagation across layers": [
+      "ar-0020"
+    ],
+    "offline-first architecture, sync strategies, conflict resolution, outbox and idempotency keys": [
+      "ar-0003",
+      "ar-0021",
+      "ar-0033"
+    ],
+    "caching policy and invalidation": [
+      "ar-0022"
+    ],
+    "dependency injection concepts — constructor injection, service locator vs DI, why not singletons": [
+      "ar-0023"
+    ],
+    "Hilt — components, scopes, entry points, assisted injection, qualifiers, testing, compile errors": [
+      "ar-0002",
+      "ar-0024"
+    ],
+    "Koin vs Hilt vs manual DI trade-offs": [
+      "ar-0002",
+      "ar-0025"
+    ],
+    "DI in KMP": [
+      "ar-0026"
+    ],
+    "multibindings and plugin architectures": [
+      "ar-0027"
+    ],
+    "modularization — by layer vs by feature, api vs implementation, dependency graph, convention plugins": [
+      "ar-0004",
+      "ar-0028",
+      "ar-0029",
+      "ar-0030"
+    ],
+    "public API surface of a module": [
+      "ar-0031"
+    ],
+    "feature toggles, staged rollout, kill switches": [
+      "ar-0007",
+      "ar-0032"
+    ],
+    "app scalability with many teams": [
+      "ar-0033",
+      "ar-0047"
+    ],
+    "the God ViewModel smell and how to split": [
+      "ar-0034"
+    ],
+    "threading policy in architecture": [
+      "ar-0035"
+    ],
+    "testability as an architectural property": [
+      "ar-0036",
+      "ar-0045"
+    ],
+    "clean-architecture dogma vs pragmatism at staff level": [
+      "ar-0037",
+      "ar-0050"
+    ],
+    "migrating a legacy codebase incrementally": [
+      "ar-0037",
+      "ar-0049"
+    ],
+    "how you would review an architecture proposal": [
+      "ar-0048"
+    ]
+  }
+}

@@ -1,0 +1,358 @@
+{
+  "id": "compose-g-2",
+  "title": "Jetpack Compose",
+  "track": "compose",
+  "items": [
+    {
+      "id": "cmp-0022",
+      "track": "compose",
+      "topic": "Snapshot system",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "snapshot",
+        "mvcc"
+      ],
+      "q": "How does the snapshot system work under the hood?",
+      "shortAnswer": [
+        "Each `StateObject` keeps a linked list of `StateRecord`s tagged with snapshot ids.",
+        "A read walks to the newest record visible to the current snapshot; a write allocates or reuses a record.",
+        "Applying advances the global snapshot and fires apply observers, so two threads can see different values at once."
+      ],
+      "answer": "Compose state is a small MVCC system. Every `StateObject` — the `SnapshotMutableState` behind `mutableStateOf` — holds a linked list of `StateRecord`s, each tagged with the snapshot id that wrote it. A read starts from the current snapshot's id and walks the chain to the newest record it may see. A write does not mutate in place: it allocates (or reuses) a record for its snapshot id and fills it, so the old value survives for readers of older snapshots.\n\n#### Why this buys lock-free reads\nBecause records are versioned and immutable-once-written, a read needs no lock — it just walks the list. Two threads holding different snapshots genuinely observe different values of the same state at the same instant, which is what lets background threads read and write state without contending with the UI thread. Correctness is preserved because the global snapshot advances only through an atomic CAS on `globalSnapshot`.\n\n#### Applying\n`Snapshot.apply()` advances the global snapshot and runs the apply observers, which is what recomposition hooks into. Unapplied child snapshots keep their isolated view until merged, and merge conflicts are resolved by `mergeRecords`.",
+      "followUps": [
+        "What makes a read lock-free given the record chain can grow?",
+        "What happens when two background snapshots write the same state?"
+      ],
+      "traps": [
+        "Claiming state reads go through a single shared current value — reads are versioned per snapshot.",
+        "Thinking writes mutate the record the UI already read — old snapshots keep their value until applied."
+      ],
+      "refs": [
+        {
+          "title": "Compose snapshot system internals",
+          "url": "https://developer.android.com/develop/ui/compose/side-effects",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0023",
+      "track": "compose",
+      "topic": "Snapshot system",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "snapshot",
+        "isolation"
+      ],
+      "q": "What is snapshot isolation good for outside of recomposition?",
+      "shortAnswer": [
+        "`Snapshot.withMutableSnapshot { }` makes a multi-field update all-or-nothing for the UI.",
+        "Nested snapshots let you compute speculatively and dispose instead of applying.",
+        "`apply()` can fail when another snapshot changed the same object, and `mergeRecords` decides the outcome."
+      ],
+      "answer": "The snapshot model is a general isolation tool, not just recomposition plumbing. `Snapshot.withMutableSnapshot { }` opens a child snapshot: every state write inside lands in the child's records and is invisible to everyone else until `apply()`. The UI therefore never renders a half-applied state — if you must set ten fields to keep an object consistent, the frame sees either all ten or none.\n\n#### Speculative computation\nA nested snapshot can be discarded entirely. Compute a preview, mutate scratch state, and if the result is not wanted, drop the snapshot instead of applying — no undo logic, no partial effects. That is cheaper than applying and rolling back, and it is how the model supports optimistic work.\n\n#### The merge contract\n`apply()` is not unconditional: it can return a failure when another snapshot changed the same `StateObject` first, and then `mergeRecords` decides the outcome. That forces writers to consider conflicts rather than blindly clobbering. Finally, writing snapshot state from a background thread is legal — the records are versioned, and the writes land atomically at apply, which is the documented way to publish async results into the UI.",
+      "followUps": [
+        "What does `mergeRecords` do when two snapshots edit the same record?",
+        "How does `withMutableSnapshot` differ from writing on the main thread directly?"
+      ],
+      "traps": [
+        "Assuming snapshot writes are immediately visible to the UI — visibility begins at apply.",
+        "Treating `apply()` as always-successful — it can fail and hand you a merge decision."
+      ],
+      "refs": [
+        {
+          "title": "Compose snapshot state — advanced reading",
+          "url": "https://developer.android.com/develop/ui/compose/state",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0024",
+      "track": "compose",
+      "topic": "Snapshot system",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "snapshot",
+        "observation"
+      ],
+      "q": "How does Compose know which composable read which piece of state?",
+      "shortAnswer": [
+        "A `readObserver` installed around each `RecomposeScope` records every `StateObject` it reads.",
+        "`Snapshot.registerApplyObserver` maps changed objects back to those scopes and invalidates them.",
+        "Reads inside `remember { }`, launched coroutines or callbacks escape the observer and go stale."
+      ],
+      "answer": "Observation is subscription by interception. When a `RecomposeScope` runs, Compose wraps it with a `readObserver`; every call to `StateObject.value` during that run is recorded in a map keyed by the state object. Later, a snapshot apply fires `Snapshot.registerApplyObserver` observers, which walk the changed objects, look up the scopes that read them, and invalidate exactly those scopes.\n\n#### The trap worth the whole item\nReads that happen *outside* the scope's execution are invisible to the observer. Reading state inside `remember { }` — common for a derived object built once — is not attributed to the recomposition scope, so changes silently stop updating the UI. The same goes for reads in a `LaunchedEffect` coroutine body (it runs after composition, observer gone) and in callbacks like `onClick`. The UI goes stale with no error.\n\n#### Doing it yourself\nThis mechanism is not exclusive to the framework: `Snapshot.observe {}` wraps a block with a read observer of your own, so you can record which state a non-composable piece of logic depends on — the pattern behind `snapshotFlow` and custom observation outside composition.",
+      "followUps": [
+        "Why does reading state inside `remember { }` not trigger recomposition?",
+        "How does `snapshotFlow` use read observers to build a Flow?"
+      ],
+      "traps": [
+        "Thinking state reads are pushed to subscribers — observation is recorded by a wrapping read observer.",
+        "Believing any read of state anywhere updates the UI — only reads inside a live scope's run are tracked."
+      ],
+      "refs": [
+        {
+          "title": "Compose state — observation",
+          "url": "https://developer.android.com/develop/ui/compose/state",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0025",
+      "track": "compose",
+      "topic": "Snapshot system",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "derived-state",
+        "performance"
+      ],
+      "q": "When does `derivedStateOf` earn its keep, and when is it the wrong tool?",
+      "shortAnswer": [
+        "It pays off when inputs change far more often than the result changes.",
+        "`firstVisibleItemIndex > 0` changes twice across hundreds of scroll reads, so the derived UI recomposes twice, not per frame.",
+        "It is not a memoization cache — that is `remember(key)` — and on a cheap mapping it is a net loss."
+      ],
+      "answer": "`derivedStateOf` exists to decouple input frequency from output frequency. Recomposition happens when the derived *result* changes, not when any dependency does. The canonical case is scroll: `listState.firstVisibleItemIndex > 0` flips twice while scrolling through hundreds of items, so a 'scroll to top' button built on a derived state recomposes twice instead of once per frame. Without it, the button's scope would invalidate on every scroll read.\n\n#### The boundary\nWhere does it stop paying? If the mapping is cheap and recomposes infrequently, the derived state adds an extra `State` object plus dependency bookkeeping per read — a genuine net loss. And it is not a cache: `derivedStateOf { heavyTransform(input) }` still recomputes `heavyTransform` whenever it re-evaluates, only the *notification* is filtered. For expensive computations, `remember(key)` or a separate state updated by a coroutine is the right tool.\n\n#### The third option\nSometimes the correct move is to defer the read entirely into a layout or draw lambda (`Modifier.layout`, `drawBehind`), where it never triggers recomposition at all — derived state still recomposes its reader; a deferred read recomposes nothing.",
+      "followUps": [
+        "Why is a cheap mapping with derivedStateOf a net loss?",
+        "How does deferring a read into draw differ from deriving state?"
+      ],
+      "traps": [
+        "Using `derivedStateOf` as a memoization cache for expensive work — it only filters change notifications.",
+        "Assuming it prevents recalculation — the calculation still runs; only notifications are throttled."
+      ],
+      "refs": [
+        {
+          "title": "Derived state in Compose",
+          "url": "https://developer.android.com/develop/ui/compose/state",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0026",
+      "track": "compose",
+      "topic": "State",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "state",
+        "remember"
+      ],
+      "q": "What breaks if you write `var count = mutableStateOf(0)` inside a composable body?",
+      "shortAnswer": [
+        "The state object is recreated on every recomposition, so writes look like they do nothing.",
+        "`remember` is what gives the state a slot in the slot table so it survives recomposition.",
+        "The mirror bug is `remember { 0 }` — a plain Int has no observation, so nothing ever recomposes."
+      ],
+      "answer": "`mutableStateOf(0)` allocates a fresh `SnapshotMutableState` each time the composable body runs. On the first recomposition triggered by some other state, the whole body re-runs, a brand-new state object is created, and the previous instance — the one your click handler incremented — is discarded. The counter appears frozen: you write `count.value++`, recomposition creates a new zero, and the UI never shows the new value.\n\n#### The mechanism behind the fix\n`remember { mutableStateOf(0) }` stores the object in the slot table keyed to that call site, so subsequent executions retrieve the same instance. The key insight is that `remember` is what ties state to the *composition*, not the function invocation.\n\n#### The mirror bug\nWriting `remember { 0 }` keeps a plain Int — no `State` wrapper — so nothing registers as a read and no recomposition is ever scheduled. The declaration form matters too: `var count by remember { mutableStateOf(0) }`, `val (count, setCount) = remember { mutableStateOf(0) }`, and `.value` all work, but all three need the `remember` to survive recomposition.",
+      "followUps": [
+        "Why does `remember` survive recomposition while a plain local does not?",
+        "What is the difference between `by` and direct `.value` access?"
+      ],
+      "traps": [
+        "Believing `mutableStateOf` is the remembering part — `remember` is what provides persistence.",
+        "Using a plain value in `remember` and expecting the UI to update — no State means no observation."
+      ],
+      "refs": [
+        {
+          "title": "Compose state — remember",
+          "url": "https://developer.android.com/develop/ui/compose/state",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0027",
+      "track": "compose",
+      "topic": "State",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "remember",
+        "keys",
+        "effects"
+      ],
+      "q": "How do `remember` keys work, and how are they different from effect keys?",
+      "shortAnswer": [
+        "Both compare keys with `equals` at the call site's slot and react when the key changes.",
+        "A changed `remember` key discards and recomputes a value; a changed `LaunchedEffect` key cancels and relaunches a coroutine.",
+        "Keying on a freshly allocated object or lambda invalidates every composition — the classic key bug."
+      ],
+      "answer": "`remember(key1, key2) { value }` stores the value in the slot table together with the keys. On the next composition the keys are compared with `equals`; equal keys return the stored value, a changed key discards it and runs the block again. The keying is positional — the slot is identified by the call site, not by the key — which is why unstable ordering inside conditionals miskeys things.\n\n#### The same mechanism, different consequences\n`LaunchedEffect(key) { }` also compares keys per composition, but the reaction is different: a changed key cancels the running coroutine and relaunches the block. Same `equals` comparison, different semantics — value recomputation versus cancel-and-restart.\n\n#### The classic failures\nThe bug that bites everyone is keying on a lambda or a freshly allocated object: `LaunchedEffect(item.onClick) { }` where `onClick` is a new closure each composition, so the effect cancels and relaunches on every recomposition — a request storm or a flickering UI. Conversely, `LaunchedEffect(Unit)` with a changing `userId` never restarts, so the effect is stuck on stale data. And a `remember` with no key caches forever, which is a stale-value leak when the value depends on changing inputs.",
+      "followUps": [
+        "Why does a fresh object as a key relaunch the effect every composition?",
+        "When should `rememberUpdatedState` replace a changing key?"
+      ],
+      "traps": [
+        "Assuming effect keys compare by identity — both key types use `equals`.",
+        "Forgetting that a changed key restarts from scratch: cancel-and-relaunch, never resume."
+      ],
+      "refs": [
+        {
+          "title": "Compose side effects — keys",
+          "url": "https://developer.android.com/develop/ui/compose/side-effects",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0028",
+      "track": "compose",
+      "topic": "State",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "saveable",
+        "saver"
+      ],
+      "q": "Write a custom `Saver` for a type that isn't Parcelable, and say where `rememberSaveable` still loses state.",
+      "shortAnswer": [
+        "`Saver(save = { ... }, restore = { ... })` converts your object to a Bundle-able form and back.",
+        "`listSaver`/`mapSaver` are the helpers for container-shaped save/restore, and `@Parcelize` is the shortcut for Parcelable types.",
+        "It still loses state across the ~1 MB Binder limit, and state in a subtree that leaves composition needs `rememberSaveableStateHolder`."
+      ],
+      "answer": "`rememberSaveable(key) { saver.remember(state) }` round-trips your value through the saved-instance-state Bundle. A custom `Saver` supplies the two halves: `save = { ObjectState -> serializableShape }` and `restore = { serializableShape -> ObjectState }`. The constraint is that the saved form must itself be Bundle-able — primitives, Strings, Parcelables, and lists of those — which is why `listSaver` and `mapSaver` exist to shuttle container shapes, and why `@Parcelize` is the no-code path for data classes.\n\n#### Where it still loses state\nThree honest limits. First, the ~1 MB saved-state Binder transaction: a large list or bitmap payload blows past it and the system drops saved state silently. Second, two saveables in one slot — `rememberSaveable { mutableStateOf(a); mutableStateOf(b) }` — must be given explicit keys or the second overwrites the first. Third, and subtlest: state under a subtree that *leaves composition* — a tab's content that is removed, a list item that scrolls out of the pool — is discarded, and only `rememberSaveableStateHolder` re-attaches it when the subtree returns.",
+      "followUps": [
+        "Why must the saved form be Bundle-able rather than just Serializable?",
+        "When would you reach for `rememberSaveableStateHolder` over plain `rememberSaveable`?"
+      ],
+      "traps": [
+        "Making the restored value depend on runtime data the Saver cannot see — restore runs with only the Bundle.",
+        "Assuming `rememberSaveable` is a general cache — it is lost on process death and Binder overflow."
+      ],
+      "refs": [
+        {
+          "title": "rememberSaveable and Savers",
+          "url": "https://developer.android.com/develop/ui/compose/state",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0029",
+      "track": "compose",
+      "topic": "State",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "hoisting",
+        "state"
+      ],
+      "q": "Where should a piece of state live — and what are the two ways hoisting goes wrong?",
+      "shortAnswer": [
+        "The rule is the lowest common ancestor that needs the state, with a `value` + `onValueChange` stateless leaf.",
+        "Hoisted too low: siblings cannot coordinate and the state dies with the subtree.",
+        "Hoisted too high: every keystroke restarts a large scope and the component stops being previewable on its own."
+      ],
+      "answer": "State hoisting has one rule: put the state at the lowest common ancestor of everything that needs to read or write it, and hand the leaf a `value` plus an `onValueChange` callback so it stays stateless. Stateless components are previewable, testable, and reusable because their behaviour is driven entirely by inputs.\n\n#### Hoisted too low\nIf the state lives inside one sibling, the other cannot coordinate with it — a filter field and a list in the same row cannot share a query — and the state is destroyed when that subtree leaves composition. You end up re-syncing or losing UI state on navigation.\n\n#### Hoisted too high\nThe flip side: hosting `TextField` text in the top-level screen composable means every keystroke invalidates the screen's restart scope — the whole body re-runs — instead of just the field. And the screen composable becomes unpresentable in isolation: its preview and tests must fabricate the state the caller was supposed to own. The symptom pair to name: an oversized recomposition scope, and a component you cannot preview without wiring up a ViewModel.",
+      "followUps": [
+        "What makes a leaf 'stateless' in Compose terms?",
+        "How do you decide where the common ancestor actually is?"
+      ],
+      "traps": [
+        "Hoisting everything to the top 'to be safe' — that inflates the recomposition scope.",
+        "Keeping state in the leaf so the rest of the screen stays clean — that blocks coordination."
+      ],
+      "refs": [
+        {
+          "title": "State hoisting",
+          "url": "https://developer.android.com/develop/ui/compose/state-hoisting",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0030",
+      "track": "compose",
+      "topic": "State",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "textfield",
+        "async-state"
+      ],
+      "q": "A `TextField` hoisted to a ViewModel drops characters and jumps the cursor. Explain and fix it.",
+      "shortAnswer": [
+        "The value → event → state → recompose round trip crosses an async boundary like `stateIn` or a dispatcher hop.",
+        "Fast typing outruns the loop, so the field reverts to a stale value with a reset selection.",
+        "The modern fix is `TextFieldState` with `BasicTextField`, which mutates the text buffer directly instead of round-tripping."
+      ],
+      "answer": "The classic symptom: type quickly and letters vanish, the caret jumps. The cause is the round trip. Each keystroke fires `onValueChange`, the event travels up to the ViewModel, the new value flows back through a `Flow`/`stateIn`/dispatcher hop, and only then does recomposition deliver it to the field. Typing faster than the loop resolves means the next keystroke composes against the *stale* value the field still holds, and the field reverts — usually resetting the selection as a bonus.\n\n#### The honest fix\n`BasicTextField` with `TextFieldState` is the modern architecture precisely because it stops round-tripping: the text lives in a state object the field mutates directly, and the buffer is the source of truth. `InputTransformation` filters what can be typed and `OutputTransformation` formats the display without going through the ViewModel per keystroke.\n\n#### When you must keep a ViewModel in the loop\nIf the value genuinely must live there, narrow the path: push the UI-side value through `collectAsStateWithLifecycle` without a dispatcher hop, update it synchronously in the callback, and treat ViewModel-side transforms as consumers of the value, not producers of each character.",
+      "followUps": [
+        "What does `TextFieldState` change about how selection is tracked?",
+        "How do `InputTransformation` and `OutputTransformation` divide responsibilities?"
+      ],
+      "traps": [
+        "Fixing it by debouncing the ViewModel — that makes the drops worse, not better.",
+        "Assuming any async state pipeline is fine because the field is 'bound' — the latency budget is one frame."
+      ],
+      "refs": [
+        {
+          "title": "BasicTextField2 and TextFieldState",
+          "url": "https://developer.android.com/develop/ui/compose/text/user-input",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0031",
+      "track": "compose",
+      "topic": "State",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "lifecycle",
+        "flow"
+      ],
+      "q": "`collectAsStateWithLifecycle` vs `collectAsState` — what actually breaks with the wrong one?",
+      "shortAnswer": [
+        "`collectAsState` keeps collecting while the app is backgrounded, holding the upstream hot.",
+        "The lifecycle-aware version from `androidx.lifecycle.compose` stops at STOPPED and re-collects at STARTED.",
+        "Pair it with `stateIn(scope, WhileSubscribed(5_000), initial)` to justify the retention window."
+      ],
+      "answer": "`collectAsStateWithLifecycle` is the default choice because it ties collection to the composition's `Lifecycle`: collection stops when the lifecycle falls below STARTED and resumes when it returns. `collectAsState` collects unconditionally for as long as the composable is composed — and a backgrounded app still keeps composing, so the upstream Flow stays hot: location updates, sockets, or a Room query churning in the background, burning battery and CPU for a UI nobody sees.\n\n#### Why the lifecycle boundary matters\nThe suspension of collection means the upstream can release resources — which is precisely the contract `stateIn(scope, SharingStarted.WhileSubscribed(5_000), initial)` is built for. `WhileSubscribed` keeps the upstream hot only while there are subscribers, plus a 5-second grace window. That window is the interesting design decision: it is short enough that rotation (composition leaves and returns) does not restart the upstream from scratch, but long enough that a real backgrounding does not hold it.\n\n#### The failure to name\nUsing `collectAsState` with an upstream that cannot handle a backgrounded collector drains battery and keeps emitting into a paused composition — and a `stateIn` with `Eagerly` or a long `WhileSubscribed` window silently defeats the whole point.",
+      "followUps": [
+        "Why is 5 seconds the sweet spot for `WhileSubscribed`?",
+        "What changes if the upstream is cold versus hot?"
+      ],
+      "traps": [
+        "Believing `collectAsState` stops when the screen is backgrounded — it does not.",
+        "Pairing `collectAsStateWithLifecycle` with a `stateIn` upstream that never stops sharing."
+      ],
+      "refs": [
+        {
+          "title": "collectAsStateWithLifecycle documentation",
+          "url": "https://developer.android.com/topic/libraries/architecture/coroutines",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    }
+  ]
+}

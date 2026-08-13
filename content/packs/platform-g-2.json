@@ -1,0 +1,360 @@
+{
+  "id": "platform-g-2",
+  "title": "Platform & Framework",
+  "track": "platform",
+  "items": [
+    {
+      "id": "pf-0021",
+      "track": "platform",
+      "topic": "ANR & main thread",
+      "level": 2,
+      "type": "qa",
+      "tags": ["looper", "handler", "messagequeue", "main-thread"],
+      "q": "Explain the main thread message loop: `Looper`, `Handler`, and `MessageQueue`. What is each for?",
+      "shortAnswer": [
+        "`Looper.loop()` is the main-thread `while` that reads `Message`s from the `MessageQueue` and dispatches each to its target `Handler`.",
+        "`Handler` posts and handles messages: `sendMessage`/`post` enqueue (ordered by `when`), `handleMessage` runs on the thread that owns the `Looper`.",
+        "The `MessageQueue` blocks with `nativePollOnce` (an epoll wait) when empty, which is exactly why a busy main thread never lets input or lifecycle callbacks in."
+      ],
+      "answer": "#### The three actors\n`Looper` is the pump: `Looper.loop()` pulls messages from the queue in a loop and hands each to the `Handler` that targets it. `Handler` is the both-sides API — you post work to it, and its `handleMessage` executes on the thread that created the Looper (the main thread for `Handler(Looper.getMainLooper())`). `MessageQueue` is the ordered store: messages are sorted by `when` (post time or `postDelayed` deadline) and dispatched in order.\n\n#### The blocking detail\nAn empty queue must not spin the CPU, so `next()` calls `nativePollOnce`, which blocks the thread on the kernel until a message is due or the fd wakes it. This is epoll-based and near-zero cost while idle — which is why the main thread can be \"idle\" yet still respond instantly. The flip side: while the main thread runs a long synchronous task, `next()` isn't reached, so every message (input, broadcast, lifecycle) queues up — that is the direct cause of ANRs and jank.\n\n#### Message mechanics worth naming\n- `Message` objects are recycled from a per-Looper pool — `Message.obtain()` avoids allocation.\n- **Sync vs async messages and sync barriers**: the system marks traversal and input messages async so they can jump a barrier; your `post` messages are sync and sit behind a barrier until it is removed.\n- `IdleHandler` runs when the queue is momentarily empty — useful for low-priority warm-ups.\n- `quitSafely()` drains remaining messages first; `HandlerThread` is a thread with its own `Looper` for serial background work.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "HandlerThread for serial off-main work",
+          "src": "private val worker = HandlerThread(\"worker\").apply { start() }\nprivate val handler = Handler(worker.looper)\n\nfun enqueue(job: Runnable) {\n    handler.post(job)                    // serialized: one job at a time\n}\n\nfun cancelPending() {\n    handler.removeCallbacksAndMessages(null)   // the leak-killer for delayed posts\n}\n\noverride fun onDestroy() {\n    worker.quitSafely()                  // drains, then stops the loop\n    super.onDestroy()\n}"
+        }
+      ],
+      "followUps": [
+        "What does `nativePollOnce` block on, and why does it matter for ANRs?",
+        "What is a sync barrier and which messages are allowed past it?",
+        "When should you use a `HandlerThread` over a coroutine?"
+      ],
+      "traps": [
+        "Saying the main thread 'spins' waiting for messages — it blocks in the kernel on epoll.",
+        "Leaving a delayed `Handler.postDelayed` holding an Activity reference — the classic leak the queue makes invisible."
+      ],
+      "refs": [
+        { "title": "Looper reference", "url": "https://developer.android.com/reference/android/os/Looper", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0022",
+      "track": "platform",
+      "topic": "ANR & main thread",
+      "level": 4,
+      "type": "qa",
+      "tags": ["choreographer", "vsync", "frame-pipeline", "rendering"],
+      "q": "Trace a frame from vsync to pixels. Where does the `Choreographer` sit, and how are frames dropped?",
+      "shortAnswer": [
+        "The display refreshes at a fixed rate and `SurfaceFlinger` sends a vsync; `Choreographer` registers for that signal and drives the frame callback for the main thread.",
+        "Within one frame the main thread runs input callbacks, animation callbacks, then measure/layout/draw, and hands the RenderThread's work to `SurfaceFlinger` for composition on the next vsync.",
+        "A dropped frame is a budget miss: if the main thread's work doesn't finish before the deadline, the buffer is stale and the display shows it again — visible as jank."
+      ],
+      "answer": "#### The clock\nThe display refreshes on a fixed cadence — 60, 90, 120, or 144 Hz. `SurfaceFlinger`, the system compositor, emits a vsync signal at each refresh. `Choreographer` subscribes to that signal through `DisplayEventReceiver` and calls your registered `FrameCallback` on the main thread. That is the heartbeat every app frame is scheduled against.\n\n#### The frame pipeline\nFor a typical frame: input events are dispatched, animation updates run (`postFrameCallback`), then the traversal pass does measure/layout/draw against the window, and the draw commands are handed to the **RenderThread**, which composes into a graphics buffer. `SurfaceFlinger` takes that buffer on a later vsync and composites all visible windows. Triple buffering lets the GPU and the app work on different buffers so a slightly slow frame can still slip in.\n\n#### How frames die\nA frame misses its deadline when the main thread cannot finish before the vsync arrives — a long synchronous task, a big recomposition, a GC pause, or the RenderThread backing up. The buffer is stale, so the display keeps the previous frame and the miss is a **dropped frame**. `Choreographer.FrameCallback`/`FrameMetrics` report the durations of each stage (input, animation, layout, draw) so you can see which one blew the budget.\n\n#### The interview point\nThe answer is never \"the UI is slow\" — it is that the main thread's per-frame work exceeded the vsync budget, and profiling tells you which stage overspent.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Measuring where a frame spends its budget",
+          "src": "class FrameStatsActivity : AppCompatActivity() {\n    override fun onCreate(savedInstanceState: Bundle?) {\n        super.onCreate(savedInstanceState)\n        window.addOnFrameMetricsAvailableListener(\n            { _, metrics, _ ->\n                if (metrics.anyInputDelayNanos > 16_000_000L) log(\"input overspent\")\n                if (metrics.layoutMeasureDurationNanos > 8_000_000L) log(\"layout overspent\")\n            },\n            Handler(Looper.getMainLooper())\n        )\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What does triple buffering actually prevent, and where does it stop helping?",
+        "Why is the frame budget smaller on a 120 Hz device, and what breaks first?",
+        "How does `Choreographer` differ from a `Handler.postFrameCallback` on a random thread?"
+      ],
+      "traps": [
+        "Attributing jank to \"the GPU\" without checking the main-thread budget — most dropped frames are main-thread misses.",
+        "Treating 60 Hz numbers as the budget on a 120 Hz flagship; the deadline halves."
+      ],
+      "refs": [
+        { "title": "Choreographer reference", "url": "https://developer.android.com/reference/android/view/Choreographer", "checked": "2026-08-13" },
+        { "title": "Slow rendering / frame pipeline", "url": "https://developer.android.com/topic/performance/vitals/render", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0023",
+      "track": "platform",
+      "topic": "IPC & Binder",
+      "level": 4,
+      "type": "qa",
+      "tags": ["aidl", "oneway", "binder-threading", "messenger"],
+      "q": "Walk through AIDL: direction tags, `oneway` semantics, and which thread things run on.",
+      "shortAnswer": [
+        "AIDL compiles an interface into a `Binder` proxy/stub pair; the `in`/`out`/`inout` tags declare whether the argument is copied into the call, back out, or both.",
+        "`oneway` methods are fire-and-forget: the caller does not block, and calls from one thread are queued and executed in order on the server's binder thread pool.",
+        "Callbacks from the server arrive on a binder thread in the client process, never the main thread — so you must hop back to main before touching UI."
+      ],
+      "answer": "#### What AIDL is\nAIDL describes a cross-process interface. The tooling generates a `Proxy` (client side) and `Stub` (server side) built on `Binder`. The call marshals its arguments into a `Parcel`, crosses to the server process, and executes on a **binder thread** from the server's thread pool (default ~16). The caller blocks until the reply — unless the method is `oneway`.\n\n#### Direction tags\n`in`: caller copies the argument in, mutations are not returned. `out`: sent empty, populated server-side, returned. `inout`: both directions, and the costliest — every argument is serialized twice. Choose `in` unless you need a return value; `Parcelable` arguments are the common case.\n\n#### oneway semantics\nA `oneway` method returns immediately; the transaction is queued and executed on the server. Ordering is guaranteed **per caller thread** — calls from the same thread run in order, different threads may interleave. `oneway` is right for fire-and-forget notifications and callbacks, and wrong for anything the caller must observe the result of.\n\n#### Threading rules\n- Server side: methods run on binder threads, never main — be thread-safe with shared state.\n- Client callbacks (`registerListener` style): they too arrive on a binder thread, so `runOnUiThread`/`MainScope.launch` before touching views.\n- A blocking binder call made **from** a binder thread is the classic deadlock: the pool is fixed, and two processes calling each other can exhaust it.\n- Detect a dead remote with `linkToDeath`; `Messenger` wraps a `Handler`/`Message` loop for simple message-passing without a full AIDL interface.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "oneway listener registration — callbacks land on binder threads",
+          "src": "// IRemoteService.aidl\ninterface IRemoteService {\n    oneway void registerCallback(IRemoteCallback cb);\n    String getStatus();\n}\n\n// Client: callback arrives on a binder thread — never touch UI directly\nprivate val callback = object : IRemoteCallback.Stub() {\n    override fun onStatusChanged(status: String) {\n        mainHandler.post { statusText.text = status }\n    }\n}\n\nservice.registerCallback(callback)"
+        }
+      ],
+      "followUps": [
+        "What ordering guarantee does `oneway` actually give you?",
+        "Why can a binder thread calling a blocking binder method deadlock the whole pool?",
+        "When is `Messenger` a better choice than a hand-written AIDL interface?"
+      ],
+      "traps": [
+        "Updating UI directly in a client callback — binder threads are not the main thread.",
+        "Assuming `oneway` is asynchronous *execution*. It is asynchronous *delivery*; the server still processes calls serially per thread."
+      ],
+      "refs": [
+        { "title": "AIDL", "url": "https://developer.android.com/develop/background-work/services/aidl", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0024",
+      "track": "platform",
+      "topic": "IPC & Binder",
+      "level": 2,
+      "type": "qa",
+      "tags": ["parcelable", "serializable", "bundle"],
+      "q": "Why is `Parcelable` preferred over `Serializable` on Android, and what are Parcelable's own traps?",
+      "shortAnswer": [
+        "`Serializable` walks your object graph with reflection, so it is slow, allocates heavily, and has a versioning trap (`serialVersionUID`).",
+        "`Parcelable` is hand-written serialization into a `Parcel` with an explicit `CREATOR`, built for the Binder and Bundle, with no reflection.",
+        "Its traps are the reverse: you must keep `writeToParcel`/`CREATOR` in sync, parcel formats are not a stable storage contract, and oversized Bundles still hit `TransactionTooLargeException`."
+      ],
+      "answer": "#### Serializable's costs\n`java.io.Serializable` uses reflection to discover fields and writes the whole object graph, including transient handling and superclass state. That is slow, allocation-heavy, and version-sensitive: deserialize a class whose `serialVersionUID` changed and you get `InvalidClassException`. It has no place on the Binder path or in a Bundle.\n\n#### Why Parcelable wins\n`Parcelable` is you deciding exactly what to write: `writeToParcel(dest, flags)` serializes fields into a `Parcel`, and a static `CREATOR` rebuilds the object. No reflection, minimal allocation, and the format is the compact one Binder already understands. That is why Bundles, intents, and saved-state are Parcelable-based. `@Parcelize` generates it for you.\n\n#### The traps\n- **Drift**: you add a field, forget `writeToParcel`, and deserialization silently drops it. A unit test round-tripping through a Parcel catches it.\n- **No persistence contract**: the parcel format is not guaranteed stable across app versions — never store a parcel blob and read it back in a later release.\n- **Size**: Parcelable does not shrink your payload. A big list still crosses the ~1 MB per-process Binder transaction buffer and throws `TransactionTooLargeException`. Pass ids, not payloads.\n- **`Serializable` in a Bundle works but with all of its costs** — the `Bundle` API accepts both, so the fast path is a convention, not a rule.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A hand-written Parcelable and its round-trip test",
+          "src": "data class User(val id: String, val name: String) : Parcelable {\n    constructor(parcel: Parcel) : this(\n        parcel.readString()!!,\n        parcel.readString()!!\n    )\n\n    override fun writeToParcel(dest: Parcel, flags: Int) {\n        dest.writeString(id)\n        dest.writeString(name)\n    }\n\n    override fun describeContents(): Int = 0\n\n    companion object CREATOR : Parcelable.Creator<User> {\n        override fun createFromParcel(parcel: Parcel): User = User(parcel)\n        override fun newArray(size: Int): Array<User?> = arrayOfNulls(size)\n    }\n}\n\n// Test: round-trip through a parcel keeps every field\nval inParcel = Parcel.obtain()\nval original = User(\"u1\", \"Ada\")\noriginal.writeToParcel(inParcel, 0)\ninParcel.setDataPosition(0)\nval restored = User.CREATOR.createFromParcel(inParcel)\ncheck(restored == original)"
+        }
+      ],
+      "followUps": [
+        "What breaks when you add a field to a `@Parcelize` class?",
+        "Why is `Serializable`'s `serialVersionUID` a footgun?",
+        "When would a parcel blow up despite being a well-formed `Parcelable`?"
+      ],
+      "traps": [
+        "Storing parcel data as a persistence format — parcel layouts are not stable across releases.",
+        "Assuming Parcelable solves size limits; the ~1 MB Binder buffer still applies."
+      ],
+      "refs": [
+        { "title": "Parcelable reference", "url": "https://developer.android.com/reference/android/os/Parcelable", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0025",
+      "track": "platform",
+      "topic": "Memory & leaks",
+      "level": 4,
+      "type": "qa",
+      "tags": ["art", "garbage-collection", "heap", "allocation"],
+      "q": "How does ART's garbage collector work, and what makes an app churn or OOM?",
+      "shortAnswer": [
+        "ART uses a generational, mostly-concurrent copying GC: young objects are allocated in a bump-pointer region and die fast, and most collection runs concurrently with your app.",
+        "The pauses you feel are short stop-the-world phases inside a mostly concurrent cycle; heavy allocation rate (churn) forces more cycles and more visible pauses.",
+        "OOM is not the same as a leak — it is hitting the heap limit because you hold on to live objects (or allocate too fast), which is why profiling distinguishes retained size from allocation rate."
+      ],
+      "answer": "#### The collector\nART runs a **generational** GC. Small objects are allocated in an allocation space using a bump pointer — nearly free. Short-lived objects (the vast majority) die in the young generation without ever being touched by a full cycle. The Concurrent Copying (CC) collector compacts live objects while the app runs, using read barriers, which keeps the heap from fragmenting — the old dalvik pain point.\n\n#### Why GC pauses happen\nThe CC collector is mostly concurrent with the mutator (your app), but it still needs brief stop-the-world phases to handle roots and stack references. Those pauses are the periodic stutter you see in a Perfetto trace as short blocks on the main thread. The trigger matters: a `kGcCauseForAlloc` — GC run because allocation *failed* — is the expensive one, and it is exactly what allocation churn produces: too many garbage objects force frequent collections, and one of them eventually interrupts your frame.\n\n#### Churn vs leak vs OOM\n- **Churn**: high allocation rate, objects die young — symptoms are frequent small pauses, and it is fixed by reusing objects, not by adding memory.\n- **Leak**: objects you no longer use stay reachable — symptoms are the heap growing steadily until OOM.\n- **OOM** (`OutOfMemoryError`) fires when a single allocation cannot be satisfied within the heap cap (`Runtime.maxMemory()`), not when the device is out of RAM. Huge bitmaps and unbounded caches hit it directly.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The allocation-vs-retention distinction in practice",
+          "src": "// CHURN: a new array per item, per scroll frame\nfun renderChurn(items: List<Item>) {\n    items.forEach { draw(item -> FloatArray(16) { 0f }) }  // 16 floats each — wasteful\n}\n\n// FIX: reuse a scratch buffer owned by the render pass\nclass Renderer {\n    private val scratch = FloatArray(16)\n    fun render(items: List<Item>) {\n        items.forEach { item ->\n            item.toMatrix(scratch)   // writes into the same buffer, no new array\n            draw(scratch)\n        }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What does the `kGcCauseForAlloc` line in logcat tell you about the app?",
+        "Why can a big retained object cause an OOM even on a device with plenty of free RAM?",
+        "How does the memory profiler distinguish churn from a leak?"
+      ],
+      "traps": [
+        "Equating OOM with a leak — high allocation rate and oversized single allocations OOM too.",
+        "Ignoring the per-process heap cap and assuming device RAM is the limit."
+      ],
+      "refs": [
+        { "title": "Android runtime (ART)", "url": "https://source.android.com/docs/core/runtime", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0026",
+      "track": "platform",
+      "topic": "Memory & leaks",
+      "level": 3,
+      "type": "qa",
+      "tags": ["low-memory-killer", "ontrimmemory", "process-importance"],
+      "q": "How does Android decide which process to kill, and what is `onTrimMemory` for?",
+      "shortAnswer": [
+        "Every process gets an importance level (foreground, visible, service, cached) and an `oom_adj` score; the Low Memory Killer kills from the cached/LRU end first.",
+        "`onTrimMemory` is your chance to react *before* a kill: release caches at the running levels and drop big in-memory data when your process is backgrounded.",
+        "The brutal fact is `onDestroy` is not guaranteed — when the system needs memory it kills cached processes without calling anything, so everything must be reconstructible."
+      ],
+      "answer": "#### The importance hierarchy\nAndroid ranks processes by what the user can see: **foreground** (an Activity in `onResume`), **visible** (on screen but not focused, e.g. split-screen), **service** (a started service), then **cached** (backgrounded Activities, kept alive in an LRU list). Each maps to an `oom_adj` score. The **Low Memory Killer (LMK)** is a kernel driver that, when memory is scarce, kills from the highest-scored (lowest-priority) end — cached processes first, and only under pressure does it reach foreground ones.\n\n#### Why process death is normal\nA cached process is *expected* to die under pressure. That is the whole reason for `onSaveInstanceState`, `SavedStateHandle`, and reconstructible screens: the OS can kill you at any moment in the background, and `onDestroy`/`onStop` are not reliable teardown points. Persist anything important the moment it changes, not when you think you are about to die.\n\n#### onTrimMemory — the levels\n- Running: `TRIM_MEMORY_RUNNING_MODERATE` / `RUNNING_LOW` / `RUNNING_CRITICAL` — release caches while staying foregrounded.\n- `TRIM_MEMORY_UI_HIDDEN` — your UI just went to the background; drop UI-only resources.\n- Backgrounded: `TRIM_MEMORY_BACKGROUND` / `MODERATE` / `COMPLETE` — progress toward being killed; free anything rebuildable.\n\nWhat you release in each is a judgement call, but the framework's expectation is clear: cache aggressively while running, and shed everything reconstructible as pressure rises.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Trim-based cache shedding",
+          "src": "class App : Application(), ComponentCallbacks2 {\n    private val imageCache = LruCache<String, Bitmap>(32 * 1024 * 1024)\n\n    override fun onTrimMemory(level: Int) {\n        super.onTrimMemory(level)\n        when {\n            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ->\n                imageCache.evictAll()              // still foregrounded: shed caches\n            level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN ->\n                imageCache.evictAll()              // UI gone: drop UI-only state\n            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND ->\n                imageCache.evictAll()              // heading for the kill list\n        }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Why is persisting on `onStop`/`onDestroy` a mistake?",
+        "What is the difference between `onTrimMemory` and `onLowMemory`?",
+        "How does the LRU cache list order relate to which process dies first?"
+      ],
+      "traps": [
+        "Depending on `onDestroy` to persist state — the system can kill you without any callback.",
+        "Holding a big cache at `TRIM_MEMORY_RUNNING_*` and wondering why the app gets killed or janks."
+      ],
+      "refs": [
+        { "title": "Processes and app lifecycle", "url": "https://developer.android.com/guide/components/activities/process-lifecycle", "checked": "2026-08-13" },
+        { "title": "ComponentCallbacks2 (onTrimMemory)", "url": "https://developer.android.com/reference/android/content/ComponentCallbacks2", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0027",
+      "track": "platform",
+      "topic": "Memory & leaks",
+      "level": 4,
+      "type": "qa",
+      "tags": ["leakcanary", "heap-dump", "reference-chain"],
+      "q": "How does LeakCanary actually detect a leak, and how do you read one of its traces?",
+      "shortAnswer": [
+        "LeakCanary watches an object it expects to be garbage (a destroyed Activity or Fragment), holds a `WeakReference` plus a `ReferenceQueue`, and after a GC if the reference is not enqueued it dumps the heap.",
+        "It then walks the heap graph from that object back to every GC root and reports the shortest reference path — the 'leak trace'.",
+        "Reading it means finding the first frame in your own code and asking who held that reference past the object's expected death — the trace names the culprit class and the path."
+      ],
+      "answer": "#### The detection mechanism\nLeakCanary's core is a `WeakReference` trick: watch the destroyed object with a `WeakReference` that also references a `ReferenceQueue`. When the GC collects the object, the weak reference is enqueued. LeakCanary forces GCs (each followed by a short wait), and if the reference is **not** enqueued, the object is still reachable — a suspected leak — so it dumps the heap (a `.hprof` file).\n\n#### The heap dump and the trace\nA heap dump is a frozen snapshot of every object and its references. LeakCanary treats the watched object as a node and finds the **shortest path to a GC root** — a static field, a live thread, a JNI global — using the same reachability analysis a GC would. The printed trace is that path, rendered top-down: `your Activity ← your Fragment ← your adapter ← a static singleton`. The frames in the middle are the *retainers*; the first frame that is your own code is usually the fix location.\n\n#### Reading a trace — what matters\n- The **GC root** at the top tells you the lifespan: a `static` root means the object will live as long as the process.\n- The **retained size** is what the leak actually costs — a view-heavy activity leak is the expensive kind.\n- Heuristics mark known framework frames as expected; the interesting part is your own frames below them.\n\nThe practical skill is the same as the GC's: the leak is always a reference you did not clear.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The watch primitive LeakCanary generalizes",
+          "src": "class Watcher {\n    private val queue = ReferenceQueue<Any>()\n    private val refs = mutableListOf<WeakReference<Any>>()\n\n    fun watch(obj: Any) {\n        refs += WeakReference(obj, queue)   // enqueued when obj is collected\n    }\n\n    fun gced(): Int {\n        System.gc()\n        Thread.sleep(100)\n        var collected = 0\n        while (queue.poll() != null) collected++\n        return collected\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Why does LeakCanary force GCs before dumping the heap?",
+        "What is the difference between 'leaked' and 'retained' size in a trace?",
+        "Why is a trace rooted in a `static` field the worst kind?"
+      ],
+      "traps": [
+        "Reading only the first frame and missing the GC root, which tells you the lifespan of the leak.",
+        "Calling anything with a live UI element 'a leak' without a dump — confirmation comes from retained reachability, not suspicion."
+      ],
+      "refs": [
+        { "title": "LeakCanary", "url": "https://square.github.io/leakcanary/", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0028",
+      "track": "platform",
+      "topic": "Background work",
+      "level": 3,
+      "type": "qa",
+      "tags": ["doze", "app-standby", "background-limits"],
+      "q": "What are Doze and App Standby buckets, and how do they throttle your background work?",
+      "shortAnswer": [
+        "Doze is the screen-off, motionless state: your network, alarms, and jobs are deferred into maintenance windows so the device can sleep.",
+        "App Standby buckets (active, working set, frequent, rare, restricted) rate how much the user engages with you and cap how often jobs and alarms run.",
+        "The consequences are concrete: no exact timing in Doze, longer job delays in low buckets, and FCM high-priority messages as the main escape hatch."
+      ],
+      "answer": "#### Doze\nWhen the screen is off, the device is motionless, and the battery is charged enough, Android enters Doze. In the **deep** phase your network access, `JobScheduler` jobs, and non-exact alarms are deferred into periodic **maintenance windows** where the device briefly wakes. Nothing runs on your schedule — the system decides. The first Doze tier (light) still allows network but throttles; full Doze with `setExactAndAllowWhileIdle` still guarantees only ~one wakeup per 9 minutes, so exact alarms lose their exactness.\n\n#### App Standby buckets\nEvery app sits in a bucket — `active` (in use now), `working set` (used regularly), `frequent`, `rare`, and `restricted` — computed from how often the user interacts with you. The bucket caps job and alarm frequency: an app in `rare` has its `JobScheduler` work delayed by hours. Your bucket changes with user engagement, so there is nothing to \"request\"; you earn it.\n\n#### What still works\n- **FCM**: a high-priority message grants a temporary Doze exemption and a background-start window — the sanctioned push path.\n- **WorkManager**: it already targets `JobScheduler`, so constraints are handled by the platform; but delay expectations must respect buckets.\n- **Exact alarms**: only for user-critical use cases, gated behind `SCHEDULE_EXACT_ALARM`.\n\n#### Testing\n`adb shell dumpsys deviceidle force-idle` enters Doze; `adb shell am set-standby-bucket <package> rare` drops your bucket; `dumpsys jobscheduler` shows scheduled jobs and their expected windows.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A job that must tolerate long delays — and the FCM path that does not",
+          "src": "// Deferrable: JobScheduler/WorkManager respects buckets automatically\nval request = PeriodicWorkRequestBuilder<CleanupWorker>(24, TimeUnit.HOURS)\n    .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build())\n    .build()\nWorkManager.getInstance(context).enqueueUniquePeriodicWork(\n    \"cleanup\", ExistingPeriodicWorkPolicy.KEEP, request\n)\n\n// Time-critical: FCM high-priority gives a temporary exemption\n// FirebaseMessagingService.onMessageReceived → send a notification / FGS"
+        }
+      ],
+      "followUps": [
+        "Why does `setExactAndAllowWhileIdle` not guarantee exact delivery in Doze?",
+        "How does an app move between standby buckets?",
+        "What is a maintenance window and what can you run inside it?"
+      ],
+      "traps": [
+        "Promising \"alarm fires exactly\" while Doze is active — exactness is reserved for user-critical cases and still windowed.",
+        "Scheduling aggressive background work and blaming the OS when the user's engagement bucket throttles it."
+      ],
+      "refs": [
+        { "title": "Optimize for Doze and App Standby", "url": "https://developer.android.com/training/monitoring-device-state/doze-standby", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0029",
+      "track": "platform",
+      "topic": "Background work",
+      "level": 3,
+      "type": "qa",
+      "tags": ["background-start", "service-restrictions", "foreground-service"],
+      "q": "What can't you start from the background, and what are the exceptions?",
+      "shortAnswer": [
+        "An app in the background generally cannot start an Activity (background activity launch) or run a background Service (background service launch).",
+        "The escape hatches are user-visible or system-granted: the user taps a notification, the app has a visible foreground service, or a high-priority FCM message arrives.",
+        "The sharp edge is `startForegroundService`: you may call it, but you must call `startForeground` within the ~10 second window or the system kills you with `ForegroundServiceDidNotStartInTimeException`."
+      ],
+      "answer": "#### Two separate bans\n**Background activity start** (Android 10+): an app with no visible window cannot start an Activity — the system blocks the launch or defers it to the foreground. **Background service start** (Android 8+): an app cannot run a Service while backgrounded. Both are enforced by the same idea: the background has no authority to grab the user's screen or drain the battery.\n\n#### What grants an exemption\nThe system allows starts when the user or an equally privileged actor is involved: the user taps a notification (`PendingIntent`), interacts with a widget, the app already has a **foreground service** running, a high-priority **FCM** message arrives (granting a temporary background-start window), a system broadcast such as `BOOT_COMPLETED` or `LOCALE_CHANGED` fires, or the app is bound by a system component. Also, an app that has been placed in a foreground state recently keeps its background-start privilege for a grace period.\n\n#### The `startForegroundService` trap\nTo run a foreground service from the background you call `startForegroundService()`; the system *allows* it, but you then must call `startForeground()` with a notification inside ~10 seconds. Miss it and you crash with `ForegroundServiceDidNotStartInTimeException` — the classic production crash in apps that start a service from an `onMessageReceived` handler and then do slow setup before calling `startForeground`.\n\n#### Testing\n`adb shell am bg-start --package <pkg>` exercises the background start path; instrument with the foreground-service path explicitly, because the two behave completely differently.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Starting a foreground service safely from a background context",
+          "src": "// From FirebaseMessagingService.onMessageReceived (background context)\ncontext.startForegroundService(Intent(context, UploadService::class.java))\n\nclass UploadService : Service() {\n    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {\n        // MUST come fast — ~10s window from startForegroundService\n        val notification = buildNotification()\n        startForeground(NOTIF_ID, notification)\n        uploadWithProgress()\n        stopSelf()\n        return START_NOT_STICKY\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Which system broadcasts still let you start a service in the background?",
+        "Why does an active foreground service exempt you from background activity start?",
+        "What is the grace period after the app goes backgrounded?"
+      ],
+      "traps": [
+        "Treating `startForegroundService` as permission to run — the `startForeground` call inside the window is mandatory.",
+        "Assuming a background app can always show a dialog or start an Activity; it cannot without an exemption."
+      ],
+      "refs": [
+        { "title": "Restrictions on starting activities from the background", "url": "https://developer.android.com/guide/components/activities/background-starts", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "pf-0030",
+      "track": "platform",
+      "topic": "Background work",
+      "level": 3,
+      "type": "qa",
+      "tags": ["foreground-service", "fgs-types", "user-initiated-data-transfer"],
+      "q": "Walk through foreground service types on Android 14+, and when a user-initiated data transfer job beats them.",
+      "shortAnswer": [
+        "Since Android 14, every foreground service must declare exactly one `foregroundServiceType` and hold the matching `FOREGROUND_SERVICE_<TYPE>` permission, or it crashes on start.",
+        "The type must genuinely describe what you do — Play reviews it against your app's core function, and `dataSync` and `mediaProcessing` carry runtime timeouts.",
+        "For user-initiated downloads and uploads, a **user-initiated data transfer job** (UIDT) is the modern replacement: declarative, quota-exempt, and the system owns the notification."
+      ],
+      "answer": "#### The mandate\nTargeting Android 14+, a foreground service must declare `android:foregroundServiceType` in the manifest and hold the corresponding `FOREGROUND_SERVICE_*` permission. Start one without a matching declaration and it crashes immediately. The declared type is a contract with the user and Play: `mediaPlayback` for audio you keep playing, `location` for location delivery, `camera`/`microphone` for capture, `phoneCall`, `dataSync`, `connectedDevice`, `mediaProjection`, and the catch-all `specialUse` that Play scrutinizes hard.\n\n#### The limits\nYou cannot start most types from the background (the exemptions mirror background-start rules). `dataSync` and `mediaProcessing` carry runtime timeouts (roughly 6 hours in a 24-hour window) — after which the system stops them. And Play policy requires the type to match your app's core functionality, so a food-delivery app declaring `mediaPlayback` is a rejection.\n\n#### User-initiated data transfer (UIDT)\nFor a transfer the *user started* and watches (\"download this file\"), a UIDT job (`UserInitiatedDataTransferJob`) is the recommended replacement for a `dataSync` FGS: you declare the transfer in WorkManager, the system shows the progress notification (you cannot), it is exempt from the expedited-work quota, and it is paused and resumed by the OS in Doze. The system enforces that it is genuinely user-initiated — that is what stops apps from relabeling background syncing as UIDT.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A user-initiated data transfer job",
+          "src": "class DownloadWorker(context: Context, params: WorkerParameters) :\n    CoroutineWorker(context, params) {\n\n    override suspend fun doWork(): Result {\n        val url = inputData.getString(KEY_URL) ?: return Result.failure()\n        val file = File(applicationContext.filesDir, \"download.bin\")\n        file.downloadFrom(url) { bytes -> setProgress(workDataOf(KEY_PROGRESS to bytes)) }\n        return Result.success()\n    }\n}\n\nval request = OneTimeWorkRequestBuilder<DownloadWorker>()\n    .setInputData(workDataOf(KEY_URL to url))\n    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())\n    .setProgressUpdateSpec(1000, TimeUnit.MILLISECONDS)\n    .build()\n\n// Runs as a user-initiated data transfer job — system-owned notification,\n// exempt from quota, no foregroundServiceType or FOREGROUND_SERVICE permission.\nWorkManager.getInstance(context).enqueue(request)"
+        }
+      ],
+      "followUps": [
+        "Which foreground service types can you not start from the background?",
+        "What happens when a `dataSync` FGS hits its runtime timeout?",
+        "How does Play verify your declared FGS type is honest?"
+      ],
+      "traps": [
+        "Starting a foreground service without declaring `foregroundServiceType` — an immediate crash on Android 14+.",
+        "Declaring a type that does not match the work, then getting rejected by Play or killed at runtime."
+      ],
+      "refs": [
+        { "title": "Foreground service types", "url": "https://developer.android.com/develop/background-work/services/fgs/service-types", "checked": "2026-08-13" },
+        { "title": "User-initiated data transfer jobs", "url": "https://developer.android.com/develop/background-work/background-tasks/uidt", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    }
+  ]
+}

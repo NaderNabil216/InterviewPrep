@@ -1,0 +1,358 @@
+{
+  "id": "compose-g-3",
+  "title": "Jetpack Compose",
+  "track": "compose",
+  "items": [
+    {
+      "id": "cmp-0032",
+      "track": "compose",
+      "topic": "State",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "viewmodel",
+        "navigation"
+      ],
+      "q": "How are ViewModels scoped in a Compose app, and what changes under Navigation 3?",
+      "shortAnswer": [
+        "`viewModel()` resolves `LocalViewModelStoreOwner`, which in a single-Activity app is the Activity by default.",
+        "So a 'screen' ViewModel can quietly outlive its screen; Nav2 scopes to the `NavBackStackEntry`, Nav3 uses entry decorators.",
+        "The `key` parameter lets you deliberately share or separate instances in the same store."
+      ],
+      "answer": "`viewModel()` looks up `LocalViewModelStoreOwner` and asks it for a store. In a single-Activity app the default owner is the Activity, so a ViewModel obtained at screen level lives as long as the Activity — not the screen. That is the classic source of stale state: navigate away and back, and the 'screen' ViewModel still holds the old data.\n\n#### How Navigation changes the scope\nNav2 scopes ViewModels to `NavBackStackEntry`, so each destination gets its own store that dies when the entry pops. Navigation 3 replaces the entry mechanism with *decorators*: `rememberViewModelStoreNavEntryDecorator` and friends attach a ViewModel store to an entry, and you compose decorators to add scope — meaning the scoping decision is explicit in the entry provider rather than implicit in the framework.\n\n#### Sharing deliberately\nScoping exists to share too. Two destinations can target the same store by resolving the same owner — in Nav2, `viewModel(parentEntry)` walks up to the parent. In Nav3 the same intent is expressed by which decorator the entries share. And the `key` parameter is the escape hatch within one store: two instances of the same ViewModel class in one owner need distinct keys or they collide.",
+      "followUps": [
+        "How do you share one ViewModel across two Nav3 entries?",
+        "What happens to a Nav2 entry's ViewModel when the entry is popped?"
+      ],
+      "traps": [
+        "Assuming a 'screen' ViewModel dies with the screen — the Activity store keeps it alive.",
+        "Believing Nav3 removed ViewModel scoping — it moved it into explicit entry decorators."
+      ],
+      "refs": [
+        {
+          "title": "ViewModel in Compose",
+          "url": "https://developer.android.com/topic/libraries/architecture/viewmodel",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0033",
+      "track": "compose",
+      "topic": "Side effects",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "effects",
+        "keys"
+      ],
+      "q": "Show me the ways effect keys go wrong.",
+      "shortAnswer": [
+        "`LaunchedEffect(Unit)` with a changing `userId` never refetches — the key never changes.",
+        "Keying on a lambda or a freshly allocated object cancels and relaunches every composition.",
+        "An effect that must keep running while seeing new values needs `rememberUpdatedState`, not a new key."
+      ],
+      "answer": "Effect keys decide when a coroutine restarts, and they fail in three recognizable ways.\n\n#### The stale key\n`LaunchedEffect(Unit) { load(userId) }` captures `userId` from the first composition. The key never changes, so the block never re-runs and the UI is stuck on the old user's data forever. The key must include every input the block reads.\n\n#### The churning key\nThe opposite bug: `LaunchedEffect(onClick) { ... }` where `onClick` is a fresh lambda or a newly allocated object every composition. `equals` says the key changed, so the effect cancels and relaunches on *every* recomposition — a request storm, flickering, and a cursor that resets. Keys need stable, equals-stable values.\n\n#### The missing middle\nSometimes the effect must keep running — polling, collecting — while still seeing fresh values. Adding a key that changes each time restarts it constantly; the right tool is `rememberUpdatedState(callback)` inside the effect, which keeps one running coroutine and swaps the value it reads. The general rule: keys compare with `equals`, and a restart means cancel-then-relaunch from scratch, never resume.",
+      "followUps": [
+        "Why does `rememberUpdatedState` beat adding a changing key?",
+        "What distinguishes a stale key bug from a churning key bug?"
+      ],
+      "traps": [
+        "Assuming effects resume where they left off — a key change cancels and relaunches.",
+        "Keying effects on lambdas because 'it works in tests' — the test never recomposes."
+      ],
+      "refs": [
+        {
+          "title": "Compose side effects — LaunchedEffect keys",
+          "url": "https://developer.android.com/develop/ui/compose/side-effects",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0034",
+      "track": "compose",
+      "topic": "Side effects",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "produce-state",
+        "snapshot-flow"
+      ],
+      "q": "Bridge both directions: a callback API into `State`, and Compose state out into a `Flow`.",
+      "shortAnswer": [
+        "`produceState` is `remember { mutableStateOf(initial) }` plus a `LaunchedEffect`, with `awaitDispose` to unregister listeners.",
+        "It is composition-aware, not lifecycle-aware.",
+        "`snapshotFlow { }` runs inside a coroutine, is conflated, and emits only distinct values."
+      ],
+      "answer": "The two bridges face opposite directions.\n\n#### Callback API in\n`produceState(initial) { ... }` is a shorthand for a remembered mutable state driven by a `LaunchedEffect`: inside the block you may assign `value = ...` and it will be observed. Its `awaitDispose { }` hook unregisters a listener when the composable leaves composition, so the bridge is leak-free. The caveat worth naming: it is *composition-aware*, not *lifecycle-aware* — it lives for the composition's lifetime and does not pause when the app backgrounds.\n\n#### Compose state out\n`snapshotFlow { someState.value }` reads snapshot state inside a coroutine and emits every distinct change as a `Flow`. Three properties make it safe to reason about: it must run inside a coroutine (usually a `LaunchedEffect` or the app's own scope); it is conflated — emissions wait until the collector is ready, so slow consumers miss intermediate values; and it filters duplicates. That combination is exactly right for load-more triggers at the end of a list, debounced search terms, and scroll analytics, where intermediate duplicates are noise and the latest value is all that matters.",
+      "followUps": [
+        "Why is `produceState` not lifecycle-aware and when does that matter?",
+        "What does conflation mean for a `snapshotFlow` consumer?"
+      ],
+      "traps": [
+        "Forgetting `awaitDispose` and leaking the listener — the effect lives as long as composition.",
+        "Expecting `snapshotFlow` to emit every read — it emits distinct values only."
+      ],
+      "refs": [
+        {
+          "title": "produceState and snapshotFlow",
+          "url": "https://developer.android.com/develop/ui/compose/side-effects",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0035",
+      "track": "compose",
+      "topic": "Side effects",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "effects",
+        "remember-observer"
+      ],
+      "q": "When exactly does an effect run, and what happens to an effect in a composition that is thrown away?",
+      "shortAnswer": [
+        "`RememberObserver` is the mechanism: `onRemembered` after apply, `onForgotten` on removal, `onAbandoned` on discard.",
+        "A discarded (optimistic) recomposition never starts its coroutine or registers its listener.",
+        "That is the ordering guarantee: effects run only for compositions that actually reach the Applier."
+      ],
+      "answer": "Effects are not scheduled during composition; they are scheduled by the `RememberObserver` lifecycle. `LaunchedEffect` and `DisposableEffect` are implemented on top of it. After the composition produces a change list and the Applier applies it, `onRemembered` fires — that is the earliest a coroutine starts. When a group is removed from the slot table, `onForgotten` fires and the effect disposes. The less-known third state is `onAbandoned`: a recomposition that is thrown away before it is ever applied never reaches the Applier, and its effects never start.\n\n#### Why the abandoned case matters\nCompose may optimistically recompose several versions of a scope before applying one. Without the abandoned guard, a discarded recomposition's `LaunchedEffect` would launch a coroutine or register a listener that nothing ever disposes — a leak and a ghost callback. The ordering also explains `SideEffect`: it is a composition-side observer that runs right after every successful apply, which is why it is the correct place to publish side effects into the outside world exactly once per applied composition.",
+      "followUps": [
+        "How does `onAbandoned` differ from `onForgotten`?",
+        "Why does `SideEffect` run after apply rather than during composition?"
+      ],
+      "traps": [
+        "Assuming effects run during composition — they run after the change list is applied.",
+        "Forgetting discarded compositions exist at all — they are the reason `onAbandoned` exists."
+      ],
+      "refs": [
+        {
+          "title": "Compose side effects and applier ordering",
+          "url": "https://developer.android.com/develop/ui/compose/side-effects",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0036",
+      "track": "compose",
+      "topic": "CompositionLocal",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "composition-local",
+        "stability"
+      ],
+      "q": "`compositionLocalOf` vs `staticCompositionLocalOf` — and when is a CompositionLocal the wrong tool entirely?",
+      "shortAnswer": [
+        "Dynamic locals track reads and invalidate only the readers; static ones have no read tracking.",
+        "A static local's change recomposes the provider's whole `content` lambda — so it is only for values that almost never change.",
+        "A local is an invisible parameter: it breaks previews, complicates tests, and hides a real dependency."
+      ],
+      "answer": "`compositionLocalOf` creates a dynamic local: Compose records which scopes read it, and when the value changes, only those readers are invalidated. `staticCompositionLocalOf` skips the read tracking entirely, so when its value changes, the *entire* `content` lambda of the provider recomposes regardless of what actually reads it. That makes the static variant strictly cheaper to read — no per-read bookkeeping — and strictly costlier to change.\n\n#### The design rule\nUse the static form for values that are effectively constant for a subtree: a config object, a theme flag set once. Dynamic is for values that change, where invalidating the readers is the whole point. Picking static for a value that changes means accepting full-subtree recomposition on every change.\n\n#### When a local is the wrong tool\nA CompositionLocal is an invisible parameter: a reader looks normal, but its behaviour secretly depends on the ambient value. That breaks previews (no provider, wrong value), complicates tests (the ambient must be mocked), and hides what is really a dependency that should be passed explicitly or injected. Locals are for cross-cutting, rarely-changing ambient context — theme, density, lifecycle — not for threading normal business data down the tree.",
+      "followUps": [
+        "Why is a static local cheaper to read but costlier to change?",
+        "How do you detect a local being abused as an implicit parameter?"
+      ],
+      "traps": [
+        "Using `staticCompositionLocalOf` for a value that changes per frame — every change recomposes everything.",
+        "Threading business data through locals because 'it is easier' — that is an invisible parameter."
+      ],
+      "refs": [
+        {
+          "title": "CompositionLocal overview",
+          "url": "https://developer.android.com/develop/ui/compose/compositionlocal",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0037",
+      "track": "compose",
+      "topic": "CompositionLocal",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "composition-local",
+        "interop"
+      ],
+      "q": "My theme and typography vanish inside a `Dialog` / `ComposeView` / `AndroidView`. What is going on?",
+      "shortAnswer": [
+        "CompositionLocals flow down a composition, not down the View hierarchy.",
+        "`Dialog`/`Popup` and `SubcomposeLayout` inherit the parent composition; a fresh `ComposeView` starts a new root with only defaults.",
+        "The fix is `rememberCompositionContext()` plus `setParentCompositionContext`."
+      ],
+      "answer": "CompositionLocals travel through the composition, so their reach is defined by composition boundaries, not view containment. `Dialog` and `Popup` in Compose create a separate window but reuse the parent's `CompositionContext`, so locals like `MaterialTheme` keep flowing in — the theme works. `SubcomposeLayout` and `AnimatedContent` likewise inherit.\n\n#### Where it breaks\nA `ComposeView` constructed in View code — `ComposeView(context)` or `findViewById<ComposeView>` — begins a brand-new root composition. It has no parent composition context, so it sees only the default `CompositionLocals`: no MaterialTheme, no typography, no your custom locals. The same trap hits a composable placed inside an `AndroidView`'s factory if it starts its own composition.\n\n#### The fix\nWrap the child with `rememberCompositionContext()` at the boundary and hand it to the `ComposeView` via `setParentCompositionContext(context)` before adding it, so the new composition inherits the ambient locals. The interview-grade detail: `LocalContext` and `LocalLifecycleOwner` also differ inside a dialog window — they resolve to the dialog's window context and its own lifecycle, which is why `LocalContext`-based resource access silently changes there.",
+      "followUps": [
+        "Why does a `Dialog` inherit locals but a `ComposeView` does not?",
+        "What else besides theme diverges inside a dialog window?"
+      ],
+      "traps": [
+        "Assuming locals follow the View hierarchy — they follow the composition tree.",
+        "Constructing a `ComposeView` in View code and expecting the activity's theme — no context means defaults."
+      ],
+      "refs": [
+        {
+          "title": "CompositionLocal and composition context",
+          "url": "https://developer.android.com/develop/ui/compose/compositionlocal",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0038",
+      "track": "compose",
+      "topic": "Modifiers",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "modifiers",
+        "layout"
+      ],
+      "q": "Why does the order of modifiers matter?",
+      "shortAnswer": [
+        "A modifier chain is not a property bag — each element wraps the next.",
+        "Constraints flow left-to-right down the chain; the resulting size comes back right-to-left.",
+        "`padding().background()` paints the padding too; `background().padding()` does not — and `clickable` order sets the touch target."
+      ],
+      "answer": "`Modifier.padding(16.dp).background(Red)` builds a chain: the padding element wraps the background element. Layout constraints enter at the leftmost element and are passed down the chain, so `padding` first *shrinks* the constraints the `background` receives — the background area is inside the padding. The reported size travels back up: `padding` adds its inset to the background's size. Order therefore changes geometry.\n\n#### The two classic demos\n`padding().background()` draws the background *within* the padding — the padding ring is unpainted. `background().padding()` paints the background over the full outer area and then insets content inside it. Swapped order, visibly different result.\n\n#### Interaction matters more\n`clickable` placement decides both the touch target and the ripple bounds. `clip().clickable()` confines the ripple to the clip; `clickable().clip()` lets the ripple follow the element's full draw. And `size(48.dp).clip(CircleShape)` versus `clip(CircleShape).size(48.dp)` changes which area is rounded. The mental model is not decoration — it is a sequence of wrapping wrappers where each left element sees the world through the right ones.",
+      "followUps": [
+        "What does the size that flows back up the chain represent?",
+        "Why does `clip` before vs after `clickable` change the ripple?"
+      ],
+      "traps": [
+        "Treating modifiers as an unordered list of properties — order is semantic.",
+        "Assuming `padding` always shrinks the child — it shrinks what the elements to its right receive."
+      ],
+      "refs": [
+        {
+          "title": "Modifiers — order matters",
+          "url": "https://developer.android.com/develop/ui/compose/modifiers",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0039",
+      "track": "compose",
+      "topic": "Modifiers",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "modifiers",
+        "performance"
+      ],
+      "q": "What does a modifier chain cost, and why is `composed { }` treated as a smell?",
+      "shortAnswer": [
+        "`composed { }` runs a composable per element per usage, so it cannot be hoisted or compared and it reallocates.",
+        "It also blocks skipping of the composable that uses it.",
+        "`Modifier.Node` replaced it with a cheap comparable element plus a long-lived node; hoist constant chains into a `val`."
+      ],
+      "answer": "A modifier chain is a linked structure of elements, and its cost is per-element allocation and per-recomposition re-evaluation. The composition-driven forms are the expensive ones. `Modifier.composed { ... }` runs a composable lambda for each element, on each composition: the resulting modifier can never be hoisted into a `val` (it depends on the composition), cannot be compared with `equals`, is reallocated every recomposition, and — critically — a composable that uses a `composed` modifier loses its skippability, because the compiler cannot reason about the modifier's stability.\n\n#### What replaced it\n`Modifier.Node` is the modern mechanism: a `ModifierNodeElement` is a plain data class — cheap to allocate, comparable, hoistable — and the node it manages is created once and mutated via `update`. The element is stable data; the node is long-lived behaviour.\n\n#### The practical wins\nThe immediate wins in review: hoist constant chains into a `val` at file or object scope (`Modifier.padding(16.dp).clip(CircleShape)` declared once); prefer node-backed or simple static modifiers over `composed`; and keep chains short inside hot lazy-list items, where per-item per-frame allocation is measurable.",
+      "followUps": [
+        "Why does `composed { }` defeat skipping?",
+        "How does `Modifier.Node` keep the element cheap?"
+      ],
+      "traps": [
+        "Assuming `composed` is fine because it 'just wraps state' — it reallocates every composition.",
+        "Hoisting a `composed` chain into a `val` — it depends on composition and cannot be hoisted."
+      ],
+      "refs": [
+        {
+          "title": "Modifier.Node documentation",
+          "url": "https://developer.android.com/develop/ui/compose/modifiers",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0040",
+      "track": "compose",
+      "topic": "Modifiers",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "modifier-node",
+        "custom-layout"
+      ],
+      "q": "Implement a node-backed modifier from scratch.",
+      "shortAnswer": [
+        "Write a `ModifierNodeElement<T>` with `create`, `update`, `equals`/`hashCode` and `inspectableProperties`.",
+        "The node implements `DrawModifierNode` or `LayoutModifierNode` and you call `invalidateDraw()`/`invalidateMeasurement()` yourself.",
+        "A missing `equals` makes `update` run on every composition; `DelegatingNode` composes behaviours."
+      ],
+      "answer": "A node-backed modifier is two pieces. The element: `data class SpinnerElement(val color: Color) : ModifierNodeElement<SpinnerNode>()` implementing `create()` to instantiate the node, `update()` to push new configuration into it, `equals`/`hashCode` from the data class, and `inspectableProperties` for the Layout Inspector. The node: `class SpinnerNode(var color: Color) : ModifierNode, DrawModifierNode` where `draw` reads the latest field.\n\n#### The contract subtleties\nThe performance depends on `equals`: if the element's `equals` returns false spuriously, `update` runs on every composition and pushes state that did not change. When `update` does change the node, you must call the invalidation yourself — `invalidateDraw()`, `invalidateMeasurement()`, `invalidateSemantics()` — the framework does not infer what the change affects. Lifetime is explicit too: `onAttach`/`onDetach` define it, and the node gets its own `coroutineScope` you can launch work in.\n\n#### Composition\n`DelegatingNode` lets a node delegate to others, so one modifier can coordinate several behaviours — a layout node delegating to a pointer node — instead of stacking independent elements. That is the composition the chain model cannot express.",
+      "followUps": [
+        "Why does a missing `equals` destroy the performance of node updates?",
+        "When would you use `DelegatingNode` over a longer chain?"
+      ],
+      "traps": [
+        "Forgetting to call `invalidateDraw`/`invalidateMeasurement` after updating node fields.",
+        "Making `update` do allocation — it should mutate the existing node, not rebuild it."
+      ],
+      "refs": [
+        {
+          "title": "Modifier.Node implementation guide",
+          "url": "https://developer.android.com/develop/ui/compose/modifiers",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    },
+    {
+      "id": "cmp-0041",
+      "track": "compose",
+      "topic": "Phases & performance",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "phases",
+        "graphics-layer",
+        "performance"
+      ],
+      "q": "How do you animate a property 120 times a second without recomposing anything?",
+      "shortAnswer": [
+        "Read the animated value inside a lambda modifier so the read is attributed to layout or draw, not composition.",
+        "`graphicsLayer { alpha = a() }` maps to a RenderNode, so translation/alpha/rotation just re-issue the display list.",
+        "`alpha < 1f` can force an offscreen layer; `CompositingStrategy.ModulateAlpha` avoids it."
+      ],
+      "answer": "Recomposition is not the only way to respond to state. Read the animated value inside a lambda-taking modifier — `graphicsLayer { alpha = anim.value }`, `offset { IntOffset(x, y) }`, `drawBehind { }` — and the read is attributed to the layout or draw phase instead of composition. The composable recomposes once; every frame after that, only the layer or draw lambda re-runs. Recomposition counts go flat while the animation still runs at frame rate.\n\n#### Why graphicsLayer is the star\n`graphicsLayer` maps to a RenderNode. Translation, alpha, rotation, scale and clip changes do not redraw — the same display list is re-issued with new transform parameters by the hardware renderer. That is a qualitatively cheaper frame than any re-layout.\n\n#### The layer gotcha\n`alpha < 1f` is the one case that forces an offscreen layer to composite the node — a real cost on low-end devices. `CompositingStrategy.ModulateAlpha` keeps it on a plain layer by blending the alpha into the drawing commands instead. Proving the win: watch recomposition/skip counts in the Layout Inspector, and a Perfetto trace showing frame time concentrated in draw, not composition.",
+      "followUps": [
+        "Why does reading inside `graphicsLayer` avoid recomposition?",
+        "When does `alpha < 1f` hurt and how do you avoid it?"
+      ],
+      "traps": [
+        "Animating via state read in the body and wondering why recomposition counts climb — that is a composition read.",
+        "Assuming all animations need composition — layer-only animation exists precisely for this."
+      ],
+      "refs": [
+        {
+          "title": "Compose phases — deferred reads",
+          "url": "https://developer.android.com/develop/ui/compose/phases",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.10"
+    }
+  ]
+}

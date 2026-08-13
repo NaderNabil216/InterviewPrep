@@ -1,0 +1,252 @@
+{
+  "track": "build-testing",
+  "scope": [
+    "Gradle configuration vs execution phase, task graph, up-to-date checks",
+    "incremental tasks — task inputs and outputs, up-to-date and from-cache",
+    "the configuration cache — what it is, what breaks it",
+    "the build cache (local and remote) and when it actually helps",
+    "parallel and isolated projects, configuring-on-demand",
+    "why a clean build is not a fix",
+    "AGP 9.3 — built-in Kotlin support with no separate kotlin.android plugin, and the migration",
+    "the AGP DSL and Variant API",
+    "version catalogs and dependency management, BOMs",
+    "resolution strategy and dependency locking",
+    "catching conflicting transitive versions",
+    "convention plugins — buildSrc vs an included build, and why buildSrc invalidates everything",
+    "multi-module build performance and measuring it with build scans",
+    "KSP2 vs kapt — why kapt is a build-time tax, migrating, annotation processors that still lack KSP",
+    "product flavors, build types, source sets, variant-aware dependencies",
+    "signing, Play App Signing, key rotation",
+    "ProGuard/R8 rule authoring and consumer rules for libraries",
+    "publishing a library module",
+    "reproducible builds, supply-chain concerns, dependency verification",
+    "lint — custom rules, baselines, CI gating",
+    "detekt and ktlint/Spotless in the build",
+    "CI pipelines for Android — sharding, caching, emulator vs Gradle Managed Devices, flake quarantine",
+    "release automation and staged rollout",
+    "the testing pyramid and what it means on Android specifically",
+    "JVM unit tests vs instrumented tests vs Robolectric — cost and fidelity trade-offs",
+    "fakes vs mocks vs stubs, and why over-mocking rots a suite",
+    "Mockito/MockK and their Kotlin pitfalls (final classes, coroutines)",
+    "testing coroutines with runTest, TestScope, virtual time and dispatcher injection",
+    "testing Flows with Turbine and with a plain collector",
+    "testing ViewModels and SavedStateHandle",
+    "testing Room and migrations",
+    "testing WorkManager",
+    "testing Retrofit with MockWebServer",
+    "Hilt testing with test components and replaced bindings",
+    "Compose UI testing — semantics tree, finders, synchronization, waitUntil",
+    "Espresso for legacy screens and interop with Compose",
+    "screenshot testing (Roborazzi/Paparazzi/Compose screenshot tests) and keeping goldens sane",
+    "UI Automator and end-to-end tests",
+    "test doubles for time and randomness",
+    "parameterized tests, test naming and readability",
+    "flakiness — root causes, detection, retry policy, and why retries hide bugs",
+    "coverage as a metric and its abuse",
+    "TDD in practice on Android",
+    "introducing testing into an untested legacy codebase",
+    "what you would gate a PR on",
+    "custom Gradle task authoring, avoiding configuration-time execution",
+    "build script performance and evaluating the build lazily",
+    "dependency substitution and project-to-project replacement",
+    "Gradle wrapper and toolchain pinning for reproducible CI",
+    "optimizing the Android edit-to-verify test loop",
+    "the Gradle daemon and what cannot cross the configuration-cache boundary",
+    "AGP internals — the Variant API and custom artifact transforms",
+    "dependency verification and supply-chain hardening",
+    "custom lint checks with UAST",
+    "measuring and debugging a slow test suite",
+    "testing code that depends on time",
+    "unit vs integration vs end-to-end test placement on Android",
+    "designing a team testing strategy"
+  ],
+  "specs": [],
+  "coverage": {
+    "Gradle configuration vs execution phase, task graph, up-to-date checks": [
+      "bt-0003",
+      "bt-0001"
+    ],
+    "incremental tasks — task inputs and outputs, up-to-date and from-cache": [
+      "bt-0004"
+    ],
+    "the configuration cache — what it is, what breaks it": [
+      "bt-0005",
+      "bt-0053"
+    ],
+    "the build cache (local and remote) and when it actually helps": [
+      "bt-0006"
+    ],
+    "parallel and isolated projects, configuring-on-demand": [
+      "bt-0007"
+    ],
+    "why a clean build is not a fix": [
+      "bt-0008"
+    ],
+    "AGP 9.3 — built-in Kotlin support with no separate kotlin.android plugin, and the migration": [
+      "bt-0009",
+      "bt-0001"
+    ],
+    "the AGP DSL and Variant API": [
+      "bt-0010",
+      "bt-0054"
+    ],
+    "version catalogs and dependency management, BOMs": [
+      "bt-0011"
+    ],
+    "resolution strategy and dependency locking": [
+      "bt-0012"
+    ],
+    "catching conflicting transitive versions": [
+      "bt-0013"
+    ],
+    "convention plugins — buildSrc vs an included build, and why buildSrc invalidates everything": [
+      "bt-0014"
+    ],
+    "multi-module build performance and measuring it with build scans": [
+      "bt-0015",
+      "bt-0049"
+    ],
+    "KSP2 vs kapt — why kapt is a build-time tax, migrating, annotation processors that still lack KSP": [
+      "bt-0016"
+    ],
+    "product flavors, build types, source sets, variant-aware dependencies": [
+      "bt-0017"
+    ],
+    "signing, Play App Signing, key rotation": [
+      "bt-0018"
+    ],
+    "ProGuard/R8 rule authoring and consumer rules for libraries": [
+      "bt-0019"
+    ],
+    "publishing a library module": [
+      "bt-0020"
+    ],
+    "reproducible builds, supply-chain concerns, dependency verification": [
+      "bt-0021",
+      "bt-0055"
+    ],
+    "lint — custom rules, baselines, CI gating": [
+      "bt-0022",
+      "bt-0056"
+    ],
+    "detekt and ktlint/Spotless in the build": [
+      "bt-0023"
+    ],
+    "CI pipelines for Android — sharding, caching, emulator vs Gradle Managed Devices, flake quarantine": [
+      "bt-0024"
+    ],
+    "release automation and staged rollout": [
+      "bt-0025"
+    ],
+    "the testing pyramid and what it means on Android specifically": [
+      "bt-0026",
+      "bt-0059",
+      "bt-0060"
+    ],
+    "JVM unit tests vs instrumented tests vs Robolectric — cost and fidelity trade-offs": [
+      "bt-0027"
+    ],
+    "fakes vs mocks vs stubs, and why over-mocking rots a suite": [
+      "bt-0028",
+      "bt-0002"
+    ],
+    "Mockito/MockK and their Kotlin pitfalls (final classes, coroutines)": [
+      "bt-0029"
+    ],
+    "testing coroutines with runTest, TestScope, virtual time and dispatcher injection": [
+      "bt-0030"
+    ],
+    "testing Flows with Turbine and with a plain collector": [
+      "bt-0031"
+    ],
+    "testing ViewModels and SavedStateHandle": [
+      "bt-0032"
+    ],
+    "testing Room and migrations": [
+      "bt-0033"
+    ],
+    "testing WorkManager": [
+      "bt-0034"
+    ],
+    "testing Retrofit with MockWebServer": [
+      "bt-0035"
+    ],
+    "Hilt testing with test components and replaced bindings": [
+      "bt-0036"
+    ],
+    "Compose UI testing — semantics tree, finders, synchronization, waitUntil": [
+      "bt-0037"
+    ],
+    "Espresso for legacy screens and interop with Compose": [
+      "bt-0038"
+    ],
+    "screenshot testing (Roborazzi/Paparazzi/Compose screenshot tests) and keeping goldens sane": [
+      "bt-0039"
+    ],
+    "UI Automator and end-to-end tests": [
+      "bt-0040"
+    ],
+    "test doubles for time and randomness": [
+      "bt-0041",
+      "bt-0058"
+    ],
+    "parameterized tests, test naming and readability": [
+      "bt-0042"
+    ],
+    "flakiness — root causes, detection, retry policy, and why retries hide bugs": [
+      "bt-0043",
+      "bt-0057"
+    ],
+    "coverage as a metric and its abuse": [
+      "bt-0044"
+    ],
+    "TDD in practice on Android": [
+      "bt-0045"
+    ],
+    "introducing testing into an untested legacy codebase": [
+      "bt-0046"
+    ],
+    "what you would gate a PR on": [
+      "bt-0047"
+    ],
+    "custom Gradle task authoring, avoiding configuration-time execution": [
+      "bt-0048"
+    ],
+    "build script performance and evaluating the build lazily": [
+      "bt-0049"
+    ],
+    "dependency substitution and project-to-project replacement": [
+      "bt-0050"
+    ],
+    "Gradle wrapper and toolchain pinning for reproducible CI": [
+      "bt-0051"
+    ],
+    "optimizing the Android edit-to-verify test loop": [
+      "bt-0052"
+    ],
+    "the Gradle daemon and what cannot cross the configuration-cache boundary": [
+      "bt-0053"
+    ],
+    "AGP internals — the Variant API and custom artifact transforms": [
+      "bt-0054"
+    ],
+    "dependency verification and supply-chain hardening": [
+      "bt-0055"
+    ],
+    "custom lint checks with UAST": [
+      "bt-0056"
+    ],
+    "measuring and debugging a slow test suite": [
+      "bt-0057"
+    ],
+    "testing code that depends on time": [
+      "bt-0058"
+    ],
+    "unit vs integration vs end-to-end test placement on Android": [
+      "bt-0059"
+    ],
+    "designing a team testing strategy": [
+      "bt-0060"
+    ]
+  }
+}

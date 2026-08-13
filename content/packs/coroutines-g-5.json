@@ -1,0 +1,385 @@
+{
+  "id": "coroutines-g-5",
+  "title": "Coroutines & Flow",
+  "track": "coroutines-flow",
+  "items": [
+    {
+      "id": "co-0049",
+      "track": "coroutines-flow",
+      "topic": "Hot flows",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "shared-flow",
+        "event-bus",
+        "backpressure"
+      ],
+      "q": "Tune `MutableSharedFlow(replay, extraBufferCapacity, onBufferOverflow)` for an in-app event bus — what do you pass, and why?",
+      "shortAnswer": [
+        "The buffer is `replay + extraBufferCapacity`, so the default `MutableSharedFlow<T>()` has no buffer at all: `emit` suspends until every current subscriber has actually collected the value, and `tryEmit` can only ever return false.",
+        "For an event bus I use `extraBufferCapacity = 1` with `onBufferOverflow = DROP_OLDEST` so that a slow collector can never stall the emitter, and I keep `replay = 0` because replaying a navigation event to the next subscriber navigates twice.",
+        "When the events genuinely must not be dropped and there is exactly one consumer, I use `Channel(Channel.BUFFERED).receiveAsFlow()` instead, and I use `subscriptionCount` when upstream work should start and stop with the audience."
+      ],
+      "answer": "#### The three parameters are one buffer\nCapacity is `replay + extraBufferCapacity`. `onBufferOverflow` only means anything when that sum is above zero — anything but `SUSPEND` on a zero buffer throws `IllegalArgumentException` at construction.\n\n#### The default is a rendezvous, not a mailbox\n`MutableSharedFlow<Event>()` is `replay = 0, extraBufferCapacity = 0, SUSPEND`:\n\n- `emit` suspends until **every** subscriber has collected. One collector doing a 300 ms disk write applies backpressure straight into your ViewModel.\n- `tryEmit` always returns false — there is never a free slot. Ignore that return value and you drop everything.\n- With **zero** subscribers `emit` returns instantly and the value is gone: the classic 'event fired in `init`, the screen never saw it' bug.\n\n#### The event-bus configuration\n\n| config | emit suspends? | replays history? | loss |\n| --- | --- | --- | --- |\n| `()` default | yes, on the slowest collector | no | none, but you stall |\n| `extraBufferCapacity = 1, DROP_OLDEST` | never | no | oldest pending event |\n| `replay = 1` | never | **yes** | none |\n\n`extraBufferCapacity = 1` with `DROP_OLDEST` is the pragmatic default: `emit` never suspends, `tryEmit` always succeeds, and only a genuinely stuck collector loses intermediate events.\n\n#### replay is a trap for events\n`replay = 1` re-delivers the last event to every new subscriber — rotate the device and the user lands on checkout twice. Use replay for *state*, and for state use `StateFlow`, which conflates.\n\nFor exactly-once delivery to a single consumer use `Channel(Channel.BUFFERED).receiveAsFlow()`: it suspends rather than drops, but two collectors split the stream. `subscriptionCount` is the mechanism `SharingStarted.WhileSubscribed` is built on.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "An event bus that cannot stall the emitter",
+          "src": "class CheckoutViewModel(private val repo: OrderRepo) : ViewModel() {\n\n    // buffer = replay(0) + extraBufferCapacity(1) = 1\n    // DROP_OLDEST => emit() never suspends and tryEmit() never returns false\n    private val _events = MutableSharedFlow<UiEvent>(\n        replay = 0,\n        extraBufferCapacity = 1,\n        onBufferOverflow = BufferOverflow.DROP_OLDEST,\n    )\n    val events: SharedFlow<UiEvent> = _events.asSharedFlow()\n\n    fun onPayClicked() {\n        viewModelScope.launch {\n            when (val result = repo.pay()) {\n                is PayResult.Ok ->\n                    _events.emit(UiEvent.Navigate(result.orderId))   // returns immediately\n                is PayResult.Failed ->\n                    _events.emit(UiEvent.Snackbar(result.message))\n            }\n        }\n    }\n}\n\n// replay = 0 also means: emitted while nobody is subscribed => the event is gone.\n// The UI must already be inside repeatOnLifecycle before you emit."
+        },
+        {
+          "lang": "kotlin",
+          "caption": "Exactly-once delivery, and driving upstream with subscriptionCount",
+          "src": "// One consumer, nothing may be dropped: a Channel, not a SharedFlow.\nprivate val _nav = Channel<NavCommand>(Channel.BUFFERED)  // 64 slots, producer suspends when full\nval nav: Flow<NavCommand> = _nav.receiveAsFlow()          // each element goes to exactly ONE collector\n\n// Start and stop the upstream with the audience -- this is what WhileSubscribed does internally.\ninit {\n    viewModelScope.launch {\n        _events.subscriptionCount\n            .map { count -> count > 0 }\n            .distinctUntilChanged()\n            .collectLatest { hasListeners ->\n                if (hasListeners) socket.connect() else socket.disconnect()\n            }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Your `tryEmit` returns false in production but the same code passes every test — explain what differs.",
+        "How would you deliver an event that is emitted before the screen has subscribed?",
+        "`SharedFlow` never completes. What does that do to a `runTest` block that collects it?"
+      ],
+      "traps": [
+        "Saying 'SharedFlow buffers by default'. The default constructor is a rendezvous: `emit` suspends on the slowest subscriber and `tryEmit` always returns false.",
+        "Using `replay = 1` for one-off events. Every new subscriber — so every rotation — re-receives the last event, which is exactly how you get a double navigation.",
+        "Assuming an `emit` with no subscribers is queued for later. With `replay = 0` it is silently discarded."
+      ],
+      "refs": [
+        {
+          "title": "StateFlow and SharedFlow",
+          "url": "https://developer.android.com/kotlin/flow/stateflow-and-sharedflow",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "MutableSharedFlow — kotlinx.coroutines API",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-mutable-shared-flow.html",
+          "checked": "2026-08-09"
+        }
+      ],
+      "addedIn": "2026.08.7"
+    },
+    {
+      "id": "co-0050",
+      "track": "coroutines-flow",
+      "topic": "Hot flows",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "state-flow",
+        "sharing-started",
+        "viewmodel"
+      ],
+      "q": "`stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState.Loading)` — justify every one of those three arguments.",
+      "shortAnswer": [
+        "`viewModelScope` bounds the sharing coroutine to the ViewModel, so the upstream is cancelled at `onCleared()` and not one moment later.",
+        "`WhileSubscribed(5_000)` starts the upstream on the first collector and stops it five seconds after the last one leaves; those five seconds are a grace window sized to span an Activity recreation, so a rotation does not tear down and rebuild a Room query or a socket.",
+        "The initial value is what every collector reads synchronously before the upstream has produced anything, which is why it has to be a real `Loading` state rather than a fabricated empty success."
+      ],
+      "answer": "#### What stateIn builds\nOne sharing coroutine in the given scope collects the cold upstream and conflates it into a `MutableStateFlow`. Five collectors mean one upstream execution, and `.value` is readable synchronously. Being a `StateFlow` it also **dedupes by `equals`** — a state class with identity-based equality silently breaks this.\n\n#### SharingStarted is a strategy object, not an enum\nAn interface emitting `START`, `STOP` or `STOP_AND_RESET_REPLAY_CACHE`. You can write your own.\n\n| strategy | starts | stops |\n| --- | --- | --- |\n| `Eagerly` | at the `stateIn` call | only when the scope dies |\n| `Lazily` | first subscriber | never |\n| `WhileSubscribed(t)` | first subscriber | `t` ms after the last leaves |\n\n#### Why 5 000\nBetween the old Activity's `onStop` and the new one's `onStart` there are zero subscribers. `WhileSubscribed(0)` cancels and restarts the upstream on every rotation: Room re-runs the query, the socket reconnects, the spinner flashes. Five seconds comfortably outlasts a recreation and still stops work for a genuinely backgrounded app. It is a grace window, and it has **nothing** to do with process death.\n\n#### The parts people trip over\n`replayExpirationMillis` defaults to `Long.MAX_VALUE`, so the cached value survives a `STOP` and the screen renders instantly on return; pass `0` and the state reverts to `initialValue`.\n\n`stateIn(scope, started, initialValue)` returns immediately. `stateIn(scope)` **suspends** until the first emission — call it in `init { }` on a flow that never emits and the coroutine never returns.\n\n`WhileSubscribed` reads `subscriptionCount`, so it is inert behind plain `collectAsState`, which never unsubscribes.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Every argument doing its job",
+          "src": "@OptIn(ExperimentalCoroutinesApi::class)\nclass SearchViewModel(\n    private val repo: SearchRepo,\n    savedState: SavedStateHandle,\n) : ViewModel() {\n\n    private val query: StateFlow<String> = savedState.getStateFlow(\"query\", \"\")\n\n    val state: StateFlow<UiState> = query\n        .debounce(300)\n        .flatMapLatest { q -> repo.observe(q) }            // cold: Room + network per query\n        .map<List<Item>, UiState> { UiState.Content(it) }\n        .catch { e -> emit(UiState.Error(e)) }\n        .stateIn(\n            scope = viewModelScope,                        // cancelled in onCleared()\n            started = SharingStarted.WhileSubscribed(\n                stopTimeoutMillis = 5_000,                 // spans the Activity recreation gap\n                replayExpirationMillis = Long.MAX_VALUE,   // default: keep the value across a STOP\n            ),\n            initialValue = UiState.Loading,                // what the very first frame renders\n        )\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "The suspending overload, and a hand-written SharingStarted",
+          "src": "// Non-suspending: returns a StateFlow right now, initial value already readable.\nval hot: StateFlow<Int> = upstream.stateIn(scope, SharingStarted.Eagerly, 0)\n\n// SUSPENDING: waits for the upstream's first emission. On a flow that never emits,\n// this never returns -- inside init { } that looks like a permanently dead screen.\nsuspend fun risky(): StateFlow<Int> = upstream.stateIn(scope)\n\n// SharingStarted is an interface, so 'while subscribed OR while a sync is running' is trivial:\nclass WhileSubscribedOrSyncing(\n    private val syncing: StateFlow<Boolean>,\n) : SharingStarted {\n    override fun command(subscriptionCount: StateFlow<Int>): Flow<SharingCommand> =\n        combine(subscriptionCount, syncing) { count, busy -> count > 0 || busy }\n            .distinctUntilChanged()\n            .map { active -> if (active) SharingCommand.START else SharingCommand.STOP }\n}"
+        }
+      ],
+      "followUps": [
+        "When is `Eagerly` the right choice, and what does it cost you?",
+        "How do you unit test that the upstream really stops five seconds after the last subscriber?",
+        "Your `StateFlow` stops emitting even though the repository is producing values — what would you check first?"
+      ],
+      "traps": [
+        "Claiming `WhileSubscribed(5_000)` protects state across process death. It only spans the subscriber gap of an Activity recreation; the entire ViewModel is gone when the process dies.",
+        "Pairing `stateIn(WhileSubscribed(...))` with `collectAsState()`. The subscriber count never falls to zero, so the strategy never fires and you pay for a hot upstream in the background.",
+        "Forgetting that `StateFlow` conflates by `equals`. A state class with identity equality re-emits constantly; one with over-broad equality drops updates you needed."
+      ],
+      "refs": [
+        {
+          "title": "StateFlow and SharedFlow",
+          "url": "https://developer.android.com/kotlin/flow/stateflow-and-sharedflow",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "SharingStarted — kotlinx.coroutines API",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-sharing-started/",
+          "checked": "2026-08-09"
+        }
+      ],
+      "addedIn": "2026.08.7"
+    },
+    {
+      "id": "co-0051",
+      "track": "coroutines-flow",
+      "topic": "Android integration",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "viewmodel",
+        "lifecycle",
+        "scopes"
+      ],
+      "q": "What exactly are `viewModelScope` and `lifecycleScope`, and when is each one cancelled?",
+      "shortAnswer": [
+        "Both are ordinary `CoroutineScope` objects with `SupervisorJob() + Dispatchers.Main.immediate`, created lazily and cached on the owner they hang off.",
+        "`viewModelScope` is cancelled when the ViewModel is cleared — the job is cancelled first and then `onCleared()` runs; `lifecycleScope` is cancelled the moment its `Lifecycle` reaches `DESTROYED`.",
+        "In a Fragment you almost always want `viewLifecycleOwner.lifecycleScope`, because the Fragment object outlives its view whenever it sits on the back stack."
+      ],
+      "answer": "#### viewModelScope\nAn extension property on `ViewModel`. The first access creates a closeable scope with `SupervisorJob() + Dispatchers.Main.immediate`. `ViewModel.clear()` closes it — cancelling the job and every child — and *then* invokes `onCleared()`, so by the time your override runs the children are already gone.\n\nThe scope is cached, so touching it after clearing hands you an already-cancelled scope on which `launch` creates a coroutine that never runs its body. Clearing happens on Activity finish or Fragment removal — **not** on a configuration change, because the `ViewModelStore` is retained.\n\n#### lifecycleScope\n`lifecycle.coroutineScope`: the same `SupervisorJob() + Main.immediate`, plus an observer that cancels the job at `DESTROYED`. For an Activity that includes the destroy half of a rotation.\n\n#### The Fragment footgun\nA Fragment has two lifecycles — its own, `onAttach` to `onDetach`, and its **view's**, `onCreateView` to `onDestroyView`. On the back stack it loses its view but stays `CREATED`, so a collector launched from `lifecycleScope` in `onViewCreated` keeps running after the binding is nulled: NPE on the next emission, or a retained dead view hierarchy. `viewLifecycleOwner.lifecycleScope` is what you meant.\n\n#### Why Main.immediate\n`Dispatchers.Main` always posts to the main `Handler`; `immediate` executes synchronously when you are already on the main thread, so state set in a click listener is updated before the listener returns. The same property bites in tests: `Main` throws until `Dispatchers.setMain(...)`.\n\nAnything you build yourself, you cancel yourself. `GlobalScope` has no parent, no cancellation and no test story.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The view lifecycle is the one you want in a Fragment",
+          "src": "class FeedFragment : Fragment(R.layout.fragment_feed) {\n\n    private val vm: FeedViewModel by viewModels()\n    private var binding: FragmentFeedBinding? = null\n\n    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {\n        binding = FragmentFeedBinding.bind(view)\n\n        // viewLifecycleOwner, not `this`: on the back stack the Fragment survives,\n        // the view does not. Using lifecycleScope here outlives onDestroyView().\n        viewLifecycleOwner.lifecycleScope.launch {\n            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {\n                vm.state.collect { state -> binding?.render(state) }\n            }\n        }\n    }\n\n    override fun onDestroyView() {\n        binding = null   // safe precisely because the collector above is view-scoped\n        super.onDestroyView()\n    }\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "viewModelScope unrolled, and where longer-lived work belongs",
+          "src": "// What viewModelScope is, spelled out:\n// CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)\n// cancelled by ViewModel.clear(), which then calls onCleared().\n\nclass UploadViewModel(\n    private val repo: DraftRepo,\n    private val appScope: CoroutineScope,   // injected, Application lifetime\n) : ViewModel() {\n\n    private val _state = MutableStateFlow<SaveState>(SaveState.Idle)\n    val state: StateFlow<SaveState> = _state.asStateFlow()\n\n    fun save(draft: Draft) {\n        viewModelScope.launch { _state.value = SaveState.Saving }  // dies with the screen\n        appScope.launch { repo.upload(draft) }                     // must outlive the screen\n        // GlobalScope.launch { } -- no parent, no cancellation, untestable. Never.\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What happens to a coroutine running on `viewModelScope` during a screen rotation?",
+        "Why do both scopes use `SupervisorJob` rather than a plain `Job`?",
+        "How would you scope an upload that must complete even if the user immediately backs out of the screen?"
+      ],
+      "traps": [
+        "Using `lifecycleScope` instead of `viewLifecycleOwner.lifecycleScope` in a Fragment. The coroutine survives `onDestroyView` and then touches a nulled binding.",
+        "Believing `viewModelScope` is cancelled on rotation. It survives the configuration change — that is the entire reason ViewModels exist.",
+        "Reaching for `GlobalScope` for 'work that must finish'. Use an application-scoped injected `CoroutineScope` so it is still cancellable and still testable."
+      ],
+      "refs": [
+        {
+          "title": "androidx.lifecycle — lifecycleScope and viewModelScope",
+          "url": "https://developer.android.com/reference/kotlin/androidx/lifecycle/package-summary",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "ViewModel overview",
+          "url": "https://developer.android.com/topic/libraries/architecture/viewmodel",
+          "checked": "2026-08-09"
+        }
+      ],
+      "addedIn": "2026.08.7"
+    },
+    {
+      "id": "co-0052",
+      "track": "coroutines-flow",
+      "topic": "Android integration",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "lifecycle",
+        "repeat-on-lifecycle",
+        "flow"
+      ],
+      "q": "Why was `lifecycleScope.launchWhenStarted { }` deprecated, and what replaced it?",
+      "shortAnswer": [
+        "`launchWhenStarted` only suspends the *consumer* at STOP; the coroutine is frozen between dispatches while the producer keeps running, so the Room observer, the location callback and the socket all stay registered and keep filling a buffer nobody is reading.",
+        "`repeatOnLifecycle(Lifecycle.State.STARTED)` cancels the entire collection at STOP and runs the block again from scratch at the next START, which is what actually unregisters the producer.",
+        "`flowWithLifecycle` is the operator form of the same mechanism, but it allocates a coroutine, a channel and an observer per flow, so for several flows I nest the launches inside a single `repeatOnLifecycle` block."
+      ],
+      "answer": "#### What launchWhenStarted did\nIt ran the block on a pausing dispatcher: below `STARTED` the dispatcher queues continuations instead of executing them. The coroutine is not cancelled — it is frozen at a suspension point, and everything upstream of it stays alive:\n\n- A `callbackFlow` never reaches `awaitClose`, so the `LocationListener`, receiver or sensor callback stays registered.\n- A Room `Flow` keeps its `InvalidationTracker` observer, so every write still re-runs the query.\n- Buffered elements pile up and flush as a burst of stale emissions on the next START.\n- The frozen continuation still holds everything it captured — views, adapters, the binding — until `DESTROYED`.\n- A block with no suspension point in it never pauses at all.\n\nIt was deprecated in `lifecycle-runtime-ktx` 2.4.\n\n#### repeatOnLifecycle\nA `suspend fun` on `Lifecycle`. Launch it once; it suspends until `DESTROYED`, starting a fresh child coroutine each time the state reaches the target and cancelling that child when the state falls below. The cancellation is genuine: `awaitClose` runs, observers are removed.\n\nTwo things people miss. Code placed after the call in the same `launch` block is unreachable until destroy. And the block re-runs from the top on every foreground, so a **cold** upstream refetches on every app switch — make it hot with `stateIn(WhileSubscribed(5_000))` and let `repeatOnLifecycle` manage only the subscription.\n\n`flowWithLifecycle` wraps the same machinery for a single flow: identical semantics, but N flows cost N coroutines and N channels against one block with N children. In Compose it is `collectAsStateWithLifecycle`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The deprecated form and its replacement",
+          "src": "// DEPRECATED: the consumer freezes, the producer does not.\nviewLifecycleOwner.lifecycleScope.launchWhenStarted {\n    locationManager.locations().collect { render(it) }   // GPS stays on while backgrounded\n}\n\n// CORRECT: one launch, one repeatOnLifecycle, N collectors nested inside it.\nviewLifecycleOwner.lifecycleScope.launch {\n    viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {\n        launch { vm.state.collect { state -> render(state) } }\n        launch { vm.events.collect { event -> show(event) } }\n        // Nothing written after repeatOnLifecycle runs until the lifecycle is DESTROYED.\n    }\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "awaitClose is the unregister — and only cancellation reaches it",
+          "src": "fun LocationManager.locations(): Flow<Location> = callbackFlow {\n    val listener = LocationListener { location -> trySend(location) }\n    requestLocationUpdates(LocationManager.GPS_PROVIDER, 1_000L, 0f, listener)\n\n    // Runs only when the collecting coroutine is CANCELLED.\n    // launchWhenStarted never gets here at STOP; repeatOnLifecycle gets here every time.\n    awaitClose { removeUpdates(listener) }\n}\n\n// If restarting the cold upstream on every foreground is too expensive,\n// make it hot once and let repeatOnLifecycle only add/remove the subscriber:\nval locations: StateFlow<Location?> = locationManager.locations()\n    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)"
+        }
+      ],
+      "followUps": [
+        "`repeatOnLifecycle` restarts a cold network flow every time the user foregrounds. What does that cost, and how do you avoid it?",
+        "Why must `repeatOnLifecycle` be launched from `viewLifecycleOwner.lifecycleScope` in a Fragment?",
+        "How does `collectAsStateWithLifecycle` relate to all of this?"
+      ],
+      "traps": [
+        "Saying `launchWhenStarted` 'leaked memory' and stopping there. The precise failure is that the producer is never cancelled: callbacks stay registered and elements buffer while the consumer is frozen.",
+        "Putting `repeatOnLifecycle` in a Fragment's `onCreate` against the Fragment lifecycle. It belongs in `onViewCreated` against `viewLifecycleOwner`, or you get a second collection every time the Fragment returns from the back stack.",
+        "Wrapping five flows in five `flowWithLifecycle` calls instead of one `repeatOnLifecycle` block with five children."
+      ],
+      "refs": [
+        {
+          "title": "LifecycleCoroutineScope — launchWhenStarted is deprecated",
+          "url": "https://developer.android.com/reference/kotlin/androidx/lifecycle/LifecycleCoroutineScope",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Lifecycle release notes",
+          "url": "https://developer.android.com/jetpack/androidx/releases/lifecycle",
+          "checked": "2026-08-09"
+        }
+      ],
+      "addedIn": "2026.08.7"
+    },
+    {
+      "id": "co-0053",
+      "track": "coroutines-flow",
+      "topic": "Android integration",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "compose",
+        "lifecycle",
+        "state"
+      ],
+      "q": "`collectAsState()` versus `collectAsStateWithLifecycle()` in Compose — and what does neither of them fix?",
+      "shortAnswer": [
+        "`collectAsState` collects for as long as the composition exists, and composition is not lifecycle-aware, so a backgrounded app keeps collecting and keeps the whole upstream chain hot.",
+        "`collectAsStateWithLifecycle`, from `lifecycle-runtime-compose`, wraps the identical collection in `repeatOnLifecycle` with a configurable `minActiveState` that defaults to STARTED.",
+        "Neither fixes a flow that is constructed inside the composable, and neither reduces recomposition when every emission is a freshly allocated object."
+      ],
+      "answer": "#### collectAsState\nEssentially a `produceState` keyed on the flow instance and context, collecting into a `MutableState`. Its lifetime is the composition's, so backgrounding does not stop it. You burn battery for pixels nobody can see, and the subscriber count never drops — so a `stateIn(WhileSubscribed(5_000))` upstream never receives its STOP either, and the Room query, socket and location callback stay alive.\n\n#### collectAsStateWithLifecycle\nThe same plus a `lifecycle` from `LocalLifecycleOwner` and a `minActiveState` defaulting to `STARTED`. It collects inside `repeatOnLifecycle`, so the subscription drops at `onStop` and returns at `onStart`. For anything out of a ViewModel this is the default choice.\n\n`minActiveState = RESUMED` pauses the instant the window loses focus. An Activity behind a translucent dialog is `STARTED` but not `RESUMED`; in multi-window both panes are `STARTED` while only the focused one is `RESUMED`.\n\n#### What neither of them fixes\n**A flow built inline.** The effect is keyed on the flow *instance*, so an operator chain in the composable body is a new object every recomposition — collection restarts and a cold upstream refetches in a loop. Hoist it into the ViewModel, or `remember(key)` it.\n\n**The initial value.** Only a `StateFlow` carries one; `emptyList()` gives a flash of 'no results'. Model `Loading` explicitly.\n\n**Recomposition cost.** A freshly allocated `List` is never structurally equal, so the subtree recomposes on every emission. Use stable, immutable types and read state low in the tree.\n\n**Process death.** That is `SavedStateHandle` and `rememberSaveable` territory.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The default choice, and when RESUMED is right",
+          "src": "@Composable\nfun FeedRoute(vm: FeedViewModel = viewModel()) {\n    // repeatOnLifecycle(STARTED) underneath: unsubscribes at onStop, resubscribes at onStart.\n    val state by vm.state.collectAsStateWithLifecycle()\n    FeedScreen(state = state, onRefresh = vm::refresh)\n}\n\n@Composable\nfun CameraRoute(vm: CameraViewModel = viewModel()) {\n    // RESUMED: also drop the subscription when a dialog, or the other multi-window\n    // pane, takes focus -- STARTED alone would keep the frames flowing.\n    val frame by vm.frames.collectAsStateWithLifecycle(\n        initialValue = Frame.Empty,\n        minActiveState = Lifecycle.State.RESUMED,\n    )\n    CameraPreview(frame)\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "The bug the lifecycle-aware variant does not save you from",
+          "src": "@Composable\nfun BadSearch(vm: SearchViewModel, query: String) {\n    // A NEW Flow instance on every recomposition -> the collection key changes ->\n    // the collector is cancelled and restarted, and the cold upstream refetches.\n    val items by vm.allItems\n        .map { list -> list.filter { it.name.contains(query, ignoreCase = true) } }\n        .collectAsStateWithLifecycle(initialValue = emptyList())\n\n    ItemList(items)\n}\n\n@Composable\nfun GoodSearch(vm: SearchViewModel) {\n    // Filtering lives in the ViewModel; the composable collects one stable StateFlow\n    // that already carries a real Loading state.\n    val state by vm.state.collectAsStateWithLifecycle()\n\n    when (state) {\n        is UiState.Loading -> Spinner()\n        is UiState.Content -> ItemList((state as UiState.Content).items)\n        is UiState.Error -> ErrorPane(onRetry = vm::retry)\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What does it cost to resubscribe every time the app foregrounds, and how do you make that cheap?",
+        "Your screen recomposes on every emission even though the visible text is unchanged — walk me through the diagnosis.",
+        "Which of these still works if the process is killed while the user is on a phone call?"
+      ],
+      "traps": [
+        "Saying `collectAsState` 'stops when the app is backgrounded'. Composition is not lifecycle-aware; it keeps collecting until the composition itself is disposed.",
+        "Switching to `collectAsStateWithLifecycle` while leaving a `map`/`filter` chain inside the composable — the collection now restarts on every recomposition instead.",
+        "Treating the lifecycle-aware variant as a recomposition optimisation. It changes *when* you collect, not how much of the tree recomposes."
+      ],
+      "refs": [
+        {
+          "title": "State and Jetpack Compose",
+          "url": "https://developer.android.com/develop/ui/compose/state",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "androidx.lifecycle.compose — collectAsStateWithLifecycle",
+          "url": "https://developer.android.com/reference/kotlin/androidx/lifecycle/compose/package-summary",
+          "checked": "2026-08-09"
+        }
+      ],
+      "addedIn": "2026.08.7"
+    },
+    {
+      "id": "co-0054",
+      "track": "coroutines-flow",
+      "topic": "Android integration",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "saved-state",
+        "process-death",
+        "state-flow"
+      ],
+      "q": "The user takes a phone call, Android kills your process, and they come back to the app. What happened to your `StateFlow`?",
+      "shortAnswer": [
+        "It is gone. `StateFlow`, `SharedFlow` and every ViewModel field are process-scoped memory; when the process dies the `ViewModelStore` dies with it and `onCleared()` is never even called.",
+        "The only thing that comes back is the saved instance state bundle, and inside a ViewModel `SavedStateHandle.getStateFlow(key, default)` is its flow-shaped API.",
+        "Put small parcelable identity in there — the selected id, the query text, a scroll key — and re-derive everything else from Room or the network, because the bundle crosses a Binder transaction with a practical ceiling around 1 MB."
+      ],
+      "answer": "#### What actually survives\n\n| | configuration change | process death |\n| --- | --- | --- |\n| ViewModel fields, `StateFlow`, `SharedFlow` | yes | **no** |\n| `SavedStateHandle` / `rememberSaveable` | yes | yes, via the bundle |\n| Room, DataStore, files | yes | yes |\n| Application singletons, DI caches | yes | **no** |\n\nWhen the system reclaims your process it keeps the task record and the state written by `onSaveInstanceState`, then recreates the top Activity and hands that `Bundle` back. Nothing in your object graph is restored, and `onCleared()` never runs — there is no process left to run it in.\n\n#### SavedStateHandle\nBacked by the `SavedStateRegistry` on the Activity, Fragment or `NavBackStackEntry`, delivered by `SavedStateViewModelFactory`, and pre-populated with navigation arguments. `getStateFlow(key, initialValue)` re-emits whenever you write `handle[key] = value`, and is serialised into the bundle at save time — so values must be bundle-compatible. Keep the **input** in the handle and derive the **output** with `flatMapLatest` and `stateIn`.\n\n#### The budget\nThe bundle crosses a Binder transaction shared by the whole task. The 1 MB limit covers all of it, and overflow gives `TransactionTooLargeException` in the field, usually on the deepest back stacks. Treat roughly 50 KB per screen as real: save the query, never the results. Since API 28 `onSaveInstanceState` is called *after* `onStop`.\n\n#### Myths to kill on the spot\n`WhileSubscribed(5_000)` is a subscriber-gap window for recreation, unrelated to process death. 'Don't keep activities' does **not** simulate it — your process, singletons and DI caches all survive, which is exactly the state that hides the bug. Use `adb shell am kill`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Save the input, re-derive the output",
+          "src": "@OptIn(ExperimentalCoroutinesApi::class)\n@HiltViewModel\nclass SearchViewModel @Inject constructor(\n    private val repo: SearchRepo,\n    private val handle: SavedStateHandle,   // also carries the navigation arguments\n) : ViewModel() {\n\n    // SURVIVES process death: a short String written into the saved-state bundle.\n    val query: StateFlow<String> = handle.getStateFlow(KEY_QUERY, \"\")\n\n    fun onQueryChanged(text: String) {\n        handle[KEY_QUERY] = text            // writing the key re-emits on the StateFlow\n    }\n\n    // Does NOT survive process death -- and does not need to. It is re-derived from\n    // the restored query plus Room, which is on disk and therefore already durable.\n    val results: StateFlow<UiState> = query\n        .flatMapLatest { q -> repo.observe(q) }\n        .map<List<Item>, UiState> { UiState.Content(it) }\n        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState.Loading)\n\n    private companion object { const val KEY_QUERY = \"query\" }\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "What not to save, and how to actually test it",
+          "src": "// Do not do this. The bundle rides a Binder transaction shared by the entire task,\n// so this fails as TransactionTooLargeException on someone else's deep back stack.\nhandle[\"results\"] = ArrayList(uiState.items)      // 3 000 parcelables\n\n// Compose equivalent of the same registry, same budget:\nvar draft by rememberSaveable { mutableStateOf(\"\") }   // fine: one short String\n\n// Reproducing process death for real:\n//   1. put the app in the background (HOME, do not swipe it away)\n//   2. adb shell am kill com.example.app\n//   3. return via Recents -- the task is recreated from the saved bundle\n//\n// 'Don't keep activities' is NOT this: it destroys Activities and clears ViewModels,\n// but leaves the process, its singletons and DI caches alive."
+        }
+      ],
+      "followUps": [
+        "Where would you restore a multi-step form whose state is far too large for the bundle?",
+        "How does `rememberSaveable` interact with `SavedStateHandle` when both are in play on one screen?",
+        "How would you catch a `TransactionTooLargeException` regression in CI rather than in the crash dashboard?"
+      ],
+      "traps": [
+        "Answering 'the ViewModel survives'. It survives a configuration change only; process death takes the whole `ViewModelStore` with it.",
+        "Serialising the full UI list into `SavedStateHandle` and discovering the 1 MB Binder ceiling from production crash reports.",
+        "Confusing `WhileSubscribed(5_000)` or `viewModelScope` with state restoration. Neither has anything to do with the process being killed."
+      ],
+      "refs": [
+        {
+          "title": "Save UI states",
+          "url": "https://developer.android.com/topic/libraries/architecture/saving-states",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "Activity — onSaveInstanceState",
+          "url": "https://developer.android.com/reference/android/app/Activity",
+          "checked": "2026-08-09"
+        }
+      ],
+      "addedIn": "2026.08.7"
+    },
+    {
+      "id": "co-0055",
+      "track": "coroutines-flow",
+      "topic": "Testing",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "testing",
+        "run-test",
+        "test-dispatcher"
+      ],
+      "q": "Your coroutine test hangs and eventually fails with 'After waiting for 60s, the test coroutine is not completing'. Debug it.",
+      "shortAnswer": [
+        "`runTest` does not return until every coroutine started in its `TestScope` has finished, so a collector on a hot flow — a `StateFlow`, a `MutableSharedFlow`, anything from `stateIn` — never completes and the test simply sits there until the sixty-second timeout.",
+        "The fix is to launch that collector in `backgroundScope`, which is cancelled as soon as the test body returns, or to use Turbine, whose `test { }` block cancels its own collector.",
+        "The other usual suspects are a real dispatcher hard-coded in production code, two `TestDispatcher`s that do not share a scheduler, and forgetting to advance virtual time under `StandardTestDispatcher`."
+      ],
+      "answer": "#### Why it hangs at all\n`runTest`'s `TestScope` job parents everything the test launches, and will not return until that job completes. The default timeout is sixty seconds; the failure is followed by a dump of the coroutines still alive. Read it — it names the culprit.\n\n#### The checklist\n\n**1. A collector on a flow that never completes.** `launch { vm.state.toList(seen) }` in the test body is the classic — a `StateFlow` never completes, so neither does the test. Move it to `backgroundScope`, which `runTest` cancels after the body, or use Turbine's `state.test { }`.\n\n**2. A real dispatcher leaked into the code under test.** `Dispatchers.setMain` replaces `Main` and nothing else. `withContext(Dispatchers.IO) { delay(30_000) }` runs at wall-clock time, and virtual time cannot skip it. Inject dispatchers.\n\n**3. Two virtual clocks.** Every `TestDispatcher` must be built from the test's scheduler — `StandardTestDispatcher(testScheduler)`. A bare `UnconfinedTestDispatcher()` creates its own, so anything waiting across the boundary deadlocks.\n\n**4. Nothing was ever advanced.** `StandardTestDispatcher` queues work. `runCurrent()` drains what is due now, `advanceUntilIdle()` drains everything including delays, `advanceTimeBy(n)` moves the clock — and since 1.7 it does **not** run a task scheduled at exactly `currentTime + n`, so a 5 000 ms timeout needs `advanceTimeBy(5_001)`.\n\n**5. Genuinely blocking calls.** `Thread.sleep`, a latch, a nested `runBlocking`. Virtual time cannot compress them.\n\n**6. `UnconfinedTestDispatcher` everywhere.** It passes tests by running eagerly, hiding ordering bugs. Good for a recording collector, poor as a default.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The hang and the fix",
+          "src": "// @get:Rule val mainRule = MainDispatcherRule()  // Dispatchers.setMain(StandardTestDispatcher())\n\n@Test\nfun hangs() = runTest {\n    val vm = FeedViewModel(FakeRepo())\n    val seen = mutableListOf<UiState>()\n\n    launch { vm.state.toList(seen) }   // StateFlow never completes => 60s timeout, test fails\n\n    vm.refresh()\n    assertEquals(UiState.Content(items), seen.last())\n}\n\n@Test\nfun passes() = runTest {\n    val vm = FeedViewModel(FakeRepo())\n    val seen = mutableListOf<UiState>()\n\n    // backgroundScope is cancelled once the test body returns, so it cannot hold the test open.\n    // Unconfined + the TEST's scheduler: emissions recorded as they happen, one virtual clock.\n    backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {\n        vm.state.toList(seen)\n    }\n\n    vm.refresh()\n    advanceUntilIdle()   // Main is a StandardTestDispatcher: nothing had run before this line\n    assertEquals(UiState.Content(items), seen.last())\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "Proving that WhileSubscribed(5_000) really stops the upstream",
+          "src": "@Test\nfun `upstream stops five seconds after the last subscriber leaves`() = runTest {\n    val repo = CountingRepo()          // increments on collect, decrements in onCompletion\n    val vm = FeedViewModel(repo)\n\n    val subscriber = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {\n        vm.state.collect { }\n    }\n    advanceUntilIdle()\n    assertEquals(1, repo.activeCollections)\n\n    subscriber.cancel()\n    advanceTimeBy(4_999)\n    assertEquals(1, repo.activeCollections)   // still inside the grace window\n\n    advanceTimeBy(2)                          // 1.7+: advanceTimeBy does not run the task\n    assertEquals(0, repo.activeCollections)   // scheduled at exactly currentTime + n\n}"
+        }
+      ],
+      "followUps": [
+        "When is `UnconfinedTestDispatcher` the right choice, and what class of bug does it hide?",
+        "What does `runTest` do with an exception thrown inside `backgroundScope`?",
+        "How would you make a repository testable when it currently calls `Dispatchers.IO` directly?"
+      ],
+      "traps": [
+        "Sprinkling `advanceUntilIdle()` until the test goes green without knowing which dispatcher was queueing. A test that only passes under `UnconfinedTestDispatcher` is concealing an ordering bug.",
+        "Collecting a `StateFlow` in the test scope rather than `backgroundScope`, then blaming the library for the sixty-second timeout.",
+        "Assuming `Dispatchers.setMain` also replaces `IO` and `Default`. It does not — hard-coded dispatchers in production code keep using real threads and real time."
+      ],
+      "refs": [
+        {
+          "title": "Testing Kotlin coroutines on Android",
+          "url": "https://developer.android.com/kotlin/coroutines/test",
+          "checked": "2026-08-09"
+        },
+        {
+          "title": "kotlinx-coroutines-test API",
+          "url": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-test/",
+          "checked": "2026-08-09"
+        }
+      ],
+      "addedIn": "2026.08.7"
+    }
+  ]
+}

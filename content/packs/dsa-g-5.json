@@ -1,0 +1,294 @@
+{
+  "id": "dsa-g-5",
+  "title": "Problem Solving",
+  "track": "dsa",
+  "items": [
+    {
+      "id": "ds-0048",
+      "track": "dsa",
+      "topic": "Greedy",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Greedy / counting",
+      "tags": [
+        "greedy",
+        "heap"
+      ],
+      "q": "Task Scheduler — minimum intervals with a cooldown",
+      "prompt": "Given `tasks: CharArray` and a cooldown `n`, each unit of CPU can process one task (or idle). The same task must wait `n` units between runs. Return the minimum number of time units to complete all tasks.\n\nThe greedy insight: the most frequent task dictates the skeleton — arrange it with `n` gaps, then fill the gaps with other tasks. The formula `(maxCount - 1) * (n + 1) + numberWithMax` is the classic answer, with the caveat that it's only valid when no task exceeds the gaps.",
+      "hints": [
+        "Which task constrains the schedule the most? The most frequent one.",
+        "If task A appears 3 times with cooldown 2, the skeleton is A _ _ A _ _ A. What fills the blanks?",
+        "Formula: `(max-1)*(n+1) + tasksWithMaxCount`, but clamp to `tasks.size` — extra tasks just extend the frame. Verify the clamp with an example where n is small."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Greedy formula — O(tasks)",
+          "src": "fun leastInterval(tasks: CharArray, n: Int): Int {\n    val counts = tasks.groupingBy { it }.eachCount().values\n    val max = counts.max()\n    val maxCount = counts.count { it == max }\n    val frame = (max - 1) * (n + 1) + maxCount\n    return maxOf(frame, tasks.size)\n}"
+        }
+      ],
+      "complexity": "Time O(tasks) to count, O(26) to scan. Space O(1) (fixed alphabet). The `maxOf(frame, tasks.size)` clamp is the detail that separates a memorized formula from an understood one.",
+      "followUps": [
+        "When is the formula wrong? (When idle never appears — that's what the clamp handles.)",
+        "Return the actual schedule, not just the length (needs a max-heap simulation).",
+        "What if tasks have weights / different priorities?"
+      ],
+      "starter": "fun leastInterval(tasks: CharArray, n: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin groupingBy",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/grouping-by.html",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0049",
+      "track": "dsa",
+      "topic": "Dynamic programming",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Dynamic programming (1D)",
+      "tags": [
+        "dp",
+        "coin-change"
+      ],
+      "q": "Coin Change — fewest coins to reach an amount",
+      "prompt": "Given coin denominations `coins: IntArray` (unlimited supply) and an amount, return the fewest number of coins to make that amount, or -1 if impossible.\n\nThe 1D DP classic: `dp[a]` = fewest coins for amount a, built bottom-up from the denominations. Interviewers will also expect you to know the greedy is wrong (25,10,5,1 works; 1,3,4 and amount 6 doesn't).",
+      "hints": [
+        "Greedy fails for some denomination sets — find a counterexample (1, 3, 4 → 6). That's why this needs DP.",
+        "Define `dp[a] = min(dp[a-c] + 1)` over all coins c ≤ a. Build from 1 to amount.",
+        "Seed `dp[0] = 0` and everything else to a large sentinel. If `dp[amount]` is still the sentinel, return -1."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Bottom-up 1D — O(amount × coins)",
+          "src": "fun coinChange(coins: IntArray, amount: Int): Int {\n    val dp = IntArray(amount + 1) { amount + 1 }\n    dp[0] = 0\n    for (a in 1..amount) {\n        for (c in coins) {\n            if (c <= a) dp[a] = minOf(dp[a], dp[a - c] + 1)\n        }\n    }\n    return if (dp[amount] > amount) -1 else dp[amount]\n}"
+        }
+      ],
+      "complexity": "Time O(amount × coins), space O(amount). The sentinel `amount + 1` is legal because you can never need more than `amount` coins (all 1s) when it's possible.",
+      "followUps": [
+        "Why does greedy fail? Give the (1,3,4)→6 counterexample.",
+        "Count the *number of ways* (unbounded knapsack counting) instead of the minimum.",
+        "What if each coin may be used once? (0/1 knapsack variant.)"
+      ],
+      "starter": "fun coinChange(coins: IntArray, amount: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0050",
+      "track": "dsa",
+      "topic": "Dynamic programming",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Dynamic programming (1D) / LIS",
+      "tags": [
+        "dp",
+        "array"
+      ],
+      "q": "Longest Increasing Subsequence",
+      "prompt": "Given `nums: IntArray`, return the length of the longest strictly increasing subsequence (elements keep their order but need not be contiguous).\n\nThe O(n²) DP is `dp[i] = max(dp[j]) + 1` over j < i with nums[j] < nums[i]. The O(n log n) version maintains a patience-sorting pile — the interviewer will ask for it as the follow-up. You should be able to do both.",
+      "hints": [
+        "The naive O(n²): for each i, look back at all j < i and extend the best chain that ends lower.",
+        "State: `dp[i]` = LIS length ending exactly at i. Answer = max over all i.",
+        "O(n log n): keep `tails[k]` = smallest tail of an increasing subsequence of length k+1. Binary-search where the new number belongs and overwrite."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Patience sorting — O(n log n)",
+          "src": "fun lengthOfLIS(nums: IntArray): Int {\n    val tails = mutableListOf<Int>()\n    for (x in nums) {\n        var lo = 0\n        var hi = tails.size\n        while (lo < hi) {\n            val mid = (lo + hi) / 2\n            if (tails[mid] < x) lo = mid + 1 else hi = mid\n        }\n        if (lo == tails.size) tails += x else tails[lo] = x\n    }\n    return tails.size\n}"
+        }
+      ],
+      "complexity": "Time O(n log n) with binary search, space O(n). The O(n²) DP is the simpler first answer — state it, then upgrade. Note `tails` is *not* the actual subsequence, just the lengths.",
+      "followUps": [
+        "Reconstruct the actual subsequence — why does plain `tails` not hold it? (You need parent pointers.)",
+        "Number of increasing subsequences, not just the length.",
+        "Longest *non-decreasing* — flip `<` to `<=` and re-examine the binary search."
+      ],
+      "starter": "fun lengthOfLIS(nums: IntArray): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0051",
+      "track": "dsa",
+      "topic": "Dynamic programming",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Dynamic programming / 0-1 knapsack",
+      "tags": [
+        "dp",
+        "knapsack"
+      ],
+      "q": "0/1 Knapsack — max value within a capacity",
+      "prompt": "Given weights and values for n items (each usable at most once) and a capacity, return the maximum total value you can carry.\n\nThe template behind 'subset sum', 'partition equal subset', and 'target sum'. The state is `dp[i][c]` = best value using the first i items and capacity c. The transition is the real lesson: take vs skip.",
+      "hints": [
+        "Two dimensions: items considered and capacity. `dp[i][c]` = max value from the first i items within capacity c.",
+        "For item i: either skip it (`dp[i-1][c]`) or take it (`value[i] + dp[i-1][c-weight[i]]`) if it fits. Take the max.",
+        "Space-optimize to one array iterating capacity *backward* — backward is mandatory so each item is used at most once."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "1D backward loop — O(n·W)",
+          "src": "fun knapsack(weights: IntArray, values: IntArray, capacity: Int): Int {\n    val dp = IntArray(capacity + 1)\n    for (i in weights.indices) {\n        for (c in capacity downTo weights[i]) {\n            dp[c] = maxOf(dp[c], dp[c - weights[i]] + values[i])\n        }\n    }\n    return dp[capacity]\n}"
+        }
+      ],
+      "complexity": "Time O(n·W), space O(W) with the optimized 1D array. The backward iteration direction is the subtle bit — forward would let an item be reused, turning 0/1 into unbounded.",
+      "followUps": [
+        "Why must the 1D loop go backward? What breaks if it's forward?",
+        "Subset-sum: is a subset summing exactly to target possible? Same engine with values = weights.",
+        "Recover *which* items were chosen (parent pointers or bitset)."
+      ],
+      "starter": "fun knapsack(weights: IntArray, values: IntArray, capacity: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0052",
+      "track": "dsa",
+      "topic": "Dynamic programming",
+      "level": 1,
+      "type": "dsa",
+      "pattern": "Dynamic programming (2D) / grid paths",
+      "tags": [
+        "dp",
+        "grid"
+      ],
+      "q": "Unique Paths in a Grid",
+      "prompt": "A robot starts at the top-left of an m×n grid and can only move right or down. Return the number of distinct paths to the bottom-right.\n\nWarm-up combinatorial/DP problem. Two valid answers: pure combinatorics `C(m+n-2, m-1)`, or the DP grid where each cell sums its top and left neighbors. The DP recurrence is the pattern that generalizes to obstacles and weighted cells.",
+      "hints": [
+        "To reach cell (r,c) you must come from (r-1,c) or (r,c-1). Counts add.",
+        "`dp[r][c] = dp[r-1][c] + dp[r][c-1]`, with the top row and left column seeded to 1.",
+        "The combinatorial answer is `choose(m+n-2, m-1)` — mention it as a closed-form alternative, then code the grid."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "2D grid DP — O(m·n)",
+          "src": "fun uniquePaths(m: Int, n: Int): Int {\n    val dp = Array(m) { IntArray(n) }\n    for (r in 0 until m) dp[r][0] = 1\n    for (c in 0 until n) dp[0][c] = 1\n    for (r in 1 until m) for (c in 1 until n) {\n        dp[r][c] = dp[r - 1][c] + dp[r][c - 1]\n    }\n    return dp[m - 1][n - 1]\n}"
+        }
+      ],
+      "complexity": "Time O(m·n), space O(m·n) (reducible to O(min(m,n)) by keeping one row). The closed form is O(m+n) with big-int care.",
+      "followUps": [
+        "Add obstacles — cells with a 1 you cannot enter; how does the seed row change?",
+        "Reduce space to one row. Which direction must you sweep?",
+        "Minimum path sum with weighted cells — same grid, different recurrence."
+      ],
+      "starter": "fun uniquePaths(m: Int, n: Int): Int {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0053",
+      "track": "dsa",
+      "topic": "Dynamic programming",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Dynamic programming / palindrome",
+      "tags": [
+        "dp",
+        "string"
+      ],
+      "q": "Longest Palindromic Substring",
+      "prompt": "Given a string, return the longest palindromic substring.\n\nTwo classic answers: expand around centers (O(n²) time, O(1) space — simplest, interviewers love it) and Manacher's (O(n), usually an extra). You should code the center-expansion fluently and be able to explain why it's O(n²) with n centers each expanding O(n).",
+      "hints": [
+        "A palindrome is symmetric around a center. Every palindrome has a center — either a single char (odd length) or between two chars (even).",
+        "There are 2n-1 centers. For each, expand outward while the ends match and track the longest run.",
+        "Keep track of the best start/length rather than materializing each substring — O(1) extra space."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Expand around centers — O(n²) time, O(1) space",
+          "src": "fun longestPalindrome(s: String): String {\n    var start = 0\n    var maxLen = 1\n    fun expand(lo: Int, hi: Int): Int {\n        var l = lo; var r = hi\n        while (l >= 0 && r < s.length && s[l] == s[r]) { l--; r++ }\n        return r - l - 1   // length of the palindrome found\n    }\n    for (i in s.indices) {\n        val lenOdd = expand(i, i)\n        val lenEven = expand(i, i + 1)\n        val len = maxOf(lenOdd, lenEven)\n        if (len > maxLen) {\n            maxLen = len\n            start = i - (len - 1) / 2\n        }\n    }\n    return s.substring(start, start + maxLen)\n}"
+        }
+      ],
+      "complexity": "Time O(n²) — n·2 centers, each expanding to O(n). Space O(1). Manacher's is O(n) but fiddly; naming it and its complexity is usually enough at interview depth.",
+      "followUps": [
+        "Why is there no O(n) *space* version needed here? (We never store the DP table.)",
+        "Count all palindromic substrings — same expansion, count instead of max.",
+        "When would you reach for Manacher's over this?"
+      ],
+      "starter": "fun longestPalindrome(s: String): String {\n    // your solution\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin standard library — String",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.text/",
+          "checked": "2026-08-13"
+        }
+      ]
+    },
+    {
+      "id": "ds-0054",
+      "track": "dsa",
+      "topic": "Design",
+      "level": 3,
+      "type": "dsa",
+      "pattern": "Design / sliding window timestamps",
+      "tags": [
+        "design",
+        "rate-limiter"
+      ],
+      "q": "Design a Rate Limiter (fixed window and token bucket)",
+      "prompt": "Design a `RateLimiter` that allows at most N requests per time window W. Support `allow(key: String, nowMs: Long): Boolean`.\n\nTwo implementations matter: fixed window (a map key → window start + count) and token bucket (key → tokens + last refill time). Know both and say when each is right — fixed window is simpler and has boundary spikes; token bucket smooths bursts. On Android this is the shape of a throttling layer in front of an API client.",
+      "hints": [
+        "Start simple: `HashMap<Key, WindowState>` where WindowState = (windowStart, count). Reset when nowMs passes the window edge.",
+        "Fixed window allows a 2N burst across a boundary — name that weakness out loud.",
+        "Token bucket: store tokens and lastRefill; on each call, add (now-last)/rate tokens, cap at capacity, allow if tokens >= 1."
+      ],
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Token bucket — smooth, burst-tolerant",
+          "src": "class TokenBucket(\n    private val capacity: Long,\n    private val refillPerSecond: Long,\n) {\n    private val state = HashMap<String, Bucket>()\n    private class Bucket(var tokens: Long, var lastRefill: Long)\n\n    fun allow(key: String, nowMs: Long): Boolean {\n        val b = state.getOrPut(key) { Bucket(capacity, nowMs) }\n        val elapsed = (nowMs - b.lastRefill) / 1000.0\n        b.tokens = minOf(capacity, b.tokens + (elapsed * refillPerSecond).toLong())\n        b.lastRefill = nowMs\n        return if (b.tokens >= 1) { b.tokens--; true } else false\n    }\n}"
+        }
+      ],
+      "complexity": "Time O(1) per call with a map lookup. Space O(keys). Both windows degrade gracefully; fixed window is one `if` simpler. Cleanup of idle keys (LRU eviction) is a production concern to mention.",
+      "followUps": [
+        "Fixed window boundary burst — how would you eliminate it? (Sliding log or token bucket.)",
+        "What happens with 10k distinct keys? (Map grows — add eviction.)",
+        "How would you do this across multiple processes? (Shared store with a lock/atomic op.)"
+      ],
+      "starter": "class RateLimiter(private val maxPerWindow: Int, private val windowMs: Long) {\n    fun allow(key: String, nowMs: Long): Boolean {\n        // your solution\n    }\n}",
+      "addedIn": "2026.08.13",
+      "refs": [
+        {
+          "title": "Kotlin HashMap",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
+          "checked": "2026-08-13"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,495 @@
+{
+  "id": "architecture-g-2",
+  "title": "Architecture & DI",
+  "track": "architecture",
+  "items": [
+    {
+      "id": "ar-0018",
+      "track": "architecture",
+      "topic": "Domain layer",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "domain-layer",
+        "use-cases",
+        "architecture-review"
+      ],
+      "q": "When does a use case earn its place, and when is it indirection you should delete in review?",
+      "shortAnswer": [
+        "A use case earns its place when it orchestrates two or more repositories, when the rule has a second consumer, or when its logic is subtle enough to want isolated unit tests.",
+        "A use case is indirection when its body is a single pass-through call — `invoke() = repo.get()` — because it adds a hop and hides nothing.",
+        "The honest rule: name a concrete consumer for every use case you keep, and be ready to delete the ones you can't."
+      ],
+      "answer": "#### When it earns its place\nThree tests, in order of strength. **Orchestration**: the action sequences two or more repositories with ordering and error semantics — a checkout that debits an account, enqueues a job, and sends a receipt. **Second consumer**: two ViewModels, or a ViewModel and a notification worker, need the same rule; without a use case that logic gets copy-pasted and the copies drift. **Testable rules**: the logic is complex enough that you want a pure-Kotlin unit test with no ViewModel scaffolding.\n\n#### When it is indirection\nThe classic is the one-line pass-through: `operator fun invoke(id) = repo.get(id)`. Nothing is orchestrated, shared, or subtle — delete it and let the caller reach the repository. Also delete use cases nobody calls, and ones that are just a renamed repository method.\n\n#### The audit\nWalk the use-case package and, for each file, name a consumer and the rule it owns beyond a single call. Keep those. That is the difference between a selective domain layer and cargo-culted Clean Architecture: the layer should be small, and every file in it should be defensible.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A rule lifted into a use case when a second consumer appears",
+          "src": "class OrderRepository(private val dao: OrderDao) {\n    fun observe(id: String): Flow<Order> = dao.observe(id)\n}\n\n// LIFTED: now shared by two screens and unit-testable in pure Kotlin\nclass ObserveValidOrderUseCase @Inject constructor(\n    private val orders: OrderRepository,\n    private val rules: OrderRules,\n) {\n    operator fun invoke(id: String): Flow<Order> =\n        orders.observe(id).map { it.requireValid(rules) }\n}\n\n// STILL INDIRECTION: delete this and call the repository directly\nclass GetOrderUseCase @Inject constructor(private val orders: OrderRepository) {\n    suspend operator fun invoke(id: String): Order = orders.get(id)\n}"
+        }
+      ],
+      "followUps": [
+        "A rule currently lives in a repository. When does moving it up into a use case become worth it?",
+        "What do you do with a use case that only one screen uses?",
+        "How are domain rules tested differently from repository tests?"
+      ],
+      "traps": [
+        "Defending every use case as 'future-proofing' — speculative indirection is the failure mode being probed.",
+        "Not being able to name a concrete rule a use case should own; the interviewer wants a real example, not a principle."
+      ],
+      "refs": [
+        {
+          "title": "Domain layer — Android architecture guide",
+          "url": "https://developer.android.com/topic/architecture/domain-layer",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Now in Android",
+          "url": "https://github.com/android/nowinandroid",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0019",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "mappers",
+        "dto",
+        "layering"
+      ],
+      "q": "Your Retrofit DTO, your Room entity, and your domain model look identical. Do you still keep three types and three mappers?",
+      "shortAnswer": [
+        "Separate types are worth it when the layers are genuinely different: the DTO mirrors the wire format, the entity mirrors the schema, and the domain model is the contract everything else shares.",
+        "Mapping at the boundary is where you normalize — server field names to camelCase, ISO-8601 strings to `Instant`, 0/1 flags to booleans — so a wire or schema change never ripples through the app.",
+        "If the models really are identical today, don't write three mappers for three copies of the same shape — keep one model and split the moment a layer actually diverges."
+      ],
+      "answer": "#### What each type is for\nThe **DTO** is a hostage of the server: field names, nullability, and types mirror the wire format, and it version-drifts with the API. The **entity** mirrors your schema: primary keys, indices, `pendingSync` flags. The **domain model** is the boundary's contract — shaped by neither JSON nor SQL, but by what the app means. A **UI model** is what Compose renders: flattened, with formatted strings and derived flags.\n\n#### Where mapping lives\nKeep mappers at the boundary and one-way: `Dto.toDomain()`, `Entity.toDomain()`, and `domain.toEntity()` in the data layer; a thin mapper or derived state in the UI layer. Never let a DTO escape the data layer — the moment one does, a server rename becomes a UI compile error.\n\n#### The collapse argument\nThree identical models plus three mappers is ceremony with a real cost — every rename is three edits. If nothing diverges, one model is honest. But keep the mapping functions so the seam exists, because the server *will* add, drop, or rename a field, and that is exactly when the split pays for itself.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "DTO and domain diverge exactly where the wire does",
+          "src": "@Serializable\ndata class NoteDto(\n    @SerialName(\"note_id\") val noteId: String,\n    @SerialName(\"created_at\") val createdAt: String? = null,\n    val body: String? = null,\n)\n\n// The domain model is the contract the rest of the app depends on\ndata class Note(val id: Long, val createdAt: Instant, val body: String)\n\nfun NoteDto.toDomain(): Note = Note(\n    id = noteId.toLong(),\n    createdAt = createdAt?.let(Instant::parse) ?: Instant.EPOCH,\n    body = body.orEmpty(),\n)"
+        }
+      ],
+      "followUps": [
+        "Where does the mapping belong — in the data source, the repository, or a dedicated mapper class?",
+        "Your server returns `active: 1` and a date string. Where do those conversions happen?",
+        "How do you stop a UI model from drifting into data concerns?"
+      ],
+      "traps": [
+        "Saying you always keep three models — the interviewer is checking whether you can see when it is ceremony.",
+        "Leaking a DTO into the UI layer and defending it as 'it's the same shape anyway'."
+      ],
+      "refs": [
+        {
+          "title": "Data layer — Android architecture guide",
+          "url": "https://developer.android.com/topic/architecture/data-layer",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Kotlin serialization",
+          "url": "https://kotlinlang.org/docs/serialization.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0020",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "error-handling",
+        "result",
+        "layering"
+      ],
+      "q": "How do errors cross your layer boundaries — what does the data layer surface, and what does the UI actually see?",
+      "shortAnswer": [
+        "The repository translates implementation failures into a small sealed error type — a 401 becomes `Unauthorized`, a timeout becomes `Network` — so no Retrofit or SQLite type leaks upward.",
+        "The domain layer returns the same sealed type, and the ViewModel turns it into state: `error: ErrorMessage?` that the UI renders, with retry as a first-class action.",
+        "Two rules matter more than the type: never swallow a failure into 'empty data', and never catch `CancellationException` into a result — that breaks structured concurrency."
+      ],
+      "answer": "#### The rule\nAn exception is an implementation detail. Each layer boundary is where you translate, so the error vocabulary shrinks as it climbs: `IOException` and `HttpException(401)` become a sealed `DomainError` in the data layer; the use case folds it into a result; the ViewModel maps `DomainError` onto `UiState.error` plus a retry action.\n\n#### What the UI sees\nState, not throws. The ViewModel produces `error: ErrorMessage?`; the composable renders a message and a retry button, and retry is not a special path — it re-runs the same action and moves back to loading.\n\n#### Where people fail\n- **Swallowing**: catching the failure and returning `emptyList()` turns 'offline' into 'no data' — indistinguishable and uncorrectable.\n- **`CancellationException`**: catching it, or letting `runCatching` absorb it, breaks structured concurrency. Always rethrow it before wrapping anything else.\n- **Error sprawl**: one enum per HTTP status. Collapse to what the UI can act on — retryable, auth, not-found, validation — and keep HTTP detail server-side.\n\n#### Concretes\nMap once, near the boundary, inside the repository. Keep transport exceptions (`HttpException`, `SQLiteConstraintException`) out of the domain package entirely.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Transport errors die at the repository boundary",
+          "src": "sealed interface DomainError {\n    data object Network : DomainError\n    data object Unauthorized : DomainError\n    data object NotFound : DomainError\n}\n\nsealed interface Outcome<out T> {\n    data class Success<T>(val value: T) : Outcome<T>\n    data class Failure(val error: DomainError) : Outcome<Nothing>\n}\n\nclass NoteRepository(private val api: NoteApi) {\n    // Callers only ever see DomainError, never OkHttp or Retrofit types\n    suspend fun loadAll(): Outcome<List<Note>> = try {\n        Outcome.Success(api.fetchAll().map(NoteDto::toDomain))\n    } catch (e: HttpException) {\n        when (e.code()) {\n            401 -> Outcome.Failure(DomainError.Unauthorized)\n            else -> Outcome.Failure(DomainError.Network)\n        }\n    } catch (e: IOException) {\n        Outcome.Failure(DomainError.Network)\n    }\n}\n\nfun refresh() {\n    viewModelScope.launch {\n        _state.update { it.copy(isRefreshing = true, error = null) }\n        repo.loadAll().fold(\n            onSuccess = { notes ->\n                _state.update { it.copy(notes = notes, isRefreshing = false) }\n            },\n            onFailure = { error ->\n                _state.update { it.copy(error = error.toMessage(), isRefreshing = false) }\n            },\n        )\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Sealed error type vs the stdlib `Result` — when would you prefer one over the other?",
+        "How do you keep a failed load distinct from a genuinely empty dataset?",
+        "Why is swallowing into an empty list worse than throwing?"
+      ],
+      "traps": [
+        "Returning the Retrofit exception type from a repository and calling that an architecture.",
+        "Not being able to say what `CancellationException` is and why it is special.",
+        "Mapping every HTTP status code to a distinct domain error."
+      ],
+      "refs": [
+        {
+          "title": "Data layer — expose errors",
+          "url": "https://developer.android.com/topic/architecture/data-layer",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Kotlin stdlib — Result",
+          "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-result/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0021",
+      "track": "architecture",
+      "topic": "Offline-first",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "idempotency",
+        "sync",
+        "outbox"
+      ],
+      "q": "Walk through your sync protocol: how does an idempotency key prevent duplicates on retry, and where does the outbox fit?",
+      "shortAnswer": [
+        "The outbox is a local queue of pending writes drained by a worker; each row carries a client sequence number for ordering and a unique idempotency key so the server can recognize a replay.",
+        "An idempotency key identifies the *operation*, not the entity — the server stores key → result and returns the stored result on a repeat, so a retry after an ambiguous timeout cannot create a duplicate.",
+        "A client-generated UUID identifies the *entity*; the key is what makes delivery at-least-once rather than at-most-once-or-twice."
+      ],
+      "answer": "#### The outbox\nWrites land in a local table flagged `pendingSync`, ordered by a monotonically increasing sequence. A WorkManager worker drains the queue with exponential backoff, and each row carries a **client sequence number** so the server can apply operations in the order the user made them — out-of-order apply is where most sync bugs hide.\n\n#### Idempotency keys\nEvery operation is sent with an **idempotency key** — a fresh random UUID generated once at write time and never regenerated on retry. The server stores `key → response` for a window (hours to days) and, on a request with the same key, returns the stored response instead of applying the mutation again. That is what makes delivery **at-least-once**: retries after timeouts, where the first request may actually have succeeded, become harmless. Contrast the **client-generated entity UUID**: it names the row, so a retried create becomes an upsert; the key names the operation and guards even non-entity mutations like 'increment counter'.\n\n#### Failure handling\nA definitive 4xx marks the row failed and surfaces a retry affordance; network and 5xx retry. A 409 means the server's version moved — fall to your conflict policy.\n\n#### Conflict policy\nSingle-writer rows: last-write-wins with a *server* clock. Multi-writer: field-level merge or a version vector. Deletions are tombstones, never hard deletes.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Outbox drained with an idempotency key, never regenerated on retry",
+          "src": "@Entity\ndata class OutboxRow(\n    @PrimaryKey val id: String,   // idempotency key, created once at write time\n    val seq: Long,                // client order; server applies in this order\n    val payload: String,\n    val pending: Boolean = true,\n    val failed: Boolean = false,\n)\n\nclass OutboxWorker(\n    private val outboxDao: OutboxDao,\n    private val api: SyncApi,\n) : CoroutineWorker() {\n\n    override suspend fun doWork(): Result {\n        for (row in outboxDao.pendingInOrder()) {\n            val outcome = runCatching { api.push(row.id, row.seq, row.payload) }\n            when {\n                outcome.isSuccess -> outboxDao.markSynced(row.id)\n                outcome.exceptionOrNull()?.isRetryable() == false -> outboxDao.markFailed(row.id)\n                else -> return Result.retry()   // backoff and re-enqueue\n            }\n        }\n        return Result.success()\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Concretely, what is the difference between an idempotency key and a client-generated primary key?",
+        "How long should the server retain idempotency-key state, and why does that window matter?",
+        "What breaks if outbox rows are applied out of order, and how do you prevent it?"
+      ],
+      "traps": [
+        "Confusing the idempotency key with the entity UUID — this is exactly what the interviewer checks.",
+        "Claiming at-least-once delivery without an idempotency key; retries will duplicate.",
+        "Hard-deleting a row during sync instead of tombstoning it."
+      ],
+      "refs": [
+        {
+          "title": "Build an offline-first app",
+          "url": "https://developer.android.com/topic/architecture/data-layer/offline-first",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "WorkManager basics",
+          "url": "https://developer.android.com/topic/libraries/architecture/workmanager",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0022",
+      "track": "architecture",
+      "topic": "Offline-first",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "caching",
+        "invalidation",
+        "data-layer"
+      ],
+      "q": "What gets cached in your app, for how long, and what invalidates it? Walk through policy, not just where the cache lives.",
+      "shortAnswer": [
+        "Cache at the layer that matches the data: an HTTP cache for raw responses, the database as the single source of truth, and in-memory only for hot, short-lived reads.",
+        "For user-generated data prefer write-through invalidation — a write updates the source of truth so readers re-emit — over a TTL, because a TTL can serve data you already have fresher.",
+        "Define staleness per data type: freshness windows for feeds, conditional revalidation for profiles, and never-cache for anything carrying auth or PII."
+      ],
+      "answer": "#### Pick the cache that matches the data\nThe **HTTP cache** (OkHttp, sized and on-disk) holds raw responses you are not re-shaping — static content, images. It honors `Cache-Control` and `ETag` and costs one line to enable. The **database is the real cache** for app data: the UI always reads from Room, and a refresh is a write into it. **In-memory** caches (`StateFlow` results, Coil's memory cache) are for hot, short-lived reads and die with the process.\n\n#### Invalidation policy\nFor user-generated data, **write-through** beats TTL: the write updates the row, Room's `Flow` re-emits, and every screen is correct immediately. TTL is the default only for data you cannot invalidate — remote feeds. When you do use a TTL, pair it with revalidation (`ETag` / `If-None-Match`) so an unchanged body is not redownloaded; a 304 is nearly free.\n\n#### The rules that prevent bugs\nInvalidate the specific query, or keep a version key per dataset — never nuke the whole cache. Never HTTP-cache responses carrying authorization headers or PII. Never read through to the network from the UI; that is a repository's job. Track `lastSyncedAt` so the UI can show 'updated 2 h ago' honestly.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Write-through with version-keyed invalidation",
+          "src": "class FeedRepository(\n    private val api: FeedApi,\n    private val dao: FeedDao,\n    private val version: DatasetVersion,\n) {\n    // The database is the source of truth; reads are always cached-and-correct\n    fun observe(): Flow<List<Post>> = dao.observeAll()\n\n    suspend fun refresh() {\n        val posts = api.fetchLatest()\n        dao.transaction {\n            dao.replaceAll(posts)\n            version.bump()          // dependent queries re-fetch\n        }\n    }\n\n    // Invalidation on write: local edit invalidates the read path immediately\n    suspend fun save(post: Post) {\n        dao.upsert(post)\n        version.invalidate(post.id)\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Why is a TTL the wrong invalidation for a note the user just edited on another device?",
+        "How does `ETag` revalidation differ from a TTL in what the user sees?",
+        "Where do you draw the line on what must never be HTTP-cached?"
+      ],
+      "traps": [
+        "Answering only 'OkHttp cache' — the question is about policy, not just the HTTP layer.",
+        "Proposing a blanket TTL for data the user mutates locally.",
+        "Caching authenticated responses and calling it a strategy."
+      ],
+      "refs": [
+        {
+          "title": "RFC 9111 — HTTP caching",
+          "url": "https://datatracker.ietf.org/doc/html/rfc9111",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Data layer — Android architecture guide",
+          "url": "https://developer.android.com/topic/architecture/data-layer",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0023",
+      "track": "architecture",
+      "topic": "Dependency injection",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "constructor-injection",
+        "service-locator",
+        "manual-di"
+      ],
+      "q": "Compare constructor injection with a service locator, and tell me why a global singleton isn't your dependency solution.",
+      "shortAnswer": [
+        "Constructor injection makes dependencies explicit constructor parameters, so the graph is visible and a test can pass fakes without touching the class.",
+        "A service locator is a global registry — `AppContainer.get<Analytics>()` — that callers reach for anywhere, hiding dependencies and making tests hit the same global.",
+        "Global singletons share the locator's problems plus more: hidden state, no per-test reset, and construction-order traps."
+      ],
+      "answer": "#### Constructor injection\nDependencies arrive as constructor parameters: `class FeedViewModel(val repo: FeedRepository)`. The caller builds the object, so a test passes a fake repository and production passes the real one — no change inside `FeedViewModel`. The dependency graph is literally readable in the constructors.\n\n#### Service locator\nA globally reachable registry: `FeedRepository = locator[FeedRepository::class]`, or a plain `object AppGraph`. Callers fetch on demand, anywhere, so nothing *tells* you a class depends on the repository until it calls the locator. Tests cannot avoid the global either, and the locator becomes the thing every test secretly depends on. It is convenient, and it is how dependency relationships quietly rot.\n\n#### Why not singletons\nA Kotlin `object` or a `by lazy` global is the same disease with less ceremony: hidden dependencies, state that outlives tests, no way to build two instances (two API configurations, two scopes), and initialization-order traps.\n\n#### What the interviewer wants\nConstructor injection as the default, with the **composition root** — the one place that builds the graph by hand, with no framework — doing all the wiring.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Constructor injection with a composition root, vs the locator",
+          "src": "// Constructor injection: the graph is visible in the constructor\nclass FeedViewModel(private val repo: FeedRepository, private val analytics: Analytics)\n\n// The composition root — the one place that wires the graph\nclass AppContainer(private val database: AppDatabase) {\n    val analytics: Analytics by lazy { Analytics() }\n    val repo: FeedRepository by lazy { FeedRepository(database.notesDao()) }\n    fun feedViewModel(): FeedViewModel = FeedViewModel(repo, analytics)\n}\n\n// Service locator anti-pattern: dependencies are fetched, not declared\nclass FeedViewModel {\n    fun load() = ServiceLocator.repo.fetchAll()   // hidden dependency\n}"
+        }
+      ],
+      "followUps": [
+        "Where is a service locator actually acceptable in a real app?",
+        "What does 'composition root' mean, and why must it be one place?",
+        "How is a hand-written container different from a service locator in practice?"
+      ],
+      "traps": [
+        "Defending service locators as 'DI with fewer imports'.",
+        "Not being able to name the composition root.",
+        "Calling a singleton 'fine' without acknowledging what it costs in tests."
+      ],
+      "refs": [
+        {
+          "title": "Dependency injection overview",
+          "url": "https://developer.android.com/training/dependency-injection",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Manual dependency injection",
+          "url": "https://developer.android.com/training/dependency-injection/manual",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0024",
+      "track": "architecture",
+      "topic": "Dependency injection",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "hilt",
+        "testing",
+        "compile-errors"
+      ],
+      "q": "What are the Hilt compile errors you actually hit, how do you fix them, and how do you replace a binding in a test?",
+      "shortAnswer": [
+        "The canonical error is `[Dagger/MissingBinding]` — a type cannot be provided; the fix is a missing `@Provides`/`@Binds`, a missing qualifier, or a class without an `@Inject` constructor.",
+        "Hilt also fails on unannotated entry points (no `@AndroidEntryPoint`), modules without `@InstallIn`, and `[Dagger/DuplicateBindings]` when two bindings claim the same key.",
+        "In tests, `@UninstallModules` plus `@TestInstallIn(replaces = ...)` swaps a real module for a fake, and `@BindValue` binds a double you constructed in the test."
+      ],
+      "answer": "#### The compile errors you will actually see\n- **`[Dagger/MissingBinding]`** — 'cannot be provided without an `@Provides`-annotated method'. Some type nobody binds is in the graph: add a `@Provides` or `@Binds`, or give the class's constructor `@Inject`. When the missing type takes arguments, chase them — the error names only the outer type.\n- **`[Dagger/DependencyCycle]`** — A needs B and B needs A. Break it by injecting `Provider<A>` or restructuring.\n- **`[Dagger/DuplicateBindings]`** — two bindings for the same type and qualifier. Fix with qualifiers or by dropping one.\n- A `@Module` without `@InstallIn` surfaces as bindings not found. Missing `@HiltAndroidApp` or `@AndroidEntryPoint` fails at build with a clear 'annotate the Application/component' message.\n\n#### Reaching the graph from Hilt-unowned code\nA `ContentProvider`, a `JobService` — anything Hilt cannot construct — gets an `@EntryPoint` interface, reached via `EntryPointAccessors.fromApplication(context, FooEntryPoint::class.java)`.\n\n#### Testing with replacement bindings\nSet `customTestRunner = HiltTestApplication`; `@UninstallModules(FooModule::class)` plus `@TestInstallIn(components = [...], replaces = [FooModule::class])` provides the fake, and `@BindValue` binds a double you built in the test. Remember `hiltRule.inject()` in `@Before`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "@EntryPoint for Hilt-unowned classes, and a replaced module in tests",
+          "src": "@EntryPoint\n@InstallIn(SingletonComponent::class)\ninterface StartupEntryPoint {\n    fun analytics(): Analytics\n}\n\nclass StartupProvider : ContentProvider() {\n    override fun onCreate(): Boolean {\n        val entryPoint = EntryPointAccessors.fromApplication(\n            context, StartupEntryPoint::class.java,\n        )\n        entryPoint.analytics().init()\n        return true\n    }\n}\n\n// --- tests ---\n@UninstallModules(NetworkModule::class)\n@HiltAndroidTest\nclass FeedViewModelTest {\n\n    @BindValue\n    @JvmField\n    val api: FeedApi = FakeFeedApi()   // replaces the real binding\n\n    @get:Rule\n    val hiltRule = HiltAndroidRule(this)\n\n    @Before\n    fun setUp() = hiltRule.inject()\n}"
+        },
+        {
+          "lang": "kotlin",
+          "caption": "Test module replacing a production module wholesale",
+          "src": "@TestInstallIn(\n    components = [SingletonComponent::class],\n    replaces = [NetworkModule::class],\n)\n@Module\nobject FakeNetworkModule {\n    @Provides\n    fun feedApi(): FeedApi = FakeFeedApi()\n}"
+        }
+      ],
+      "followUps": [
+        "What does `@AssistedInject` buy you that `SavedStateHandle` does not cover?",
+        "Why does Hilt catch errors at build time that Koin only finds at runtime?",
+        "How would you test a class whose binding lives in a scoped component?"
+      ],
+      "traps": [
+        "Quoting the error name from memory and being unable to trace a `MissingBinding` to its transitive cause.",
+        "Replacing a module with `@UninstallModules` but forgetting the `replaces =` that scopes it.",
+        "Not knowing `@EntryPoint` exists for `ContentProvider`-style classes."
+      ],
+      "refs": [
+        {
+          "title": "Dependency injection with Hilt",
+          "url": "https://developer.android.com/training/dependency-injection/hilt-android",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Hilt and testing",
+          "url": "https://developer.android.com/training/dependency-injection/hilt-testing",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0025",
+      "track": "architecture",
+      "topic": "Dependency injection",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "koin",
+        "hilt",
+        "manual-di"
+      ],
+      "q": "Koin, Hilt, or hand-rolled manual DI — how would you pick for a greenfield app, and what does the choice cost at team scale?",
+      "shortAnswer": [
+        "Hilt gives compile-time-verified graphs via KSP, at the cost of build time and Android-only scope — the right default for an Android-only team app.",
+        "Koin resolves at runtime from a Kotlin DSL, works across KMP, and its annotation + KSP path recovers most of the compile-time safety.",
+        "Manual DI is a container you write by hand — zero dependencies and fully explicit, but the wiring is unverified and repeats, so it caps out early."
+      ],
+      "answer": "#### Manual DI\nA hand-written `AppContainer` whose constructors wire the graph. Zero dependencies, everything visible, trivially testable. But nothing verifies the wiring — a forgotten argument is a runtime crash — and the plumbing grows with the app. Right for small apps and for libraries that should not force a framework on consumers.\n\n#### Hilt\nAnnotations plus KSP codegen: graph correctness, scoping, and cycle detection are verified at build time, and generated code is fast at startup. Costs: KSP build time, a Dagger-shaped learning curve, and it is Android-only — nothing shared with iOS or a backend.\n\n#### Koin\nA Kotlin DSL resolved at runtime; startup cost is small, and first-class KMP support makes it the usual pick for shared modules. The caveat is runtime failures — the annotation-based API (`@Factory`, `@KoinViewModel` processed by KSP) closes most of that gap, so on a KMP or time-constrained project Koin is defensible.\n\n#### The decision\nAndroid-only and safety-critical → Hilt. KMP, small team, or a shared feature layer → Koin (prefer annotations). A feature shipped inside other apps, or a prototype → manual. Whatever you pick, keep the composition root small and everything else constructor-injected, so a later migration is wiring, not a rewrite.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The same graph, hand-wired vs Koin DSL",
+          "src": "// Manual DI: the whole graph in one file\nclass AppContainer(private val db: AppDatabase) {\n    val noteRepo: NoteRepository by lazy { NoteRepository(NoteApi(), db.noteDao()) }\n    val observeNotes: ObserveNotes by lazy { ObserveNotes(noteRepo) }\n}\n\n// Koin: the same graph, declared in a module\nval appModule = module {\n    single { NoteApi() }\n    single { NoteRepository(get(), get()) }\n    factory { ObserveNotes(get()) }\n}\n\n// Hilt equivalent (Android-only):\n// @Module @InstallIn(SingletonComponent::class) object AppModule {\n//   @Provides fun api(): NoteApi = NoteApi()\n//   @Provides fun repo(api: NoteApi, dao: NoteDao): NoteRepository = NoteRepository(api, dao)\n// }"
+        }
+      ],
+      "followUps": [
+        "What runtime failure does Koin's annotation path specifically remove?",
+        "How would you migrate a codebase from Koin to Hilt module by module?",
+        "Where does manual DI genuinely beat both frameworks?"
+      ],
+      "traps": [
+        "Claiming Koin has no compile-time checks — its KSP path does.",
+        "Picking a framework by familiarity instead of by the KMP / build-time / team axis.",
+        "Ignoring that migration cost is a first-class criterion."
+      ],
+      "refs": [
+        {
+          "title": "Dependency injection with Hilt",
+          "url": "https://developer.android.com/training/dependency-injection/hilt-android",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Manual dependency injection",
+          "url": "https://developer.android.com/training/dependency-injection/manual",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0026",
+      "track": "architecture",
+      "topic": "Dependency injection",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "kmp",
+        "dependency-injection",
+        "expect-actual"
+      ],
+      "q": "You're building a shared KMP module for Android and iOS. How does dependency injection work across both platforms?",
+      "shortAnswer": [
+        "Hilt is Android-only, so common code either does constructor injection with per-platform composition roots, or uses a KMP-first container such as Koin.",
+        "Platform services — clock, settings, network — become common interfaces whose implementations each platform provides, via `expect`/`actual` factories or per-platform DI modules.",
+        "ViewModel creation stays per platform; the shared graph injects the use cases and repositories they need."
+      ],
+      "answer": "#### The constraint\nHilt's codegen is Android-only, so common Kotlin has three realistic options: **constructor injection with manual wiring**, a KMP-first container such as **Koin**, or a tiny hand-written container. All share one shape — the graph is built per platform at each platform's composition root, and common code never constructs its own dependencies.\n\n#### The platform seam\nAnything platform-specific — the clock, the file system, settings, the HTTP stack — is declared as a common interface, and each platform provides an implementation. `expect fun platformClock(): Clock` forces the binding: the Android `actual` returns a `SystemClock`, the iOS `actual` returns a `CFClock`. Register them in each platform's Koin module or its `AppContainer`, and common code depends only on the interface.\n\n#### What else is shared\nRoom and DataStore are multiplatform-ready, so the database and the source of truth can live in common code and register in the common graph — the platform layer supplies only the context or file handles. ViewModels stay platform-shaped: each platform constructs them (Compose Multiplatform's `viewModel {}` on Android, iOS building from the shared factory), with shared factories doing the wiring.\n\n#### The failure mode to avoid\nDon't `expect/actual` every class — that is duplicated code, not DI. Put behavior behind common interfaces and let the graph pick the implementation.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "One common interface, two platform implementations, one common graph",
+          "src": "// commonMain\nexpect fun platformClock(): Clock\n\ninterface Clock { fun now(): Instant }\n\nval commonModule = module {\n    single { platformClock() }\n    single { NoteRepository(get()) }   // Clock injected from the platform\n}\n\n// androidMain\nactual fun platformClock(): Clock = object : Clock {\n    override fun now(): Instant = Instant.ofEpochMilli(System.currentTimeMillis())\n}\n\n// iosMain\nactual fun platformClock(): Clock = object : Clock {\n    override fun now(): Instant = Instant.ofEpochSecond(NSDate().timeIntervalSince1970.toLong())\n}"
+        }
+      ],
+      "followUps": [
+        "Why can't Hilt run in common code?",
+        "When would you choose Koin over manual wiring in a KMP project?",
+        "How do you provide platform implementations without an `expect`/`actual` pair per class?"
+      ],
+      "traps": [
+        "Proposing Hilt for shared KMP code without noting it is Android-only.",
+        "Reaching for `expect`/`actual` per class instead of interface plus injected implementation.",
+        "Not knowing Room and DataStore are multiplatform-ready."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin Multiplatform docs",
+          "url": "https://kotlinlang.org/docs/multiplatform.html",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "KMP App Template",
+          "url": "https://github.com/Kotlin/KMP-App-Template",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0027",
+      "track": "architecture",
+      "topic": "Dependency injection",
+      "level": 4,
+      "type": "qa",
+      "tags": [
+        "multibindings",
+        "into-set",
+        "plugin-architecture"
+      ],
+      "q": "How do you model a plugin architecture — contributors added without touching core — using DI multibindings?",
+      "shortAnswer": [
+        "Multibindings let many bindings register under one key: `@IntoSet` collects contributors into a `Set`, and `@IntoMap` with a key annotation collects them into a `Map`.",
+        "Each plugin module adds its contributor with a single binding, so core injects `Set<Contributor>` and iterates — plugins are additive and compile-time registered.",
+        "`@IntoSet` gives no order, so carry an explicit `order` or a sortable key; test the host with a hand-built set and replace contributors via test modules."
+      ],
+      "answer": "#### The shape\nDefine a contract — `interface RatingStrategy { fun apply(candidate: Candidate): Double }`. Core depends only on that interface; each feature module registers an implementation with `@Provides @IntoSet`. Core injects `Set<RatingStrategy>` and iterates. Adding a plugin is one new binding in one module: no edit to core, no runtime registration, no reflection. That is the whole plugin architecture — discovery at compile time instead of runtime.\n\n#### Map multibindings\nWhen contributors are addressed by key, use `@IntoMap` with a `@MapKey` annotation — Hilt supports string, int, long, class, and enum keys — and inject `Map<FeatureKey, Contributor>`. Keyed access is how a host dispatches: `handlers[event.type]`.\n\n#### The subtleties\n- **Order**: `@IntoSet` makes no promise about iteration order. If order matters — grading contributors applied in sequence — carry `order: Int` and sort at consumption.\n- **Empty set**: an injected `Set<...>` defaults to empty, so core works with zero plugins; don't inject a nullable collection.\n- **Tests**: build the host with an explicit set, or replace one contributor with `@TestInstallIn(replaces = ...)`; `@BindValueIntoSet` binds a test double into a set.\n\n#### When it is overkill\nMultibindings pay off when plugins come from different teams or modules. For five fixed contributors, an explicit list in the composition root is clearer.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Set multibindings: plugin modules register, core consumes",
+          "src": "interface RatingStrategy {\n    fun order(): Int\n    fun apply(candidate: Candidate): Double\n}\n\n@Module\n@InstallIn(SingletonComponent::class)\nobject RatingModule {\n    @Provides @IntoSet\n    fun videoRating(): RatingStrategy = VideoRating()          // order() = 10\n\n    @Provides @IntoSet\n    fun engagementRating(): RatingStrategy = EngagementRating() // order() = 20\n}\n\n@HiltViewModel\nclass GradeViewModel @Inject constructor(\n    private val strategies: Set<RatingStrategy>,\n) : ViewModel() {\n    fun score(candidate: Candidate): Double =\n        strategies.sortedBy { it.order() }.sumOf { it.apply(candidate) }\n}\n\n// Keyed dispatch via @IntoMap + a custom @MapKey\n@MapKey\n@Retention(AnnotationRetention.BINARY)\nannotation class FeatureKey(val name: String)\n\nclass FeatureHost @Inject constructor(\n    private val handlers: Map<FeatureKey, FeatureHandler>,\n) {\n    fun dispatch(feature: String) = handlers[FeatureKey(feature)]?.handle() ?: Unit\n}"
+        }
+      ],
+      "followUps": [
+        "How do you enforce ordering when `@IntoSet` provides none?",
+        "What is the difference between `@IntoSet` and `@ElementsIntoSet`?",
+        "How would you test a host whose plugin set is assembled by DI?"
+      ],
+      "traps": [
+        "Assuming `Set` iteration order is meaningful — it is not.",
+        "Using multibindings to disguise a hard-coded list of five.",
+        "Not knowing a custom `@MapKey` annotation exists for keyed dispatch."
+      ],
+      "refs": [
+        {
+          "title": "Dependency injection with Hilt",
+          "url": "https://developer.android.com/training/dependency-injection/hilt-android",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.11"
+    }
+  ]
+}

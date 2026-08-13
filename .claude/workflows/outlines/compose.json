@@ -1,0 +1,638 @@
+{
+  "specs": [
+    {
+      "topic": "Compiler & internals",
+      "level": 1,
+      "type": "qa",
+      "q": "Why can a `@Composable` function only be called from another `@Composable` function?",
+      "angle": "The plugin threads a hidden `$composer` parameter through every composable call, so there must be a calling context — that is why you cannot call one from `onClick`, a plain lambda, a `suspend fun`, or a ViewModel. Name the bridges out (effect APIs, `rememberCoroutineScope`) and in (`setContent`, `ComposeView`), and that `@Composable () -> Unit` is a distinct type from `() -> Unit`."
+    },
+    {
+      "topic": "Compiler & internals",
+      "level": 4,
+      "type": "qa",
+      "q": "What does the Compose compiler plugin actually generate for a composable function?",
+      "angle": "Decode the real transform: the injected `$composer`, the `$changed` bitmask (3 bits per parameter — unknown / same / different / static), a `$default` mask, and the `startRestartGroup` / `if (!skipping) body else skipToGroupEnd()` / `endRestartGroup { recompose }` frame. The key insight is that the *caller* computes the callee's `$changed`, so skipping costs a bitmask test, not an equality walk."
+    },
+    {
+      "topic": "Compiler & internals",
+      "level": 4,
+      "type": "qa",
+      "q": "Why is the slot table a gap buffer, and when does that data structure hurt you?",
+      "angle": "A flat array of groups plus a movable gap: sequential insertion at the write cursor is O(1), but moving the gap costs O(distance), so churn far from the cursor is the expensive kind. Cover groups, anchors surviving relocation, `SlotReader`/`SlotWriter`, and that `movableContentOf` exists precisely to relocate a group (and its `remember`ed state) instead of discarding and rebuilding it."
+    },
+    {
+      "topic": "Compiler & internals",
+      "level": 4,
+      "type": "qa",
+      "q": "Trace one state write all the way to pixels. Who does what — Composer, Applier, Recomposer?",
+      "angle": "Write -> snapshot apply observer -> invalidate the recording `RecomposeScope`s -> `Recomposer` awaits `withFrameNanos` on `AndroidUiDispatcher`'s `MonotonicFrameClock` -> recomposition records a change list -> the `Applier` mutates the LayoutNode tree (insert/remove/move/up/down) -> measure/place/draw in the same Choreographer frame. Composition never touches the UI tree directly, and `Applier` being an interface is what lets Compose target LayoutNode, VectorNode, and Glance's RemoteViews."
+    },
+    {
+      "topic": "Recomposition model",
+      "level": 3,
+      "type": "qa",
+      "q": "You read a state value inside a `Column { }` content lambda and the entire enclosing screen re-runs. Why?",
+      "angle": "`Column`/`Row`/`Box` are inline, so their content lambda has no restart group of its own — the nearest enclosing restartable scope is the caller. Contrast a non-inline composable lambda parameter (its own scope), a composable that returns a value (never restartable), and show the fix: extract a small composable or take a `() -> T` lambda so the read lands in a tighter scope."
+    },
+    {
+      "topic": "Recomposition model",
+      "level": 3,
+      "type": "qa",
+      "q": "What is donut-hole skipping, and how do you engineer one on purpose?",
+      "angle": "The parent restarts but every child skips because its arguments are unchanged, so the cost collapses to the parent's own body — the 'hole' is wherever the changing state is read. Show building it deliberately with content slots and `() -> T` parameters, and what closes the hole: passing the changing value down as a parameter, a non-skippable child, or a `CompositionLocal` read high in the tree."
+    },
+    {
+      "topic": "Stability & skipping",
+      "level": 2,
+      "type": "qa",
+      "q": "Turn on the Compose compiler reports. What do you look at first?",
+      "angle": "The `composeCompiler { metricsDestination / reportsDestination }` DSL under AGP 9.3's built-in Kotlin support (no `kotlin.android` plugin), run against the release variant. Then read `composables.txt` (restartable / skippable / scheme columns) and `classes.txt` (`unstable class Foo { unstable val bar }`) and describe the loop: find the one offending field, fix it, re-run, diff the counts."
+    },
+    {
+      "topic": "Stability & skipping",
+      "level": 4,
+      "type": "qa",
+      "q": "A model class from our `:domain` module is reported unstable even though every property is a `val`. Why, and what are your options?",
+      "angle": "Stability is inferred at compile time and only for classes compiled by the Compose compiler; a pure-Kotlin module's class is treated as unstable because the inference never ran. State the exact contracts of `@Stable` (equals is consistent and property changes notify the composition) versus `@Immutable` (never changes after construction), then the `stabilityConfigurationFile` with wildcard entries — and what silently breaks when you list a type that genuinely mutates."
+    },
+    {
+      "topic": "Stability & skipping",
+      "level": 4,
+      "type": "qa",
+      "q": "Strong skipping is on and one screen stopped updating. Diagnose it.",
+      "angle": "With strong skipping, unstable parameters are compared with `===`, so an object mutated in place is the same reference, the call is skipped, and the UI goes stale — the exact bug that instance-equality buys performance with. Cover auto-remembered lambdas, `@NonSkippableComposable` / `@NonRestartableComposable` as escape hatches, and argue that copying to a new instance (or real immutability) is the fix rather than disabling skipping."
+    },
+    {
+      "topic": "Stability & skipping",
+      "level": 2,
+      "type": "qa",
+      "q": "`List<T>` is unstable. What do you actually do about it — and when is the right answer 'nothing'?",
+      "angle": "The options in cost order: leave it, wrap the holder in `@Immutable`, add the type to the stability config, or take a dependency on `kotlinx.collections.immutable` (`ImmutableList` / `persistentListOf`). The insight is the cost model — a re-executed composable is microseconds of function calls, not a redraw — so demand a compiler report plus a trace before adding a dependency to every module."
+    },
+    {
+      "topic": "Snapshot system",
+      "level": 4,
+      "type": "qa",
+      "q": "How does the snapshot system work under the hood?",
+      "angle": "MVCC: each `StateObject` holds a linked list of `StateRecord`s tagged with snapshot ids; a read walks to the newest record visible to the current snapshot; a write allocates or reuses a record; applying advances the global snapshot and notifies apply observers. Explain why this gives lock-free, internally consistent reads and why two threads can hold different values of the same state at the same instant."
+    },
+    {
+      "topic": "Snapshot system",
+      "level": 3,
+      "type": "qa",
+      "q": "What is snapshot isolation good for outside of recomposition?",
+      "angle": "`Snapshot.withMutableSnapshot { }` makes a multi-field update all-or-nothing so the UI never renders a half-applied state; nested snapshots let you compute speculatively and dispose instead of applying; `apply()` can return a failure when another snapshot changed the same object, and `mergeRecords` decides the outcome. Note that writing snapshot state from a background thread is legal and lands atomically at apply."
+    },
+    {
+      "topic": "Snapshot system",
+      "level": 3,
+      "type": "qa",
+      "q": "How does Compose know which composable read which piece of state?",
+      "angle": "A `readObserver` is installed around each `RecomposeScope` while it runs, recording every `StateObject` read; `Snapshot.registerApplyObserver` maps changed objects back to those scopes and invalidates them. The trap worth the whole item: reads that happen inside `remember { }`, inside a launched coroutine, or in a callback are outside any observer, so the UI silently goes stale — and `Snapshot.observe` is how you do this yourself outside composition."
+    },
+    {
+      "topic": "Snapshot system",
+      "level": 3,
+      "type": "qa",
+      "q": "When does `derivedStateOf` earn its keep, and when is it the wrong tool?",
+      "angle": "It pays off only when the inputs change far more often than the result: `listState.firstVisibleItemIndex > 0` changes twice across hundreds of scroll reads, so the button that shows 'scroll to top' recomposes twice instead of per frame. It is not a memoization cache — that is `remember(key)` — and on a cheap mapping it is a net loss (an extra state object plus dependency bookkeeping); the third option is deferring the read into a layout/draw lambda."
+    },
+    {
+      "topic": "State",
+      "level": 1,
+      "type": "qa",
+      "q": "What breaks if you write `var count = mutableStateOf(0)` inside a composable body?",
+      "angle": "The state object is recreated on every recomposition, so writes appear to do nothing and the value snaps back — `remember` is what gives it a slot in the slot table. Also cover the mirror bug (`remember { 0 }` with a plain Int never triggers recomposition) and the three declaration forms (`by`, destructured, `.value`)."
+    },
+    {
+      "topic": "State",
+      "level": 2,
+      "type": "qa",
+      "q": "How do `remember` keys work, and how are they different from effect keys?",
+      "angle": "Both compare with `equals` at the call site's slot, but the consequences differ: a changed `remember` key discards and recomputes a value, while a changed `LaunchedEffect` key cancels and relaunches a coroutine. Name the classic bug — keying on a freshly allocated object or lambda, which invalidates every composition — and when `remember` with no key is a stale-value leak."
+    },
+    {
+      "topic": "State",
+      "level": 2,
+      "type": "qa",
+      "q": "Write a custom `Saver` for a type that isn't Parcelable, and say where `rememberSaveable` still loses state.",
+      "angle": "Show a real `Saver(save = { … }, restore = { … })` plus `listSaver`/`mapSaver`, and the constraint that the saved form must be Bundle-able (with `@Parcelize` as the shortcut). Then the limits: the ~1 MB Binder budget, two saveables in one slot needing explicit `key`s, and subtrees that leave composition entirely needing `rememberSaveableStateHolder`."
+    },
+    {
+      "topic": "State",
+      "level": 1,
+      "type": "qa",
+      "q": "Where should a piece of state live — and what are the two ways hoisting goes wrong?",
+      "angle": "The rule is the lowest common ancestor that needs it, with a `value` + `onValueChange` stateless leaf. Too low: siblings can't coordinate and the state dies with the subtree. Too high: every keystroke restarts a large recomposition scope and the component stops being previewable/testable on its own — name both symptoms concretely."
+    },
+    {
+      "topic": "State",
+      "level": 3,
+      "type": "qa",
+      "q": "A `TextField` hoisted to a ViewModel drops characters and jumps the cursor. Explain and fix it.",
+      "angle": "The value -> event -> state -> recompose round trip crosses an async boundary (Flow, `stateIn`, a dispatcher hop), so fast typing outruns the loop and the field reverts to a stale value with a reset selection. The modern fix is `TextFieldState` with `BasicTextField`, which mutates the text buffer directly instead of round-tripping, plus `InputTransformation` for filtering and `OutputTransformation` for visual formatting."
+    },
+    {
+      "topic": "State",
+      "level": 2,
+      "type": "qa",
+      "q": "`collectAsStateWithLifecycle` vs `collectAsState` — what actually breaks with the wrong one?",
+      "angle": "`collectAsState` keeps collecting while the app is backgrounded, holding the upstream hot (location, sockets, DB queries) and burning battery; the lifecycle-aware version from `androidx.lifecycle.compose` stops at STOPPED and re-collects at STARTED. Pair it with `stateIn(scope, WhileSubscribed(5_000), initial)` and justify the 5 s number against rotation vs a real backgrounding."
+    },
+    {
+      "topic": "State",
+      "level": 3,
+      "type": "qa",
+      "q": "How are ViewModels scoped in a Compose app, and what changes under Navigation 3?",
+      "angle": "`viewModel()` resolves `LocalViewModelStoreOwner`, which in a single-Activity app is the Activity — so a 'screen' ViewModel quietly outlives its screen and keeps stale state. Contrast `NavBackStackEntry` scoping in Nav2 with Nav3's entry decorators (`rememberViewModelStoreNavEntryDecorator` and friends), how you deliberately share one instance across two entries, and what the `key` parameter is for."
+    },
+    {
+      "topic": "Side effects",
+      "level": 2,
+      "type": "qa",
+      "q": "Show me the ways effect keys go wrong.",
+      "angle": "Three concrete failures: `LaunchedEffect(Unit)` with a changing `userId` never refetches; keying on a lambda or a freshly allocated object cancels and relaunches every composition (a request storm); and an effect that must keep running while still seeing the newest callback needs `rememberUpdatedState`, not a new key. Keys compare with `equals`, and a restart means cancel-then-relaunch, not resume."
+    },
+    {
+      "topic": "Side effects",
+      "level": 3,
+      "type": "qa",
+      "q": "Bridge both directions: a callback API into `State`, and Compose state out into a `Flow`.",
+      "angle": "`produceState` is `remember { mutableStateOf(initial) }` + `LaunchedEffect`, with `awaitDispose { }` to unregister the listener when the composable leaves — and it is not lifecycle aware, only composition aware. `snapshotFlow { }` is the inverse: it must run inside a coroutine, is conflated and emits only distinct values, which makes it right for load-more triggers, debounced search, and scroll analytics."
+    },
+    {
+      "topic": "Side effects",
+      "level": 4,
+      "type": "qa",
+      "q": "When exactly does an effect run, and what happens to an effect in a composition that is thrown away?",
+      "angle": "`RememberObserver` is the mechanism: `onRemembered` fires after the composition is applied, `onForgotten` when the slot is removed, and `onAbandoned` when the composition never applies at all. That is why a discarded (optimistic) recomposition never starts your coroutine and never leaks the listener — walk the ordering against `SideEffect`, the Applier's change list, and measure/draw."
+    },
+    {
+      "topic": "CompositionLocal",
+      "level": 2,
+      "type": "qa",
+      "q": "`compositionLocalOf` vs `staticCompositionLocalOf` — and when is a CompositionLocal the wrong tool entirely?",
+      "angle": "Dynamic locals track reads and invalidate only the readers; static ones have no read tracking at all, so any change recomposes the provider's whole `content` lambda — which is why static is only for values that essentially never change. The 'wrong tool' argument: a local is an invisible parameter, so it breaks previews, complicates tests, and hides a real dependency that should have been passed or injected."
+    },
+    {
+      "topic": "CompositionLocal",
+      "level": 4,
+      "type": "qa",
+      "q": "My theme and typography vanish inside a `Dialog` / `ComposeView` / `AndroidView`. What is going on?",
+      "angle": "CompositionLocals flow down a composition, not a View hierarchy, so it depends on whether the boundary has a parent `CompositionContext`: `Dialog`/`Popup` and `SubcomposeLayout` inherit, but a `ComposeView` constructed in View code starts a brand-new root composition with only the defaults. The fix is `rememberCompositionContext()` plus `setParentCompositionContext`, and knowing that `LocalContext`/`LocalLifecycleOwner` also differ inside a dialog window."
+    },
+    {
+      "topic": "Modifiers",
+      "level": 1,
+      "type": "qa",
+      "q": "Why does the order of modifiers matter?",
+      "angle": "A chain is not a property bag — each element wraps the next, constraints flow left-to-right down the chain and the resulting size comes back right-to-left. Make it concrete with `padding().background()` vs `background().padding()`, and with `clickable` placement deciding the touch target and ripple bounds."
+    },
+    {
+      "topic": "Modifiers",
+      "level": 3,
+      "type": "qa",
+      "q": "What does a modifier chain cost, and why is `composed { }` treated as a smell?",
+      "angle": "`composed { }` runs a composable per element per usage: the modifier can never be hoisted or compared, it reallocates on every recomposition, and it blocks skipping of the composable using it. `Modifier.Node` replaced it with a cheap comparable element plus a long-lived node. Add the practical wins: hoist constant chains into a `val`, and watch chain length inside hot lazy-list items."
+    },
+    {
+      "topic": "Modifiers",
+      "level": 4,
+      "type": "qa",
+      "q": "Implement a node-backed modifier from scratch.",
+      "angle": "`ModifierNodeElement<T>` with `create`, `update`, `equals`/`hashCode` and `inspectableProperties`, wrapping a node that implements `DrawModifierNode` or `LayoutModifierNode`. Emphasise that `update` mutates the existing node and you must call `invalidateDraw()` / `invalidateMeasurement()` / `invalidateSemantics()` yourself, that `onAttach`/`onDetach` and the node's `coroutineScope` define its lifetime, that `DelegatingNode` composes behaviours — and that a missing `equals` makes `update` run on every composition."
+    },
+    {
+      "topic": "Phases & performance",
+      "level": 3,
+      "type": "qa",
+      "q": "How do you animate a property 120 times a second without recomposing anything?",
+      "angle": "Read the animated value inside a lambda modifier so the read is attributed to layout or draw instead of composition: `graphicsLayer { alpha = a() }`, `offset { IntOffset(...) }`, `drawBehind { }`. Explain that `graphicsLayer` maps to a RenderNode so translation/alpha/rotation just re-issue the display list, that `alpha < 1f` can force an offscreen layer (and `CompositingStrategy.ModulateAlpha` avoids it), and how to prove the win with recomposition counts."
+    },
+    {
+      "topic": "Custom layout",
+      "level": 2,
+      "type": "qa",
+      "q": "Explain `Constraints`. Why is my child with `Modifier.size(48.dp)` rendering at 200 dp?",
+      "angle": "Constraints carry min/max width and height down the tree. `size` sets a *preferred* size that the parent's constraints still clamp, `requiredSize` overrides them (and then reports the parent-imposed size while drawing outside its bounds), `fillMaxWidth` takes `maxWidth` — which is `Constraints.Infinity` inside a scrollable, which is exactly why `fillMaxHeight` inside a `LazyColumn` item misbehaves."
+    },
+    {
+      "topic": "Custom layout",
+      "level": 3,
+      "type": "qa",
+      "q": "Why does measuring a child twice throw, and what do intrinsics really cost?",
+      "angle": "The single-measure invariant is what keeps Compose layout O(n) instead of the exponential blow-up nested `LinearLayout` weights allowed; measuring the same `Measurable` twice in one pass throws at runtime. Intrinsics are the sanctioned second look — `IntrinsicSize.Min` for equal-height columns or a divider matching the tallest child — but each query walks the whole subtree, and lazy layouts do not support them at all."
+    },
+    {
+      "topic": "Custom layout",
+      "level": 4,
+      "type": "qa",
+      "q": "What does `SubcomposeLayout` actually cost, and when is `BoxWithConstraints` the wrong answer?",
+      "angle": "It defers composition into the layout phase, so that content cannot be prefetched by a lazy list, is not part of the parent's normal skipping path, and state read there is attributed to layout. `BoxWithConstraints` is a `SubcomposeLayout`, which makes it a real jank source inside a list item — the cheaper alternatives are `Modifier.layout { }`, `onSizeChanged` plus state (one frame late), or a plain `Layout` with intrinsics."
+    },
+    {
+      "topic": "Custom layout",
+      "level": 4,
+      "type": "qa",
+      "q": "How do `LookaheadScope` and shared-element transitions actually work?",
+      "angle": "Lookahead runs a pre-pass that measures and places the *final* layout, then the approach pass (`Modifier.approachLayout`) animates current values toward those targets, so a structural layout change becomes animatable without hardcoding coordinates. Then `SharedTransitionLayout` with `sharedElement`/`sharedBounds`, matching keys across an `AnimatedVisibilityScope`, clip and z-order pitfalls, and why a mismatched key silently animates nothing."
+    },
+    {
+      "topic": "Lists & performance",
+      "level": 1,
+      "type": "qa",
+      "q": "`LazyColumn` vs `Column(Modifier.verticalScroll())` — when is the lazy one the wrong choice?",
+      "angle": "Lazy composes only the visible window plus a reuse pool, so it wins for long or unbounded lists; for a short fixed screen it adds machinery and gives up simple `weight()` and intrinsic behaviour. Include the concrete gotcha that `LazyListScope` is not `@Composable`, so you cannot call composables directly in the DSL body — you must use `item { }` / `items()`."
+    },
+    {
+      "topic": "Lists & performance",
+      "level": 3,
+      "type": "qa",
+      "q": "How do item reuse and prefetch work inside a lazy layout?",
+      "angle": "Slots are recycled from a pool keyed by `contentType`; a reused slot keeps its node structure but drops its state, which is why `contentType` in a mixed feed turns an expensive rebuild into a cheap rebind. Then prefetch: one item composed ahead within the frame budget, nested prefetch for a `LazyRow` inside a `LazyColumn`, and why the first frames of a fast fling are where a heavy item or a missing baseline profile shows up."
+    },
+    {
+      "topic": "Lists & performance",
+      "level": 3,
+      "type": "qa",
+      "q": "Implement a collapsing toolbar with `NestedScrollConnection`.",
+      "angle": "Walk `onPreScroll` / `onPostScroll` / `onPreFling` / `onPostFling` and the consumption contract — you return the `Offset`/`Velocity` you consumed and the child gets the remainder, with sign conventions that trip people up. Keep the offset in a plain `Float` state read inside a `graphicsLayer`/`layout` lambda so the header never recomposes per frame, and explain why nesting two same-direction scrollables throws instead of silently misbehaving."
+    },
+    {
+      "topic": "Accessibility & interop",
+      "level": 3,
+      "type": "qa",
+      "q": "How does nested scroll work across the Compose/View boundary?",
+      "angle": "`rememberNestedScrollInteropConnection()` lets a Compose scrollable participate as a nested-scroll child of a `NestedScrollingParent3` View such as `CoordinatorLayout`/`AppBarLayout`; the reverse direction (a scrolling View inside a Compose scrollable) has no equivalent bridge and needs the View to enable nested scrolling itself. The diagnostic symptom is a toolbar that simply never collapses over a `ComposeView`."
+    },
+    {
+      "topic": "Lists & performance",
+      "level": 4,
+      "type": "qa",
+      "q": "When would you drop down to `LazyLayout`?",
+      "angle": "`LazyLayout` plus a `LazyLayoutItemProvider` is the engine under LazyColumn/LazyGrid/Pager; you reach for it when the virtualization rule is not a simple linear window — an infinite calendar, a timeline, a tiled canvas. Be honest about what you re-implement by hand: item keys and identity, saveable state per item, the prefetch policy, and item placement animations — which is usually the argument for composing existing lazy layouts instead."
+    },
+    {
+      "topic": "Text",
+      "level": 2,
+      "type": "qa",
+      "q": "Why `sp` for text and `dp` for everything else — and what changed with non-linear font scaling?",
+      "angle": "`sp` honours the user's font-size preference and `dp` does not, but since Android 14 the sp-to-px curve is non-linear, so you can no longer derive a dp from an sp by multiplying by `fontScale`. Cover the failure mode (fixed-height containers and `maxLines` clipping at 200%), converting through `LocalDensity` correctly, and testing at the largest scale plus display size."
+    },
+    {
+      "topic": "Text",
+      "level": 2,
+      "type": "qa",
+      "q": "How do you build styled text with links and inline icons?",
+      "angle": "`buildAnnotatedString` with `SpanStyle` for character ranges and `ParagraphStyle` for blocks, `LinkAnnotation.Url`/`LinkAnnotation.Clickable` for links that are actually focusable and announced by TalkBack (the modern replacement for `ClickableText` plus offset-mapping hacks), and `InlineTextContent` with a `Placeholder` for inline icons. Note that annotations are plain data you can assert on in tests."
+    },
+    {
+      "topic": "Text",
+      "level": 3,
+      "type": "qa",
+      "q": "Why is text usually the most expensive thing on your frame, and what do you do about it?",
+      "angle": "Text layout shapes glyphs, resolves fonts and breaks lines, and it dominates measure time in a list row. Cover async `FontFamily` resolution causing a visible reflow when the font lands (preload, or pick a fallback with matching metrics), `rememberTextMeasurer` + `drawText` when drawing text on a canvas, and that auto-sizing text binary-searches sizes — repeated measurement per frame."
+    },
+    {
+      "topic": "Animation",
+      "level": 2,
+      "type": "qa",
+      "q": "Why does gesture-driven motion need `Animatable` rather than `animate*AsState`?",
+      "angle": "`snapTo` while the finger is down, then `animateTo`/`animateDecay` with `initialVelocity` taken from a `VelocityTracker` so the fling continues at the user's speed — `animate*AsState` has no velocity handoff and no interruption control. Add that `Animatable`'s `MutatorMutex` guarantees a single owner by cancelling the previous animation, and name `splineBasedDecay`/`exponentialDecay` for natural fling deceleration."
+    },
+    {
+      "topic": "Animation",
+      "level": 3,
+      "type": "qa",
+      "q": "Why use `Transition`/`updateTransition` instead of several `animate*AsState` calls, and what is `SeekableTransitionState` for?",
+      "angle": "One clock and one target change keeps N properties in lockstep, gives per-property `transitionSpec`s, supports `createChildTransition`, and is what the Animation Inspector can introspect. `SeekableTransitionState` drives the same transition by fraction rather than time — exactly what predictive back and scrubbed/gesture-driven transitions need — and `MutableTransitionState` is how you animate on first composition."
+    },
+    {
+      "topic": "Gestures",
+      "level": 3,
+      "type": "qa",
+      "q": "Explain `pointerInput`: event passes, consumption, and the bug everyone hits.",
+      "angle": "`awaitPointerEventScope { awaitFirstDown(); … }` plus the ready-made detectors (`detectTapGestures`, `detectDragGesturesAfterLongPress`, `detectTransformGestures`). Every event travels Initial -> Main -> Final so ancestors can pre-intercept and children consume in Main via `change.consume()`. The bug: `pointerInput(Unit)` never restarts its coroutine, so the block captures stale values — the key parameter is what re-launches it."
+    },
+    {
+      "topic": "Gestures",
+      "level": 3,
+      "type": "qa",
+      "q": "Build swipe-to-dismiss with `AnchoredDraggable`.",
+      "angle": "`AnchoredDraggableState` with `DraggableAnchors`, a `positionalThreshold` and a `velocityThreshold`, plus a `decayAnimationSpec` for the fling, reading `requireOffset()` inside a `graphicsLayer`/`offset` lambda so the row never recomposes mid-drag. Say that it replaced `swipeable`, and how it cooperates with a parent list through `nestedScroll` so the gesture does not fight the scroll."
+    },
+    {
+      "topic": "Accessibility & interop",
+      "level": 3,
+      "type": "qa",
+      "q": "Touch interop: a Compose gesture inside a scrolling View, and a legacy View inside Compose.",
+      "angle": "`AndroidComposeView` receives `dispatchTouchEvent` like any other View, so an ancestor `ViewPager2`/`RecyclerView` can intercept the move stream and Compose never sees it — the fix is `requestDisallowInterceptTouchEvent` from inside the gesture. Going the other way, `pointerInteropFilter` hands raw `MotionEvent`s to a legacy child, and you must decide who consumes what."
+    },
+    {
+      "topic": "Navigation",
+      "level": 2,
+      "type": "qa",
+      "q": "Show me a Navigation 3 setup in code.",
+      "angle": "`rememberNavBackStack(HomeKey)` returning an observable list of `NavKey`s, `NavDisplay(backStack, onBack = { backStack.removeLastOrNull() }, entryProvider = entryProvider { entry<Detail> { … } })`, keys as `@Serializable` data classes so arguments are constructor parameters. Nav3 is 1.1.1 stable; call out that back-stack persistence across process death depends on those keys being serializable, and that navigating is just list mutation."
+    },
+    {
+      "topic": "Navigation",
+      "level": 3,
+      "type": "qa",
+      "q": "How does one Navigation 3 back stack render two panes at once?",
+      "angle": "A `SceneStrategy` inspects the back stack and decides which entries render together as a `Scene`: a list-detail strategy pulls the last two entries into two panes on an expanded window and falls back to one on compact, and back pops the detail rather than the whole scene. Cover entry `metadata` opting a destination into a pane, and that entries not currently displayed are still on the stack."
+    },
+    {
+      "topic": "Navigation",
+      "level": 3,
+      "type": "qa",
+      "q": "How do you implement predictive back in a Compose app?",
+      "angle": "`PredictiveBackHandler` / the `androidx.navigationevent` APIs give you a `Flow<BackEventCompat>` with progress 0..1 and the swipe edge, which you must collect and then either complete or handle cancellation in a `finally`. Drive that progress into a `SeekableTransitionState` for a real scrubbed animation, mention the manifest opt-in and current platform defaults, and why a plain `BackHandler` can only give you an instant pop."
+    },
+    {
+      "topic": "Adaptive layouts",
+      "level": 2,
+      "type": "qa",
+      "q": "What is `WindowSizeClass`, what are the breakpoints, and why not just check the screen size?",
+      "angle": "Compact < 600 dp, medium 600–840 dp, expanded >= 840 dp wide; heights compact < 480, medium 480–900, expanded >= 900 — obtained via `currentWindowAdaptiveInfo()`. The point is that it describes the *window*, so a split-screen or freeform app on a tablet is compact; branching on `Configuration.screenWidthDp`, resource buckets, or an `isTablet` boolean is how you get a broken multi-window layout."
+    },
+    {
+      "topic": "Adaptive layouts",
+      "level": 3,
+      "type": "qa",
+      "q": "Walk me through building an adaptive app: canonical layouts, pane scaffolds, foldables.",
+      "angle": "List-detail, supporting-pane and feed as the canonical layouts; `NavigationSuiteScaffold` swapping bottom bar / rail / drawer by size class; `ThreePaneScaffoldNavigator` owning its own pane back stack — and the conflict when both it and the app's navigation try to handle back. For foldables, `WindowInfoTracker.windowLayoutInfo` as a Flow of `FoldingFeature` with bounds, state and occlusion, used to split panes at the hinge and support tabletop posture."
+    },
+    {
+      "topic": "Theming & insets",
+      "level": 2,
+      "type": "qa",
+      "q": "How does Material 3 theming work, and what do you need to know about dynamic color?",
+      "angle": "`MaterialTheme` provides ColorScheme, Typography and Shapes through CompositionLocals, and the surface/`LocalContentColor` pairing is why `Text` picks a readable colour without being told. `dynamicLightColorScheme(context)` needs Android 12+, so a static fallback scheme is mandatory. Then the senior part: extending with your own semantic tokens via a companion CompositionLocal instead of forking M3, and contrast-checking custom colours."
+    },
+    {
+      "topic": "Theming & insets",
+      "level": 2,
+      "type": "qa",
+      "q": "Edge-to-edge and window insets — how do you avoid double padding?",
+      "angle": "`enableEdgeToEdge()` plus the platform now enforcing edge-to-edge for modern target SDKs; `WindowInsets.safeDrawing` / `systemBars` / `ime`. The mechanism to nail: `Modifier.windowInsetsPadding` *consumes* the inset for descendants while `padding(insets.asPaddingValues())` does not — that asymmetry is the double-padding bug. Add `Scaffold` contentPadding you must actually apply, and `consumeWindowInsets` so a list scrolls under the bar but its last item still clears it."
+    },
+    {
+      "topic": "Accessibility & interop",
+      "level": 3,
+      "type": "qa",
+      "q": "Explain the semantics tree: merged vs unmerged, custom actions, and `testTag`.",
+      "angle": "`mergeDescendants = true` collapses a subtree into a single announcement, which is why a test matcher finds nothing until it asks for the unmerged tree (`useUnmergedTree = true`) — the single most common Compose test confusion. Then `clearAndSetSemantics` to replace a subtree's description, `customActions` so TalkBack users can reach a swipe-only action, `onClick(label = …)`, `stateDescription`/`progressBarRangeInfo` for custom controls, and `testTagsAsResourceId` for UIAutomator."
+    },
+    {
+      "topic": "Accessibility & interop",
+      "level": 2,
+      "type": "qa",
+      "q": "`AndroidView`: what runs in `factory`, `update`, `onReset` and `onRelease`?",
+      "angle": "`factory` runs once per instance, `update` is a snapshot-observed block that re-runs only when state it reads changes (not on every recomposition), `onRelease` tears down, and `onReset` is what makes an `AndroidView` reusable inside a lazy list instead of being recreated. Add the real cost — two layout systems per row — and `AndroidViewBinding` for existing XML."
+    },
+    {
+      "topic": "Accessibility & interop",
+      "level": 3,
+      "type": "qa",
+      "q": "You're putting a `ComposeView` into an existing View screen. Which `ViewCompositionStrategy` and why?",
+      "angle": "The default `DisposeOnDetachedFromWindow` is wrong in a Fragment because the view is detached and reattached, so state dies or the composition outlives the view lifecycle — use `DisposeOnViewTreeLifecycleDestroyed`; for a RecyclerView item use `DisposeOnDetachedFromWindowOrReleasedFromPool`. Also: the host must supply `ViewTreeLifecycleOwner`/`SavedStateRegistryOwner` or composition crashes, and set the parent composition context to inherit CompositionLocals."
+    },
+    {
+      "topic": "Testing & tooling",
+      "level": 4,
+      "type": "qa",
+      "q": "A screen janks while scrolling. Which tool answers which question, and in what order?",
+      "angle": "Start with Macrobenchmark `FrameTimingMetric` on a release build (a debug build is 5–10x slower and will lie), then a Perfetto trace to decide whether frames are composition-, layout- or draw-bound. Layout Inspector recomposition/skip counts find the composable that keeps re-running; composition tracing (the `runtime-tracing` dependency) puts composable names inside the trace; the compiler report explains why it isn't skipping. Close with the ordered culprit list."
+    },
+    {
+      "topic": "Testing & tooling",
+      "level": 3,
+      "type": "qa",
+      "q": "Why do baseline profiles matter more for a Compose app than a View app?",
+      "angle": "Compose runs a lot of library code that would otherwise be interpreted and JIT'd on first run — the signature symptom is a first scroll that stutters and is smooth ever after. Cover generation with `BaselineProfileRule` and the `androidx.baselineprofile` plugin, including a startup profile, ART merging the profile at install/update, and proving the win by benchmarking `CompilationMode.None()` against `Partial()`."
+    },
+    {
+      "topic": "Testing & tooling",
+      "level": 3,
+      "type": "qa",
+      "q": "How does a Compose test synchronize, and why does `Thread.sleep` never belong in one?",
+      "angle": "The test rule drives and waits on the composition clock, so assertions already wait for idle. The nasty case: an infinite animation (shimmer, `rememberInfiniteTransition`) means the clock is never idle and the test hangs forever — fix with `mainClock.autoAdvance = false` plus `advanceTimeBy`. Then `waitUntil { fetchSemanticsNodes().isNotEmpty() }` for work Compose cannot see, `registerIdlingResource` for your own async, and `runComposeUiTest` as the multiplatform entry point."
+    },
+    {
+      "topic": "Testing & tooling",
+      "level": 1,
+      "type": "qa",
+      "q": "What does `@Preview` actually render, and why can't you preview a screen that takes a ViewModel?",
+      "angle": "Previews render composables in an environment with no real Activity, no ViewModelStore and no data layer, so `viewModel()`/`hiltViewModel()` cannot resolve — which is the practical argument for a stateless composable plus a thin stateful wrapper. Add `@PreviewParameter` for sample data and the multipreview annotations (`@PreviewLightDark`, `@PreviewFontScale`, `@PreviewScreenSizes`)."
+    },
+    {
+      "topic": "Testing & tooling",
+      "level": 2,
+      "type": "qa",
+      "q": "How do you screenshot-test a Compose UI across theme, font scale and locale?",
+      "angle": "Define the matrix that actually catches bugs — light/dark, 1.0 and 2.0 font scale, RTL, the longest translation, compact vs expanded width — and pin device config so CI is deterministic. Compare the Compose Preview screenshot-testing Gradle plugin with JVM tools like Roborazzi/Paparazzi (fast, no device, but not real device font rendering), and say what screenshot tests should not assert."
+    },
+    {
+      "topic": "Multiplatform & Glance",
+      "level": 2,
+      "type": "qa",
+      "q": "What actually differs when you move Compose UI to Compose Multiplatform?",
+      "angle": "The runtime, compiler and most of Foundation/Material are shared, while everything Android-specific is not: resources move to `compose.components.resources`, no `Context`/`AndroidView`/Activity result APIs, different back handling and font/insets stories, and iOS gets a `UIViewController` host with its own scroll and text-input behaviour. CMP 1.11.0 with iOS stable; the honest interview answer is which layers you share and where you still write per-platform code."
+    },
+    {
+      "topic": "Multiplatform & Glance",
+      "level": 2,
+      "type": "qa",
+      "q": "Glance looks like Compose — where does the illusion break?",
+      "angle": "Glance reuses the Compose runtime and compiler but its Applier emits `RemoteViews`, not LayoutNodes, so you get a restricted composable set, no arbitrary custom layouts or `Modifier.Node`, and no per-frame animation. State lives in `GlanceStateDefinition`/DataStore and updates go through `updateAppWidget`, interaction is limited to actions such as `actionRunCallback`/`actionStartActivity`, and the RemoteViews size and update-frequency limits still apply."
+    }
+  ],
+  "coverageNotes": "Read all three existing packs (11 items: cmp-0001..0011) before planning. Those are broad survey items (\"walk through the effect APIs\", \"how do you test Compose UI\", \"how do you choose an animation API\"); every one of the 64 specs below is deliberately a depth item that goes past what the survey item says, and I re-angled several to stay clear of near-duplicates:\n- cmp-0001 (recomposition/slot table) -> new items go to the actual compiler output ($changed bitmask), gap-buffer mechanics, Applier/Recomposer/frame clock, and the inline-vs-restartable scope rule, none of which cmp-0001 explains.\n- cmp-0002 (stability/strong skipping) -> new items are the compiler reports workflow, cross-module inference + stability config file, the `===` stale-UI failure, and the \"when to do nothing\" cost argument.\n- cmp-0003 (remember/saveable/ViewModel tiers) -> new items are remember-vs-effect keys, writing a Saver plus registry/keying limits, and the *where to hoist* decision with its two failure modes.\n- cmp-0004 (effect API catalogue) -> new items are effect-key failure modes, produceState/snapshotFlow mechanics, and RememberObserver/abandoned-composition timing. I deliberately dropped a planned \"DisposableEffect vs SideEffect\" item because cmp-0004 already covers it.\n- cmp-0005 (three phases) -> only one phases item survives, aimed squarely at graphicsLayer/RenderNode and animating without recomposition.\n- cmp-0006 (Nav3 concept) -> new items are the code-level API, scene strategies, and predictive back.\n- cmp-0007 (custom layout + Modifier.Node concept) -> new items are Constraints, the single-measure rule + intrinsic cost, SubcomposeLayout cost, lookahead/shared elements, and actually authoring a ModifierNodeElement.\n- cmp-0008 (testing survey) -> new items are clock/idling synchronization, the screenshot matrix, and @Preview.\n- cmp-0009 (key/contentType) -> new items are the reuse pool + prefetch internals and LazyLayout.\n- cmp-0010 (animation ladder) -> new items are Animatable/velocity/decay and Transition/SeekableTransitionState only.\n- cmp-0011 (a11y + interop survey) -> new items are merged/unmerged semantics, AndroidView callbacks, ViewCompositionStrategy choice, and touch/nested-scroll interop.\n\nLevel mix is exact: 6 x L1 (9.4%), 19 x L2 (29.7%), 26 x L3 (40.6%), 13 x L4 (20.3%). The L4s are all internals or trade-off items (compiler output, slot table, Applier/Recomposer, cross-module stability, strong-skipping failure, snapshot MVCC, effect timing/RememberObserver, CompositionLocal boundaries, node-backed modifiers, SubcomposeLayout cost, lookahead, LazyLayout, jank tooling ordering).\n\nOrdering is grouped for chunk coherence: internals -> recomposition -> stability -> snapshot -> state/ViewModel -> effects -> CompositionLocal -> modifiers/phases -> layout -> lists & scroll -> text -> animation -> gestures -> navigation -> adaptive -> theming/insets -> a11y & interop -> tooling/testing -> CMP/Glance. Two interop items (nested-scroll interop, touch interop) sit inside the scroll and gesture blocks rather than the interop block, because adjacency matters more than the topic label for chunking.\n\nTopics: 9 existing names reused (Recomposition model, Stability & skipping, State, Side effects, Phases & performance, Custom layout, Lists & performance, Animation, Navigation, Accessibility & interop, Testing & tooling). New topics only where genuinely new: Compiler & internals, Snapshot system, CompositionLocal, Modifiers, Text, Gestures, Adaptive layouts, Theming & insets, Multiplatform & Glance.\n\nVersion guidance for authors: the stack snapshot is binding — Compose BOM 2026.04.01 / core 1.11.0, Kotlin 2.4.0, AGP 9.3.0 with built-in Kotlin support (so the compiler-report item must use the `composeCompiler { }` DSL and must NOT mention the kotlin.android plugin), Navigation 3 1.1.1 stable, CMP 1.11.0, targetSdk 36 by 2026-08-31. Do not attribute a version number to Material 3 or to any API not in the snapshot; say \"current stable\" instead of inventing a number. Deliberate scope omissions to stay at 64: `movableContentOf` (folded into the slot-table item's angle), snapshot mutation policies (folded into the read-observation and derivedStateOf items), Pager, and Crossfade/infinite transitions (already in cmp-0010's ladder).",
+  "scope": [
+    "the compiler plugin, the injected $composer and $changed parameters, positional memoization and the slot table / gap buffer",
+    "Composer, Applier, Recomposer, and how recomposition scopes are chosen",
+    "donut-hole skipping",
+    "stability, @Stable/@Immutable, strong skipping and what it changed, stability inference across modules and the stability configuration file",
+    "State and the snapshot system, snapshot isolation, how reads are observed",
+    "remember vs rememberSaveable, custom Savers, keys and invalidation",
+    "derivedStateOf vs a plain calculation",
+    "the three phases and how lambda-taking modifiers skip recomposition",
+    "deferred reads and graphicsLayer",
+    "effect APIs — LaunchedEffect, DisposableEffect, SideEffect, rememberCoroutineScope, rememberUpdatedState, produceState, snapshotFlow — and choosing between them",
+    "effect keys",
+    "CompositionLocal static vs dynamic and when it is the wrong tool",
+    "state hoisting and stateless composables",
+    "ViewModel integration and collectAsStateWithLifecycle",
+    "modifier chain order semantics and cost",
+    "Modifier.Node, why composed{} is a performance smell, writing a node-backed modifier",
+    "custom layout with Layout, measure/place, intrinsics, why measuring a child twice throws, SubcomposeLayout cost",
+    "BoxWithConstraints",
+    "LazyColumn/LazyRow — key, contentType, item reuse, nested-scroll pitfalls, LazyLayout",
+    "nested scroll interop",
+    "text — font scaling, AnnotatedString, measurement cost",
+    "picking an animation API (animate*AsState, Animatable, updateTransition, AnimatedVisibility, AnimatedContent, Crossfade, infinite transitions) and animating without recomposing",
+    "gestures with pointerInput, drag and tap detectors, velocity, touch interop with Views",
+    "Navigation 3 (1.1.1) — back stack as observable state, NavDisplay, entry providers, scenes",
+    "adaptive layouts, WindowSizeClass, canonical layouts, foldables",
+    "Material 3 theming and dynamic color",
+    "edge-to-edge and window insets",
+    "accessibility semantics, mergeDescendants, custom actions, testTag",
+    "View interop in both directions (AndroidView, ComposeView, ViewCompositionStrategy) and its lifecycle traps",
+    "performance tooling — Layout Inspector recomposition counts, composition tracing, compiler metrics and reports, baseline profiles for Compose",
+    "common jank sources",
+    "Compose testing — semantics queries, synchronization without sleeping, waitUntil, screenshot tests across theme and font scale",
+    "Compose Multiplatform differences",
+    "Glance for widgets"
+  ],
+  "coverage": {
+  "the compiler plugin, the injected $composer and $changed parameters, positional memoization and the slot table / gap buffer": [
+    "cmp-0012",
+    "cmp-0013",
+    "cmp-0014",
+    "cmp-0001"
+  ],
+  "Composer, Applier, Recomposer, and how recomposition scopes are chosen": [
+    "cmp-0015",
+    "cmp-0001"
+  ],
+  "donut-hole skipping": [
+    "cmp-0017"
+  ],
+  "stability, @Stable/@Immutable, strong skipping and what it changed, stability inference across modules and the stability configuration file": [
+    "cmp-0018",
+    "cmp-0019",
+    "cmp-0020",
+    "cmp-0021",
+    "cmp-0002"
+  ],
+  "State and the snapshot system, snapshot isolation, how reads are observed": [
+    "cmp-0022",
+    "cmp-0023",
+    "cmp-0024"
+  ],
+  "remember vs rememberSaveable, custom Savers, keys and invalidation": [
+    "cmp-0027",
+    "cmp-0028",
+    "cmp-0003"
+  ],
+  "derivedStateOf vs a plain calculation": [
+    "cmp-0025"
+  ],
+  "the three phases and how lambda-taking modifiers skip recomposition": [
+    "cmp-0041",
+    "cmp-0005"
+  ],
+  "deferred reads and graphicsLayer": [
+    "cmp-0041"
+  ],
+  "effect APIs — LaunchedEffect, DisposableEffect, SideEffect, rememberCoroutineScope, rememberUpdatedState, produceState, snapshotFlow — and choosing between them": [
+    "cmp-0033",
+    "cmp-0034",
+    "cmp-0035",
+    "cmp-0004"
+  ],
+  "effect keys": [
+    "cmp-0027",
+    "cmp-0033"
+  ],
+  "CompositionLocal static vs dynamic and when it is the wrong tool": [
+    "cmp-0036",
+    "cmp-0037"
+  ],
+  "state hoisting and stateless composables": [
+    "cmp-0029",
+    "cmp-0030"
+  ],
+  "ViewModel integration and collectAsStateWithLifecycle": [
+    "cmp-0031",
+    "cmp-0032"
+  ],
+  "modifier chain order semantics and cost": [
+    "cmp-0038",
+    "cmp-0039"
+  ],
+  "Modifier.Node, why composed{} is a performance smell, writing a node-backed modifier": [
+    "cmp-0039",
+    "cmp-0040"
+  ],
+  "custom layout with Layout, measure/place, intrinsics, why measuring a child twice throws, SubcomposeLayout cost": [
+    "cmp-0042",
+    "cmp-0043",
+    "cmp-0044",
+    "cmp-0007"
+  ],
+  "BoxWithConstraints": [
+    "cmp-0044"
+  ],
+  "LazyColumn/LazyRow — key, contentType, item reuse, nested-scroll pitfalls, LazyLayout": [
+    "cmp-0046",
+    "cmp-0047",
+    "cmp-0050",
+    "cmp-0009"
+  ],
+  "nested scroll interop": [
+    "cmp-0048",
+    "cmp-0049"
+  ],
+  "text — font scaling, AnnotatedString, measurement cost": [
+    "cmp-0051",
+    "cmp-0052",
+    "cmp-0053"
+  ],
+  "picking an animation API (animate*AsState, Animatable, updateTransition, AnimatedVisibility, AnimatedContent, Crossfade, infinite transitions) and animating without recomposing": [
+    "cmp-0054",
+    "cmp-0055",
+    "cmp-0041",
+    "cmp-0010"
+  ],
+  "gestures with pointerInput, drag and tap detectors, velocity, touch interop with Views": [
+    "cmp-0056",
+    "cmp-0057",
+    "cmp-0058"
+  ],
+  "Navigation 3 (1.1.1) — back stack as observable state, NavDisplay, entry providers, scenes": [
+    "cmp-0059",
+    "cmp-0060",
+    "cmp-0006"
+  ],
+  "adaptive layouts, WindowSizeClass, canonical layouts, foldables": [
+    "cmp-0062",
+    "cmp-0063"
+  ],
+  "Material 3 theming and dynamic color": [
+    "cmp-0064"
+  ],
+  "edge-to-edge and window insets": [
+    "cmp-0065"
+  ],
+  "accessibility semantics, mergeDescendants, custom actions, testTag": [
+    "cmp-0066"
+  ],
+  "View interop in both directions (AndroidView, ComposeView, ViewCompositionStrategy) and its lifecycle traps": [
+    "cmp-0067",
+    "cmp-0068"
+  ],
+  "performance tooling — Layout Inspector recomposition counts, composition tracing, compiler metrics and reports, baseline profiles for Compose": [
+    "cmp-0018",
+    "cmp-0069",
+    "cmp-0070"
+  ],
+  "common jank sources": [
+    "cmp-0069",
+    "cmp-0053"
+  ],
+  "Compose testing — semantics queries, synchronization without sleeping, waitUntil, screenshot tests across theme and font scale": [
+    "cmp-0071",
+    "cmp-0073",
+    "cmp-0008"
+  ],
+  "Compose Multiplatform differences": [
+    "cmp-0074"
+  ],
+  "Glance for widgets": [
+    "cmp-0075"
+  ]
+}
+}

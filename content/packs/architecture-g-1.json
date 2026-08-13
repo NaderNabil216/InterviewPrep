@@ -1,0 +1,377 @@
+{
+  "id": "architecture-g-1",
+  "title": "Architecture & DI",
+  "track": "architecture",
+  "items": [
+    {
+      "id": "ar-0008",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 1,
+      "type": "qa",
+      "tags": ["udf", "state", "ui-layer"],
+      "q": "What is 'state' in a Compose app, and what does unidirectional data flow actually mean?",
+      "shortAnswer": [
+        "State is the data a screen renders at a moment — the result it shows, not the actions that change it.",
+        "Unidirectional data flow means state flows **down** from a single source of truth and events flow **up** back to that source; the UI never mutates state directly.",
+        "Because the UI is a pure function of state, the same state re-renders identically after rotation, recomposition, or restore — predictability is the whole point."
+      ],
+      "answer": "#### State is the render input\nState is the data a screen renders at a given moment: loaded items, the text in a field, the selected tab. The distinction that matters is between **state** (what is shown) and **events** (the actions that change it). Writing `count++` inside the composable that also renders `count` is exactly the coupling UDF exists to remove.\n\n#### The two directions\n- **State flows down.** One owner — a ViewModel, a repository, or a hoisted composable — produces an immutable snapshot, and `collectAsStateWithLifecycle()` turns it into something Compose can read. That owner is the **single source of truth**.\n- **Events flow up.** The UI calls `onIncrement`, `onTextChanged`, `onSelect`; only the owner may mutate state. A child composable that receives `count` and a callback cannot corrupt state it does not own.\n\n#### What it buys you\nThe screen is a pure function of state: rotate it, re-collect it, restore it from a process-death save, and it renders identically. Two places cannot disagree about the screen because only one place owns it. Testability follows — you assert on state, not on gestures.\n\nThat single-snapshot model is the foundation every other pattern in this track — MVVM, MVI, state holders — builds on.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The anti-pattern (UI owns and mutates state) vs UDF",
+          "src": "// Anti-pattern: the UI owns AND mutates its own state\n@Composable\nfun CounterAntiPattern() {\n    var count by remember { mutableStateOf(0) }\n    Button(onClick = { count++ }) { Text(\"$count\") }\n}\n\n// UDF: state is owned above the UI and flows down; events flow up\n@Composable\nfun Counter(count: Int, onIncrement: () -> Unit) {\n    Button(onClick = onIncrement) { Text(\"$count\") }\n}\n\n@Composable\nfun CounterScreen(viewModel: CounterViewModel) {\n    val count by viewModel.count.collectAsStateWithLifecycle()\n    Counter(count = count, onIncrement = viewModel::increment)\n}"
+        }
+      ],
+      "followUps": [
+        "Where is the single source of truth for state that exists only while a screen is visible?",
+        "How does rotation behave differently for a correct state owner versus an inline `remember`?",
+        "What breaks if a child composable mutates state it received as a parameter?"
+      ],
+      "traps": [
+        "Defining state as 'any variable' — the interviewer wants the render-input distinction, with events deliberately excluded.",
+        "Describing the flow but letting the UI mutate a `StateFlow` directly; it stops being unidirectional the moment that happens.",
+        "Anchoring the answer to one library (LiveData, Redux) instead of the principle it is an instance of."
+      ],
+      "refs": [
+        { "title": "Jetpack Compose architecture", "url": "https://developer.android.com/jetpack/compose/architecture", "checked": "2026-08-13" },
+        { "title": "UI layer — Android architecture guide", "url": "https://developer.android.com/topic/architecture/ui-layer", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0009",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 2,
+      "type": "qa",
+      "tags": ["state-holder", "viewmodel", "state-hoisting"],
+      "q": "When do you reach for a ViewModel versus a plain state holder class versus `remember { }`?",
+      "shortAnswer": [
+        "`remember { }` is for state that matters only while a composable is on screen — text fields, scroll, toggles — and it dies on rotation and is untestable in isolation.",
+        "A **plain state holder** class hoists UI state and events into something reusable and unit-testable; it survives recomposition but still dies with the composition.",
+        "A **ViewModel** is the state holder when state must survive configuration changes or process death, or when it needs DI-provided repositories — and it is overkill for a disposable counter."
+      ],
+      "answer": "#### The three holders\n- **`remember { }`** — state tied to a composition slot: text input, scroll position, an expand toggle. Correct for state nobody else needs and nothing must survive. Costs: gone on rotation, untestable in isolation, and the state and its logic sit inside the composable.\n- **Plain state holder** — a regular `@Stable` class owning UI state and events, remembered by the screen: `class TextFieldState { var text by mutableStateOf(\"\") }`. It can be hoisted and shared and tested as a pure class. It still dies when the composition leaves — it is not lifecycle-aware.\n- **ViewModel** — framework-managed: survives configuration changes, receives a `SavedStateHandle` that survives process death, and is the only holder that injects repositories (`@HiltViewModel`). Its cost is ceremony and a life tied to the navigation entry, not the composition.\n\n#### The decision rule\nLifetime first, dependencies second. Does the state need to survive rotation? Then `remember` is out. Does it need to survive process death, or does it need a repository? Then a ViewModel. If the answer to both is no, a plain state holder is the honest choice — and a ViewModel that only wraps one `mutableStateOf` is a sign you over-engineered.\n\nFollow the architecture guidance: keep the composable dumb, and prefer the simplest holder whose lifetime and dependencies match the state's.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The three holders, in ascending lifetime",
+          "src": "// 1. Local state — dies with the composition\n@Composable\nfun ExpandableSection() {\n    var expanded by remember { mutableStateOf(false) }\n    ExpandButton(expanded = expanded, onToggle = { expanded = !expanded })\n}\n\n// 2. Plain state holder — hoisted, testable, still tied to the composition\n@Stable\nclass SearchFieldState(initial: String = \"\") {\n    var query by mutableStateOf(initial)\n    fun onQueryChanged(next: String) { query = next }\n}\n\n// 3. ViewModel — survives rotation AND process death, injects repositories\n@HiltViewModel\nclass ProfileViewModel @Inject constructor(\n    private val repo: ProfileRepository,\n) : ViewModel() {\n    private val _state = MutableStateFlow(ProfileUiState())\n    val state: StateFlow<ProfileUiState> = _state.asStateFlow()\n\n    init {\n        viewModelScope.launch {\n            repo.observeProfile().collect { profile ->\n                _state.value = ProfileUiState(profile)\n            }\n        }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What does `rememberSaveable` add over `remember`, and where does it still lose state?",
+        "Can a plain state holder be shared between two screens, and what breaks?",
+        "When is a ViewModel wrong even though the state must survive rotation?"
+      ],
+      "traps": [
+        "Answering 'ViewModel, always' — the question is probing the holder hierarchy, and 'always' misses the lifetime-first ordering.",
+        "Not knowing the plain-state-holder option exists at all.",
+        "Confusing `rememberSaveable` (rotation) with ViewModel (process death plus DI access)."
+      ],
+      "refs": [
+        { "title": "State hoisting — Jetpack Compose", "url": "https://developer.android.com/develop/ui/compose/state-hoisting", "checked": "2026-08-13" },
+        { "title": "ViewModel overview", "url": "https://developer.android.com/topic/libraries/architecture/viewmodel", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0010",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 2,
+      "type": "qa",
+      "tags": ["ui-state", "sealed-class", "state-modeling"],
+      "q": "Loading, error, empty, and stale data: is one sealed state class the right model, or separate fields?",
+      "shortAnswer": [
+        "Model **full-screen states** — loading, error, empty, content — as a sealed class, because they are mutually exclusive and `when` becomes exhaustive.",
+        "Model **partial states** — content that is refreshing, or one region loading — as fields or flags alongside the sealed state, because they coexist with content by definition.",
+        "The two failure modes to name: stuffing every flag into the sealed class (state-space explosion) or using separate `StateFlow`s that drift out of sync."
+      ],
+      "answer": "#### Full-screen states: sealed class\nAt the screen level the shape is a union: loading, error, empty, or content. A sealed interface encodes that exactly — the compiler makes the variants mutually exclusive and `when` exhaustive. Adding a case breaks every `when` until it is handled, and `isLoading == true` together with `error != null` becomes unrepresentable because they share one slot.\n\n#### Partial state: fields alongside\nRefreshing is not a fourth screen state: \"stale content while a refresh runs\" must render content *and* a spinner. It belongs as a flag next to the sealed value — `screen` stays in `Content` while `isRefreshing` flips, and rotation plus repeated refreshes behave. The same applies to one region loading independently inside an otherwise loaded screen.\n\n#### The two anti-patterns\n1. One sealed class with every flag enumerated — the state space explodes into meaningless variants, and adding a toggle means adding a case.\n2. Three separate `StateFlow`s for loading, error, and content — they drift out of sync and you render an error on top of data.\n\nThe rule that answers the question: **sealed for mutually exclusive screen shapes, fields for what can coexist with content.** That split is exactly what the `when (screen)` plus `isRefreshing` example in the code does.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Sealed full-screen state + partial-state flag",
+          "src": "sealed interface ScreenState {\n    data object Loading : ScreenState\n    data class Error(val message: String, val retryable: Boolean = true) : ScreenState\n    data object Empty : ScreenState\n    data class Content(val items: ImmutableList<Item>) : ScreenState\n}\n\ndata class HomeUiState(\n    val screen: ScreenState = ScreenState.Loading,\n    val isRefreshing: Boolean = false,   // partial state coexists with Content\n)\n\n@Composable\nfun HomeScreen(viewModel: HomeViewModel) {\n    val state by viewModel.state.collectAsStateWithLifecycle()\n\n    when (val screen = state.screen) {\n        ScreenState.Loading -> LoadingSpinner()\n        is ScreenState.Error -> ErrorPane(\n            message = screen.message,\n            onRetry = viewModel::load,\n        )\n        ScreenState.Empty -> EmptyHint(onAction = viewModel::load)\n        is ScreenState.Content -> Column {\n            if (state.isRefreshing) RefreshIndicator()\n            ItemList(items = screen.items)\n        }\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Where does the flag live when a region of content loads independently — sealed per region, or fields?",
+        "Why not model Loading and Error as fields in a single data class?",
+        "How would you show per-item loading and error inside an already-loaded list?"
+      ],
+      "traps": [
+        "Stuffing every flag into one sealed class — the interviewer is testing the full-screen vs partial-state boundary.",
+        "Three independent `StateFlow`s for loading/error/content that can drift out of sync.",
+        "Not naming the rule: sealed for exclusive shapes, fields for coexistence with content."
+      ],
+      "refs": [
+        { "title": "UI layer — Android architecture guide", "url": "https://developer.android.com/topic/architecture/ui-layer", "checked": "2026-08-13" },
+        { "title": "Now in Android", "url": "https://github.com/android/nowinandroid", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0011",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 3,
+      "type": "qa",
+      "tags": ["state-explosion", "derived-state", "state-modeling"],
+      "q": "Your screen's state class keeps growing — dozens of flags, nested conditions. How do you stop the state explosion?",
+      "shortAnswer": [
+        "Kill **derived state** first — anything computable from other state is not state, it is a `derivedStateOf` or a mapping, and hand-syncing it is the biggest source of bloat.",
+        "Split by **what changes together**: give each independent region its own small sealed state or plain holder instead of one 40-field class.",
+        "Collapse boolean pairs into typed values — `showDialog` plus `dialogKind` becomes a single `DialogConfig?` where null means hidden — and keep the ViewModel a thin coordinator."
+      ],
+      "answer": "#### Diagnose before you prune\nA state class with twenty flags is a symptom. The diagnosis is two questions: *do these fields change together?* and *is this value derived?*\n\n#### The three levers\n1. **Derive, don't store.** `isButtonEnabled = a && b && c` is not state — it is a function of state. Store the inputs and compute the output with `derivedStateOf` or a mapping. That removes most of the \"kept in sync by hand\" bugs, which are what bloat screens over time.\n2. **Split by change-co-occurrence.** A screen with a header, a list, and a dialog has at least three independent lifecycles. Give each its own sealed state or plain holder and compose them. The `when` stays local and exhaustive, and refreshing the list does not touch the header's state.\n3. **Replace boolean pairs with values.** `showDialog` + `dialogKind` is a mini state machine written as two flags. One nullable `DialogConfig?` — non-null means visible, and the type itself says what is shown — is smaller and cannot represent \"dialog hidden but kind selected\".\n\n#### The rule to state\nState should be **as small as it can be and no smaller** — split by what changes together, not \"one state per screen.\" A ViewModel owning a 40-field `UiState` is a God ViewModel in training; per-region holders are the cure.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Flag soup before; derived + nested + single-slot state after",
+          "src": "// Before — flag soup: every combination is representable, most are meaningless\ndata class MessyUiState(\n    val showDialog: Boolean = false,\n    val dialogKind: Int = 0,\n    val isListLoading: Boolean = false,\n    val isHeaderLoading: Boolean = false,\n    val listError: String? = null,\n    val headerError: String? = null,\n    val canSubmit: Boolean = false,\n)\n\n// After — derived values, per-region state, one dialog slot\nsealed interface HeaderState {\n    data object Loading : HeaderState\n    data class Loaded(val title: String) : HeaderState\n}\n\nclass ListState {\n    var items by mutableStateOf<List<Item>>(emptyList())\n    var isRefreshing by mutableStateOf(false)\n    var error by mutableStateOf<String?>(null)\n}\n\ndata class CleanUiState(\n    val header: HeaderState = HeaderState.Loading,\n    val list: ListState = ListState(),\n    val dialog: DialogConfig? = null,   // null == hidden\n)\n\n// Derived, never stored in state\n@Composable\nfun SubmitButton(text: String, selected: Item?, isRefreshing: Boolean) {\n    val canSubmit by remember(text, selected, isRefreshing) {\n        derivedStateOf { text.isNotBlank() && selected != null && !isRefreshing }\n    }\n    Button(onClick = {}, enabled = canSubmit) { Text(\"Submit\") }\n}"
+        }
+      ],
+      "followUps": [
+        "What is the test for deciding two flags 'change together'?",
+        "Where does `derivedStateOf` become over-engineering instead of an ownership tool?",
+        "Is splitting per-region state the same as splitting the ViewModel?"
+      ],
+      "traps": [
+        "Proposing to 'add more fields with sensible defaults' — that is the disease, not the cure.",
+        "Not mentioning derived state, which is the single biggest real-world source of state bloat.",
+        "Treating `derivedStateOf` as a performance memoization tool instead of an ownership tool."
+      ],
+      "refs": [
+        { "title": "State and Jetpack Compose", "url": "https://developer.android.com/develop/ui/compose/state", "checked": "2026-08-13" },
+        { "title": "State hoisting — Jetpack Compose", "url": "https://developer.android.com/develop/ui/compose/state-hoisting", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0012",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 3,
+      "type": "qa",
+      "tags": ["mvvm", "mvi", "mvp"],
+      "q": "Compare MVVM, MVI, and MVP honestly — and when is each the wrong choice?",
+      "shortAnswer": [
+        "**MVVM** is the pragmatic default with the least ceremony, and it works while you enforce one immutable `StateFlow` — it is wrong the moment it becomes permission to skip state modeling.",
+        "**MVI** buys 'impossible states are unrepresentable' with a sealed intent and a pure reducer — it is wrong when the screen's logic is smaller than the ceremony protecting it.",
+        "**MVP** targets an imperative `View` interface that Compose erased, so it is wrong on modern Android — but naming *why* the interface is untyped UI state is what is scored."
+      ],
+      "answer": "#### Same loop, different bookkeeping\nAll three are the same loop — the UI renders state, events mutate it — differing in *where the mutation lives* and *how constrained the state is*.\n\n**MVVM** exposes state and public methods; constraints are advisory. It wins on ceremony — a form and a list need no sealed-intent tax. It loses the moment someone adds a second `StateFlow`, because two flows can now disagree about one screen. That is the wrong time to use it: when \"MVVM\" is used as a license to skip modeling state at all.\n\n**MVI** forces one immutable `State`, a sealed `Intent`, and a pure `(State, Action) -> State`. Every transition is an exhaustive `when`, and a state like `loading == true && error != null` cannot exist. It is wrong when the screen is nearly stateless — a settings toggle with one boolean — where the ceremony exceeds the logic it protects. It is also wrong at scale when intents proliferate and reducers become long `when` statements.\n\n**MVP** splits the View into an interface (`view.showItems(list)`, `view.showError(message)`) the Presenter calls. On Compose there is no imperative View to target, so the interface is dead code with a presenter-shaped shadow. The killer critique: that `View` interface *is* UI state, but as untyped imperative methods — so it has MVI's drift problem without MVI's exhaustiveness. Wrong today, still worth understanding for legacy reviews.\n\nName the trade-off, not the orthodoxy.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Why MVP's imperative View contract is replaced by state",
+          "src": "// MVP: the Presenter drives an imperative View contract\ninterface ItemListView {\n    fun showLoading()\n    fun showError(message: String)\n    fun showItems(items: List<Item>)\n    fun showEmpty()\n}\n\nclass ItemListPresenter(\n    private val view: ItemListView,\n    private val repo: ItemRepository,\n) {\n    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)\n\n    fun load() {\n        view.showLoading()\n        scope.launch {\n            runCatching { repo.load() }\n                .onSuccess { items -> if (items.isEmpty()) view.showEmpty() else view.showItems(items) }\n                .onFailure { view.showError(it.message ?: \"error\") }\n        }\n    }\n}\n\n// The Compose replacement: the View contract becomes DATA\nsealed interface ScreenState {\n    data object Loading : ScreenState\n    data class Error(val message: String) : ScreenState\n    data object Empty : ScreenState\n    data class Content(val items: List<Item>) : ScreenState\n}\n\n@Composable\nfun ItemListHost(state: ScreenState) = when (state) {\n    ScreenState.Loading -> LoadingSpinner()\n    is ScreenState.Error -> ErrorPane(state.message)\n    ScreenState.Empty -> EmptyHint()\n    is ScreenState.Content -> ItemList(state.items)\n}"
+        }
+      ],
+      "followUps": [
+        "If MVVM with one state object is 'MVI-lite', when does a full reducer actually pay for itself?",
+        "Is MVP dead, or did Compose just rename the View to State?",
+        "Where does intent/reducer machinery break down at scale?"
+      ],
+      "traps": [
+        "Reciting the textbook definitions with no 'when each is wrong' verdict — 'honestly' is the whole question.",
+        "Defending MVP because 'the View is just an interface' — the interface is precisely the problem on Compose.",
+        "Dismissing MVI ceremony without conceding its consistency guarantee, or vice versa."
+      ],
+      "refs": [
+        { "title": "Guide to app architecture", "url": "https://developer.android.com/topic/architecture", "checked": "2026-08-13" },
+        { "title": "Now in Android", "url": "https://github.com/android/nowinandroid", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0013",
+      "track": "architecture",
+      "topic": "Events & navigation",
+      "level": 3,
+      "type": "qa",
+      "tags": ["single-live-event", "events", "live-data"],
+      "q": "Dissect SingleLiveEvent: why is it an anti-pattern, and what exactly breaks when you use it?",
+      "shortAnswer": [
+        "It is a `LiveData` subclass that nulls its value after one observer consumes it — which silently drops events for every observer beyond the first.",
+        "Rotation between `setValue` and consumption destroys the consuming screen, the recreated one re-subscribes to the nulled value, and the snackbar or navigation simply vanishes.",
+        "The replacement models events as **state the UI acknowledges** — a `messages` list in the `UiState` — so rotation and process death cannot lose them."
+      ],
+      "answer": "#### What it is\n`SingleLiveEvent` is `MutableLiveData` with an `observe` override: when the current observer receives a value, the value resets to `null`. The intent — \"navigate once, snackbar once\" — sounds reasonable; the mechanism is \"this event exists only until the current observer consumes it,\" and that is the bug.\n\n#### What breaks\n- **One observer, silently.** Attach a second — a recreated layout, a logging subscriber, a test — and it gets nothing, with no error. Whether your screen works becomes an observer-count lottery.\n- **Rotation drops events.** The consuming activity is destroyed; the recreated one re-subscribes and reads `null`. The \"saved\" snackbar is gone before the user saw it. That is a correctness bug, not a polish issue.\n- **A race at the seam.** `postValue` from a background thread can set the value between consumption and reset, so a later observer double-receives.\n- **It papers over the wrong model.** The ViewModel emits ephemeral signals into the void and hopes a UI is listening *right now*. Events that depend on a live observer are events that rotation can destroy.\n\n#### The replacement, in one line\nMake the effect part of state: `messages: List<UserMessage>` in the `UiState`; the UI renders the first and calls `onMessageShown(id)`. Acknowledged state survives rotation, survives re-collection, and is testable by asserting on state. `SharedFlow(replay = 0)` is the pragmatic fallback if you accept what is dropped while the UI is stopped.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The widely-copied hack, with its failure modes annotated",
+          "src": "class SingleLiveEvent<T> : MutableLiveData<T>() {\n\n    override fun observe(owner: LifecycleOwner, observer: Observer<in T>) {\n        super.observe(owner) { value ->\n            if (hasActiveObservers()) {\n                value?.let { observer.onChanged(it) }\n                value = null   // consumed by ONE observer, gone for everyone else\n            }\n        }\n    }\n\n    // 1. A second observer (logger, second screen, test) silently never sees events.\n    // 2. Rotation between setValue and consumption: the recreated screen\n    //    re-subscribes to the already-nulled value — snackbar/navigation vanish.\n    // 3. postValue from a background thread can land after the reset, double-delivering.\n}"
+        }
+      ],
+      "followUps": [
+        "Why does `StateFlow<Event?>` have the same replay problem?",
+        "What do you lose with `SharedFlow(replay = 0)` when the UI is stopped?",
+        "How does the acknowledged-state version behave under process death?"
+      ],
+      "traps": [
+        "Recommending `SingleLiveEvent` as the answer — it is the exact thing being interrogated.",
+        "Explaining what it does without naming *why* it fails (observer-count lottery, rotation delivery).",
+        "Not knowing the acknowledged-state replacement is the accepted pattern."
+      ],
+      "refs": [
+        { "title": "UI events — Android architecture guide", "url": "https://developer.android.com/topic/architecture/ui-layer/events", "checked": "2026-08-13" },
+        { "title": "Guide to app architecture", "url": "https://developer.android.com/topic/architecture", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0014",
+      "track": "architecture",
+      "topic": "Events & navigation",
+      "level": 3,
+      "type": "qa",
+      "tags": ["navigation", "navigation3", "state-driven-nav"],
+      "q": "What does it mean to treat navigation as state, and how does Navigation 3 embody that?",
+      "shortAnswer": [
+        "Navigation as state means the back stack is **data** — a list of destinations you can read, transform, and persist — rather than an opaque imperative stack only the navigator can mutate.",
+        "Navigation 3 makes that literal: `NavBackStack` is a snapshot-backed list of `NavKey`s you push onto and pop from, and `rememberNavBackStack` restores it across configuration changes and process death.",
+        "The payoff: no double-navigation from replayed events, deep links and system back become the same list transforms, and the whole stack is testable as ordinary state."
+      ],
+      "answer": "#### The imperative model's bugs\nNavigation Compose (Nav2) hid the stack: `navigate(route)` pushed, `popBackStack()` popped, and the stack's contents were an implementation detail. Two failure modes followed — a replayed one-shot event navigates twice (the classic `LaunchedEffect` bug), and you cannot read the stack to drive UI decisions.\n\n#### The state model\nFlip it: the destinations you are on are a list your code can read and transform. Then the old bugs change character:\n- Double-navigation disappears, because navigation becomes an **acknowledged state mutation**, not a fire-and-forget call.\n- Deep links become *initializing the list* — the same mechanism as a normal launch.\n- System back and predictive back become *removing the last element*.\n- The whole thing is unit-testable: assert on the list after an action.\n\n#### Navigation 3 in 2026\nNavigation 3 (stable since 1.1.0, April 2026) makes this concrete. `rememberNavBackStack(startKey)` gives you a `NavBackStack` — a Compose-snapshot-backed `MutableList<NavKey>` that survives configuration changes and process death via serialized saved state. Composable destinations render from the stack's current entry, `add`/`remove` are push/pop, and Now in Android wraps it in a `Navigator` that treats every navigate call as a state transition. The architectural point: navigation stops being a special subsystem with its own lifecycle and becomes state you already know how to reason about.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Navigation 3: the back stack is a list you read, transform, and restore",
+          "src": "sealed interface NavKey\ndata object Home : NavKey\ndata class Detail(val id: String) : NavKey\n\n@Composable\nfun App() {\n    val navBackStack = rememberNavBackStack(Home)   // restored across process death\n\n    val currentKey: NavKey by derivedStateOf { navBackStack.last() }\n\n    fun pop() {\n        if (navBackStack.size > 1) navBackStack.removeAt(navBackStack.lastIndex)\n    }\n\n    when (currentKey) {\n        is Home -> HomeScreen(\n            onOpenItem = { id -> navBackStack.add(Detail(id)) },  // push == list add\n            onBack = ::pop,\n        )\n        is Detail -> DetailScreen(\n            id = (currentKey as Detail).id,\n            onBack = ::pop,\n        )\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "How does treating navigation as state fix the replayed-event double-navigation bug?",
+        "What does predictive back require from a state-driven back stack?",
+        "What should *not* be pushed onto the back stack as state?"
+      ],
+      "traps": [
+        "Describing Navigation 3's API without the *why* — the question targets the state model, not the function names.",
+        "Treating navigation as 'just another field in `UiState`' — it is a list with push/pop transitions, not a boolean.",
+        "Not connecting it to the one-shot-event problem, which is the architectural motivation."
+      ],
+      "refs": [
+        { "title": "Navigation 3 guide", "url": "https://developer.android.com/guide/navigation/navigation-3", "checked": "2026-08-13" },
+        { "title": "Jetpack Navigation 3 is stable", "url": "https://android-developers.googleblog.com/2025/11/jetpack-navigation-3-is-stable.html", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0015",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 2,
+      "type": "qa",
+      "tags": ["repository", "data-layer", "single-source-of-truth"],
+      "q": "What belongs in a repository, and what should never be in one?",
+      "shortAnswer": [
+        "A repository is the **domain-facing boundary of the data layer**: it exposes the app's data model, hides which sources exist, and owns the policy for how they combine.",
+        "In: source-of-truth `Flow`s, caching and staleness policy, source-switching and fallback, outbox/retry, and DTO-to-domain mapping.",
+        "Out: UI state, navigation, per-screen reshaping, and cross-repository business rules — those belong to state holders, the navigation layer, and use cases respectively."
+      ],
+      "answer": "#### The contract\nThe repository is the single interface the rest of the app sees for data. Callers get domain models and `Flow`s and never learn whether a value came from Room, Retrofit, or DataStore. That indirection is the point — sources swap without touching callers, and every screen shares one behavior.\n\n#### What belongs in it\n- **Single source of truth** — `observeItems(): Flow<List<Item>>` from the database, so the UI observes the cache.\n- **Caching and staleness policy** — when to refresh, how old is stale, when a network round-trip is triggered.\n- **Source orchestration** — merge cached and fresh, fall back to cache on network failure, combine several sources into one model.\n- **Offline mechanics** — outbox writes, idempotency keys, retry.\n- **DTO to domain mapping** — wire formats never leak upward.\n\n#### What does not\n- **UI state.** Loading flags, which screen asked, whether to show a spinner — that is the state holder's job.\n- **Navigation.** \"Fetch then go to detail\" is a ViewModel decision, not a data-layer one.\n- **Per-screen reshaping.** A list sorted and filtered for one screen belongs in that screen's layer; a repository method per UI whim is how the API degrades into sprawl.\n- **Cross-repository rules.** Combining account, subscription, and a feature flag is a use case's job — not one repository reaching into another.\n\nSay it as a rule: *the repository knows how data is stored and combined; it does not know who is asking or what they will do with it.*",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "A UI-agnostic repository vs one with UI concerns smuggled in",
+          "src": "// RIGHT: a coarse, UI-agnostic, source-of-truth boundary\nclass ItemsRepository(\n    private val local: ItemDao,\n    private val remote: ItemApi,\n) {\n    // The database is the source of truth the UI observes\n    fun observeItems(): Flow<List<Item>> =\n        local.observeAll().map { rows -> rows.map { it.toDomain() } }\n\n    // Refresh is a data-layer policy: fetch into Room, let the Flow re-emit\n    suspend fun refresh() {\n        val fresh = remote.fetchItems()\n        local.upsertAll(fresh.map { it.toEntity() })\n    }\n}\n\n// WRONG: UI concerns smuggled into the data boundary\nclass LeakyRepository(private val navController: NavController) {\n    var lastLoading: Boolean = false            // UI state in a repository\n\n    suspend fun loadAndNavigate(id: String) {   // navigation in a repository\n        lastLoading = false\n        navController.navigate(\"detail/$id\")    // NavController dependency\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "How is a repository different from a DAO, and why does the distinction survive?",
+        "Where do cross-repository rules go — repository-to-repository calls or a use case?",
+        "When does a repository become a God object, and how do you notice it?"
+      ],
+      "traps": [
+        "Answering 'a repository wraps the network' — that is a data source; source-combination policy is the repository's actual job.",
+        "Defending repository methods that return UI-shaped state.",
+        "Only listing what belongs in — half the question is what stays out."
+      ],
+      "refs": [
+        { "title": "Data layer — Android architecture guide", "url": "https://developer.android.com/topic/architecture/data-layer", "checked": "2026-08-13" },
+        { "title": "Guide to app architecture", "url": "https://developer.android.com/topic/architecture", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0016",
+      "track": "architecture",
+      "topic": "Offline-first",
+      "level": 3,
+      "type": "qa",
+      "tags": ["network-bound-resource", "single-source-of-truth", "offline-first"],
+      "q": "Explain NetworkBoundResource and why the pattern fell out of favor — what replaced it?",
+      "shortAnswer": [
+        "NetworkBoundResource was a generic cache-then-network loader: read the database, fetch in the background if stale, save the result, and re-emit — all wrapped in a `Resource<T>` status tag.",
+        "It fell out of favor because the script was **opaque and rigid** — one fixed policy, no paging, no real cancellation, and `Resource<T>` flattened every screen state into a single wrapper.",
+        "The replacement is Room as the single source of truth plus plain flows: the UI observes the database, refresh fetches and writes into it, and `RemoteMediator` handles pagination."
+      ],
+      "answer": "#### What it was\nFrom the architecture-components samples (GithubBrowserSample), `NetworkBoundResource` scripted the cache-then-network dance: `loadFromDb()`, decide `shouldFetch()`, `createCall()`, `saveCallResult()`, emitting Loading, cache Success, then network Success — all wrapped in a generic `Resource<T>` (status + data + message). One class gave every screen cache-first behavior for free.\n\n#### Why it aged out\n- **It was a magic box.** The policy was fixed: cache-first, then network, then re-emit. The moment a screen needed refresh-only-if-stale, deduplicated in-flight fetches, or a different failure mode, the generic wrapper was the wrong shape and you fought it.\n- **No structured lifecycle.** The network call ran in its own scope with no real cancellation; a config change or stopped collection mid-flight behaved badly.\n- **No paging, no partial writes, no cache-size policy.** Real screens needed all three.\n- **`Resource<T>` was the state-modeling anti-pattern** — one tagged wrapper flattened Loading/Success/Error instead of a proper sealed state.\n\n#### What replaced it\nThe single-source-of-truth flow: the UI observes **only the database**; `refresh()` is a separate, fallible operation that fetches and *writes into the database*; the Room `Flow` re-emits on its own. Paging 3's `RemoteMediator` keeps the same shape for paginated data — fetch pages *into* Room, `PagingSource` reads them back. The \"resource\" logic is now ordinary, readable repository code, and the UI state is a proper sealed model.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The generic that aged out vs the single-source-of-truth flow",
+          "src": "// The generic it replaced (conceptually):\n// NetworkBoundResource<T> ran loadFromDb() -> shouldFetch() -> createCall()\n// -> saveCallResult() and emitted Resource<T>(status, data, message) with a\n// fixed cache-first-then-network script, no paging, and no cancellation story.\n\n// What replaced it: Room is the single source of truth, refresh writes into it\nclass FeedRepository(\n    private val dao: FeedDao,\n    private val api: FeedApi,\n) {\n    // The UI observes ONLY this — the database\n    fun observeFeed(): Flow<List<FeedItem>> =\n        dao.observeAll().map { rows -> rows.map { it.toDomain() } }\n\n    // Refresh is a plain data-layer function: fetch, upsert, Flow re-emits.\n    // Readable, testable, and cancellable like any other suspend call.\n    suspend fun refresh() {\n        val fresh = api.fetch()\n        dao.upsertAll(fresh.map { it.toEntity() })\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "What does 'the database is the single source of truth' mean for a screen that is fully online?",
+        "How does `RemoteMediator`'s REFRESH versus APPEND distinction show up in the flow?",
+        "How do you show a network error when the cache already has content — and does the sealed-state model handle it?"
+      ],
+      "traps": [
+        "Recommending NetworkBoundResource as a pattern to adopt today — the question is explicitly about why it aged out.",
+        "Not knowing `Resource<T>` was itself the flattened-state anti-pattern.",
+        "Saying 'just cache everything' without a staleness or paging policy."
+      ],
+      "refs": [
+        { "title": "architecture-components-samples (GithubBrowserSample)", "url": "https://github.com/android/architecture-components-samples", "checked": "2026-08-13" },
+        { "title": "Paging 3 with RemoteMediator", "url": "https://developer.android.com/topic/libraries/architecture/paging/v3-network-db", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    },
+    {
+      "id": "ar-0017",
+      "track": "architecture",
+      "topic": "App architecture",
+      "level": 4,
+      "type": "qa",
+      "tags": ["savedstatehandle", "process-death", "state-restoration"],
+      "q": "How do you survive process death — what does SavedStateHandle actually save, and where are its limits?",
+      "shortAnswer": [
+        "`SavedStateHandle` is the ViewModel's slice of the saved-instance-state Bundle: it is written during `onSaveInstanceState` and rebuilt before the ViewModel's constructor runs, so `init` can act on restored ids.",
+        "It saves what fits a Bundle — primitives, `String`, `Parcelable`/`Serializable`, maps of those — and it is capped by the ~1MB transaction limit, so no caches, lists, or bitmaps.",
+        "The robust split: put the **key** (id, cursor, flags) in the handle and keep the **payload** in Room or DataStore; re-hydrate on restart, and still handle the 'no saved value' case."
+      ],
+      "answer": "#### The mechanism\nEach ViewModel can register state in the saved-instance-state Bundle, which the framework writes during `onSaveInstanceState`. After process death, `SavedStateHandle` is reconstructed from that Bundle **before** the ViewModel's constructor runs — via `createSavedStateHandle()` — so `init` can read a saved `profileId` and start loading immediately. Because the handle exists at construction time, the guarantee is real: restore-before-init, not restore-after.\n\n#### What it saves\nAnything a `Bundle` holds: primitives, `String`, enums, `Parcelable`/`Serializable`, and `ArrayList`/`Map` of those. It also survives configuration changes, and the `getStateFlow(\"key\")` API re-emits the restored value — so rotation restore and process-death restore share one code path.\n\n#### The limits\n- **The Bundle cap.** Everything crosses the transaction buffer, roughly 1MB; saving a cached list or a bitmap throws `TransactionTooLargeException`.\n- **No arbitrary objects.** A repository, a lambda, or a custom non-Parcelable class cannot be saved.\n- **Not a guarantee.** If the OS kills the process without a save — memory pressure while backgrounded, or the user swiping the app away — the handle starts empty. You must handle \"no saved value\".\n- **Not a cache.** Large data belongs in Room or DataStore; the handle holds the *key*, not the *payload*.\n\nThe interview-grade answer names both directions: what is guaranteed (constructor-time restore of Bundle-able values) and what is not (anything you should not have put there anyway).",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The key in SavedStateHandle, the payload re-hydrated from the data layer",
+          "src": "class ProfileViewModel(\n    private val savedStateHandle: SavedStateHandle,\n    private val repo: ProfileRepository,\n) : ViewModel() {\n\n    // Constructor-time guarantee: restored BEFORE init runs\n    private val profileId: String =\n        checkNotNull(savedStateHandle.get<String>(\"profileId\"))\n\n    private val _state = MutableStateFlow(ProfileUiState())\n    val state: StateFlow<ProfileUiState> = _state.asStateFlow()\n\n    init {\n        viewModelScope.launch {\n            // Re-hydrate from the source of truth, keyed by the saved id\n            repo.observeProfile(profileId).collect { profile ->\n                _state.value = ProfileUiState(profile)\n            }\n        }\n    }\n\n    // Small values live in the handle; large payloads stay in Room/DataStore\n    fun saveCursor(offset: Int) {\n        savedStateHandle[\"cursor\"] = offset\n    }\n}"
+        }
+      ],
+      "followUps": [
+        "Where does `rememberSaveable` fit — and where does it still lose state even when the process is saved?",
+        "What does `TransactionTooLargeException` look like in practice, and how do you find the culprit?",
+        "Why is the id, not the data, the right thing to save?"
+      ],
+      "traps": [
+        "Treating `SavedStateHandle` as a persistence cache — the interviewer is checking you know it is a Bundle, not a database.",
+        "Not knowing the constructor-time guarantee — the whole point is `init` runs before any observer exists.",
+        "Claiming you can save un-Parcelable objects and that it works."
+      ],
+      "refs": [
+        { "title": "Saved State module for ViewModel", "url": "https://developer.android.com/topic/libraries/architecture/viewmodel/viewmodel-savedstate", "checked": "2026-08-13" },
+        { "title": "Saved state module overview", "url": "https://developer.android.com/topic/libraries/architecture/saving-states", "checked": "2026-08-13" }
+      ],
+      "addedIn": "2026.08.11"
+    }
+  ]
+}

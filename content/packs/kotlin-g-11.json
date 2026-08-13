@@ -1,0 +1,221 @@
+{
+  "id": "kotlin-g-11",
+  "title": "Kotlin Language",
+  "track": "kotlin",
+  "items": [
+    {
+      "id": "kt-0064",
+      "track": "kotlin",
+      "topic": "Standard library",
+      "level": 1,
+      "type": "qa",
+      "tags": [
+        "ranges",
+        "progressions",
+        "rangeUntil"
+      ],
+      "q": "Ranges and progressions: `..`, `..<`, `downTo`, `step`, `in` — what do they cost?",
+      "shortAnswer": [
+        "`for (i in 0..<n)` compiles to a plain int loop with no allocation and no boxing, same for `downTo`/`step`.",
+        "`(0..n).map { }` materializes a list, and `..<` (rangeUntil) is the stable replacement for `until`.",
+        "Ranges double as membership checks — `c in 'a'..'z'`, `i in list.indices` — and `IntRange` becomes a real object once you store it."
+      ],
+      "answer": "Ranges and progressions are cheap when used right.\n\n#### Loops are free\n`for (i in 0..<n)` compiles down to a plain `int` loop — an index variable, a comparison, an increment: **no allocation, no boxing, no iterator**. The same for `downTo` and `step`: `for (i in 10 downTo 0 step 2)` is just arithmetic. In loop position the range is an *optimization target*, not a runtime object.\n\n#### Where the cost appears\nThe moment a range is used as a **collection**, it materializes: `(0..n).map { }` builds an actual `IntRange` object and then a list. Storing it also pays: `val r: IntRange = 0..10` is a real heap object. Use ranges for *iteration and membership* (free); avoid them as intermediate collections.\n\n#### The operators\n- `..` — inclusive: `0..n` covers `0` through `n`.\n- `..<` — **rangeUntil**, the stable replacement for `until`: `0..<n` covers `0` through `n-1`, aligned with `subList(0, n)`'s exclusive end.\n- `downTo` — descending.\n- `step` — stride; a `step` of `0` throws `IllegalArgumentException`.\n\n#### Membership checks\nRanges are predicates: `c in 'a'..'z'`, `i in list.indices`, `t in 0..100`. These compile to plain comparisons — no object unless you keep the range.\n\n#### Choosing the loop tool\n`list.indices` when you need indexes, `withIndex()` when you need index+value, `forEachIndexed` in operator land. Prefer `for (i in 0..<list.size)` over `for (i in 0..list.size - 1)` — the exclusive upper bound reads the intent.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Free loops, materialized ranges, and the operators",
+          "src": "for (i in 0..<n) { }              // int loop — no allocation, no boxing\nfor (i in 10 downTo 0 step 2) { }  // arithmetic, still free\n\nval r: IntRange = 0..10            // real object once stored\n(0..n).map { it * 2 }              // materializes IntRange + list\n\nval ok = c in 'a'..'z'             // membership — plain comparisons\nval inside = i in list.indices\n\nval upper = 0..<n                  // rangeUntil — stable until replacement\nval old = 0 until n                // still legal"
+        }
+      ],
+      "followUps": [
+        "When does an IntRange stop being free?",
+        "What is the difference between `..` and `..<`?",
+        "Why is a `step` of 0 rejected?"
+      ],
+      "traps": [
+        "Using `(0..n).map { }` expecting the loop's zero-cost — ranges materialize as collections.",
+        "Writing `0 until n` when the stabilized `..<` is the modern idiom."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Ranges and progressions",
+          "url": "https://kotlinlang.org/docs/ranges.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0065",
+      "track": "kotlin",
+      "topic": "Standard library",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "Duration",
+        "value-class",
+        "time"
+      ],
+      "q": "Why should an API take `kotlin.time.Duration` instead of `Long` milliseconds?",
+      "shortAnswer": [
+        "Duration is a value class packing magnitude and unit into one Long — no allocation, and no 'was that seconds or millis' bug with `30.seconds`, `timeout.inWholeMilliseconds`.",
+        "It gives ZERO/INFINITE, arithmetic, ISO-8601 parsing and `toComponents`.",
+        "For elapsed time use `TimeSource.Monotonic.markNow()`/`elapsedNow()` or `measureTime` — not `System.currentTimeMillis`, which can jump backwards."
+      ],
+      "answer": "`Duration` is the type-safe answer to the unit confusion that `Long` invites.\n\n#### Type safety vs `Long`\n`fun timeout(ms: Long)` reads as milliseconds — but callers pass `5000` meaning seconds as often as millis, and there is nothing to catch it. `Duration` makes the unit part of the value: `30.seconds`, `5.minutes`, `timeout.inWholeMilliseconds`. The compiler blocks `fun wait(t: Duration)` from ever receiving a bare number, and conversions are explicit (`inWholeSeconds`, `inWholeMicros`).\n\n#### Performance\nDuration is a **value class** packing magnitude and unit into one `Long` — no allocation in the unboxed case, comparable to a primitive. So the ergonomics cost nothing in hot paths (with the usual value-class boxing caveats).\n\n#### The rest of the API\n- **`ZERO`, `INFINITE`** sentinels.\n- **Arithmetic** — `timeout + 1.seconds`, `delay.dividedBy(2)`.\n- **Parsing** — `Duration.parse(\"PT30S\")` (ISO-8601), and `toString()` prints `30s`, `1.5m`.\n- **`toComponents`** — split into minutes/seconds/millis for display.\n\n#### Elapsed-time gotcha\n`System.currentTimeMillis()` measures the **wall clock**, which can jump backwards (NTP sync, clock changes) — bad for measuring. For elapsed time use `TimeSource.Monotonic.markNow()`, `.elapsedNow()`, or `measureTime { }`/`measureTimedValue { }`, which use a monotonic source. On Android, `SystemClock.elapsedRealtime()` is the monotonic equivalent — still wall-clock for timestamps that must be human-parseable.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Duration in signatures + monotonic timing",
+          "src": "fun wait(timeout: Duration) = ...      // callers write wait(30.seconds)\n// fun wait(ms: Long) = ...               // 30 could be seconds or millis\n\nval t = 30.seconds\nprintln(t.inWholeMilliseconds)   // 30000\nval parsed = Duration.parse(\"PT2M\")\n\nval (m, s) = t.toComponents { min, sec, _ -> min to sec }\n\n// elapsed time — never wall clock\nval start = TimeSource.Monotonic.markNow()\nval elapsed: Duration = start.elapsedNow()\n\nval time = measureTime { heavyWork() }\nprintln(\"took $time\")"
+        }
+      ],
+      "followUps": [
+        "Why is `currentTimeMillis` wrong for measuring elapsed time?",
+        "When does a Duration allocation occur?",
+        "How do you parse a Duration from a string?"
+      ],
+      "traps": [
+        "Using `System.currentTimeMillis()` for stopwatch timing — it can jump.",
+        "Passing bare `Long` timeouts across an API — that's the bug Duration exists to kill."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — kotlin.time (Duration)",
+          "url": "https://kotlinlang.org/api/latest/jvm/stdlib/kotlin.time/",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0066",
+      "track": "kotlin",
+      "topic": "Standard library",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "unsigned",
+        "UInt",
+        "value-class"
+      ],
+      "q": "When do unsigned types (`UInt`, `ULong`, `UByte`) earn their place?",
+      "shortAnswer": [
+        "They are value classes over the signed primitives, so arithmetic wraps and there is no JVM-level unsigned support: method names get mangled and Java callers see the signed underlying type.",
+        "`UIntArray`/`UByteArray` avoid boxing, but `List<UInt>` does not.",
+        "The honest uses are binary protocol/file-format parsing, hashing and C interop in KMP — otherwise `Int` with masking is clearer."
+      ],
+      "answer": "Kotlin's unsigned types are **value classes wrapping the signed primitives** — `UInt` wraps `Int`, `ULong` wraps `Long`. The JVM has no unsigned arithmetic, so everything happens through normal signed operations; arithmetic **wraps** (unsigned overflow is intended behaviour), not `BigInteger`-style.\n\n#### The costs\n- **Name mangling**: `UInt` parameters/returns get mangled method names (`-<init>` style) in the bytecode — Java callers see `int`-typed methods with odd names, and reflection/DI that matches names breaks.\n- **Java sees the signed type**: a `UInt` return is a plain `int` to Java, so `0xFFFFFFFFu` surfaces as `-1`.\n- **Boxing**: `UIntArray`/`UByteArray` are primitive-backed (no boxing per element), but `List<UInt>` boxes every element.\n\n#### When they earn their place\n1. **Binary protocols / file formats** — parsing or emitting bytes where you genuinely need full unsigned range (`0..0xFFFFFFFF`) without sign reinterpretation. `UByte` for byte-level work is the most common honest use.\n2. **Hashing** — unsigned multiply/add in hash functions where signed overflow would corrupt results.\n3. **C interop in KMP** — C types map cleanly onto the matching unsigned Kotlin type (`uint32_t` → `UInt`).\n\n#### When they don't\nFor general math, `Int` with explicit masking is clearer: `b.toInt() and 0xFF` reads 'treat this byte as unsigned' right where it happens, and avoids mangling/Java interop surprises. Reaching for `UInt` to 'avoid negative numbers' is usually a modeling mistake — the domain should be a bounded `Int` with validation.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "Parsing bytes with UByte vs Int-masking",
+          "src": "val b: UByte = 0xFFu           // value class over Byte\nval sum: UInt = 0xFFFFFFFFu + 1u  // wraps to 0u — intended\n\n// binary protocol: reassemble a uint32 little-endian\nfun readUInt32(bytes: UByteArray, i: Int): UInt =\n    (bytes[i+3].toUInt() shl 24) or\n    (bytes[i+2].toUInt() shl 16) or\n    (bytes[i+1].toUInt() shl 8) or bytes[i].toUInt()\n\n// the Int-masking alternative\nval v = b.toInt() and 0xFF\n\n// List<UInt> boxes; UIntArray does not\nval arr = uintArrayOf(1u, 2u)"
+        }
+      ],
+      "followUps": [
+        "Why does Java see a signed type under UInt?",
+        "What is the boxing difference between UIntArray and List<UInt>?",
+        "When is Int-masking clearer than UInt?"
+      ],
+      "traps": [
+        "Expecting JVM-level unsigned support — these are value-class wrappers with mangled names.",
+        "Using `List<UInt>` and claiming no boxing."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Unsigned integer types",
+          "url": "https://kotlinlang.org/docs/unsigned-integer-types.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0067",
+      "track": "kotlin",
+      "topic": "Standard library",
+      "level": 2,
+      "type": "qa",
+      "tags": [
+        "strings",
+        "buildString",
+        "templates"
+      ],
+      "q": "String handling: templates, `buildString`, raw strings — what is the performance and correctness story?",
+      "shortAnswer": [
+        "`\"$a$b\"` compiles to invokedynamic via StringConcatFactory on JVM 9+ targets rather than a StringBuilder chain, but `s += x` in a loop is still O(n²).",
+        "`trimIndent`/`trimMargin` execute at runtime on every evaluation — hoist them out of hot paths.",
+        "`split(\".\")` takes literal delimiters (the Regex overload is separate), `==` is `equals` so interning never matters, and `Char.code`/`digitToInt` replaced the removed `toInt()` conversions."
+      ],
+      "answer": "#### Template cost\nOn JVM 9+ targets, `\"$a$b\"` compiles to an `invokedynamic` via **StringConcatFactory** — a single efficient concat, not a StringBuilder chain. But the trap is in a **loop**: `s += x` still allocates a new string per iteration and copies everything — **O(n²)**. The fix is `buildString { append(...) }` (optionally with a capacity hint) or `joinToString`.\n\n#### Raw strings\n`\"\"\"...\"\"\"` is compile-time — but `trimIndent()`/`trimMargin()` run **at runtime on every evaluation**, so a raw string used in a hot path re-trims each time. Hoist the trimmed result into a `val` or a constant.\n\n#### Correctness details\n- **`split` takes literals, not regexes**: `\"a.b\".split(\".\")` splits on the *character* `.` — unlike Java, where `split` takes a regex. Kotlin's regex overload is a separate `split(Regex)` call. This is a silent-difference trap for Java migrants.\n- **`==` is content equality**: `\"abc\" == buildString { append(\"abc\") }` is `true`. Interning is never something you need to rely on or worry about.\n- **Removed `toInt()` conversions**: `'5'.toInt()` on a `Char` was removed in 1.5. Use `Char.code` (the numeric code) and `digitToInt()` (the digit value). `String.toInt()` remains (parsing), throwing `NumberFormatException`.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "O(n²) append vs buildString; literal split; digit conversions",
+          "src": "var s = \"\"\nrepeat(10_000) { s += it }       // O(n²) — each += copies everything\n\nval sb = buildString {              // O(n) with append\n    repeat(10_000) { append(it) }\n}\n\n// raw string re-trims at runtime each evaluation\nval raw = \"\"\"\n        |line\n    \"\"\".trimMargin()               // runs trimMargin() every access\n\n\"a.b\".split(\".\")       // [\"a\", \"b\"] — LITERAL delimiter\n\"a.b\".split(Regex(\"\\\\.\"))  // same, but explicit Regex\n\n'5'.digitToInt()       // 5\n'5'.code               // 53"
+        }
+      ],
+      "followUps": [
+        "Why is `s += x` in a loop quadratic?",
+        "What does `split` do by default, and how is that different from Java?",
+        "How do you convert a Char to its numeric value now?"
+      ],
+      "traps": [
+        "Assuming `split` treats its argument as a regex like Java.",
+        "Using `s += x` in a loop and wondering why it's slow."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Strings",
+          "url": "https://kotlinlang.org/docs/strings.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    },
+    {
+      "id": "kt-0068",
+      "track": "kotlin",
+      "topic": "Standard library",
+      "level": 3,
+      "type": "qa",
+      "tags": [
+        "stdlib",
+        "gotchas"
+      ],
+      "q": "Which stdlib calls are quiet bugs waiting to happen?",
+      "shortAnswer": [
+        "`emptyList<Double>().average()` is NaN while `sum()` is 0.0; `first()`/`last()`/`single()` throw NoSuchElementException where the OrNull variants don't, and `single()` also throws on two elements.",
+        "`toInt()` throws NumberFormatException versus `toIntOrNull()`; `MutableList<Int>.remove(1)` removes the VALUE while `removeAt(1)` removes the index.",
+        "Integer division truncates toward zero, `%` keeps the dividend's sign, `map.getValue(k)` throws while `map[k]` returns null, and `getOrPut` may run its lambda twice under concurrency."
+      ],
+      "answer": "The stdlib is ergonomic, but a handful of calls hide their failure modes.\n\n#### Aggregates on empty\n`emptyList<Double>().average()` returns **`NaN`** (0.0 / 0) — while `sum()` returns `0.0`. Guard empty collections before averaging, or use `averageOrNull()`.\n\n#### The `OrNull` family\n`first()`, `last()`, `single()` **throw `NoSuchElementException`** when nothing matches. `single()` throws *also* when **two or more** match — it asserts exactly one. The `OrNull` variants (`firstOrNull`...) return null instead. Choose based on whether absence is a bug (throw) or a case (OrNull).\n\n#### Parsing\n`\"abc\".toInt()` throws **`NumberFormatException`**; `toIntOrNull()` returns null. Same for `toDouble`/`toLong` and friends — the OrNull forms are the safe parsing entry point.\n\n#### The `remove` trap\n`MutableList<Int>.remove(1)` removes the *element with value* `1` (it calls `remove(Object)`), while `removeAt(1)` removes the element at *index* 1. Mixing them on an `Int` list is a classic off-by-nowhere.\n\n#### Arithmetic\nInteger division truncates **toward zero** (`-7 / 2 == -3`), and `%` keeps the **dividend's** sign (`-7 % 2 == -1`, not `1`).\n\n#### Maps\n`map.getValue(k)` throws when the key is absent; `map[k]` returns null. Under concurrency, `getOrPut` may **run its lambda twice** (it isn't atomic) — precompute or synchronize. And `use { }` closes the resource, attaching a close-failure as a **suppressed exception** on the original exception.",
+      "code": [
+        {
+          "lang": "kotlin",
+          "caption": "The quiet failures, each in one line",
+          "src": "emptyList<Double>().average()      // NaN\nemptyList<Double>().sum()           // 0.0\n\nlistOf(1,2).single { it > 5 }       // NoSuchElementException\nlistOf(1,2).singleOrNull { it > 5 }  // null\n\n\"abc\".toInt()                      // NumberFormatException\n\"abc\".toIntOrNull()                // null\n\nval m = mutableListOf(1, 2, 3)\nm.remove(2)      // removes value 2   -> [1, 3]\nm.removeAt(0)    // removes index 0    -> [3]\n\n-7 / 2     // -3 (toward zero)\n-7 % 2     // -1 (dividend's sign)\n\nmap.getValue(\"missing\")  // NoSuchElementException\nmap[\"missing\"]           // null"
+        }
+      ],
+      "followUps": [
+        "Why is average() on empty NaN but sum() 0.0?",
+        "When does single() throw, exactly?",
+        "Why might getOrPut run its lambda twice?"
+      ],
+      "traps": [
+        "Using `remove(value)` where `removeAt(index)` was meant on an Int list.",
+        "Expecting `%` to return a positive remainder for negative dividends."
+      ],
+      "refs": [
+        {
+          "title": "Kotlin docs — Collection aggregate operations",
+          "url": "https://kotlinlang.org/docs/collection-aggregate.html",
+          "checked": "2026-08-13"
+        }
+      ],
+      "addedIn": "2026.08.9"
+    }
+  ]
+}
