@@ -133,7 +133,7 @@ pack files — registering them and bumping the release is still `sync-manifest.
 ## Notes
 
 - `README.md` is user-facing and its item counts drift; `node tools/validate.mjs` prints the truth
-  (629 items across 89 registered packs as of manifest 2026.08.15).
+  (629 items across 89 registered packs as of manifest 2026.08.16).
 - `validate.mjs` carries 15 gates and a `--final` flag. Gates 4, 5, 8, 9, 12 are warnings during a
   staged expansion and errors at `--final`; gates 2, 3 and 14 are **release-scoped** — an error on
   an item the current release ships, a warning on untouched remediation backlog, an error at

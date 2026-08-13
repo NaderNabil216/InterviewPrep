@@ -67,12 +67,13 @@
       ],
       "refs": [
         {
-          "title": "Compose compiler metrics and reports",
-          "url": "https://developer.android.com/develop/ui/compose/performance/metrics",
+          "title": "Diagnose stability issues in Jetpack Compose — compiler metrics and reports",
+          "url": "https://developer.android.com/develop/ui/compose/performance/stability/diagnose",
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.16"
     },
     {
       "id": "cmp-0014",
@@ -244,12 +245,13 @@
       ],
       "refs": [
         {
-          "title": "Compose compiler metrics",
-          "url": "https://developer.android.com/develop/ui/compose/performance/metrics",
+          "title": "Diagnose stability issues in Jetpack Compose — compiler metrics",
+          "url": "https://developer.android.com/develop/ui/compose/performance/stability/diagnose",
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.16"
     },
     {
       "id": "cmp-0019",
