@@ -91,7 +91,7 @@ function renderDetail(el, snapshot, item) {
             <button class="btn" id="run-btn" ${runnable ? '' : 'disabled title="No runnable sample case for this problem"'}>▶ Run</button>
           </div>
           <textarea class="scratchpad code-editor" id="scratchpad" spellcheck="false">${scratch.code}</textarea>
-          <p class="faint" style="margin-top:8px;">Saved automatically to this browser. Press Run to execute it against the sample case on Judge0 CE.</p>
+          <p class="faint" style="margin-top:8px;">Saved automatically to this browser. Press Run to execute it against the sample case on the free Judge0 CE instance — no key or account needed.</p>
         </div>
         <div class="run-result run-result--idle" id="run-result">${runnable ? 'No run yet — press Run to execute your code on the sample case.' : 'This problem has no runnable sample case.'}</div>
         <div class="rate-row">
@@ -117,9 +117,9 @@ function renderDetail(el, snapshot, item) {
     toast(`Marked complete — next review ${res.due}.`);
   });
 
-  // ---- Run (Judge0 CE via RapidAPI, US6) ----
+  // ---- Run (Judge0 CE public instance, ce.judge0.com — no key, no account, no card) ----
   const runBtn = el.querySelector('#run-btn');
-  // FR-020a: one in-flight request per view instance, but pressing Run again while a request is
+  // One in-flight request per view instance, but pressing Run again while a request is
   // pending aborts the prior one cleanly (never both results racing to display). A fresh
   // AbortController + timeout per request, and a sequence guard so only the newest run can render.
   let controller = null;
@@ -134,31 +134,38 @@ function renderDetail(el, snapshot, item) {
 
   if (!runnable) return; // Run disabled from the markup; never issue a request
 
-  runBtn.addEventListener('click', () => {
-    const key = (Store.getSettings().judge0ApiKey || '').trim();
-    if (!key) {
-      setRun('needs-key', 'No code runner key. Add a Judge0 CE key in <a href="#/settings">Settings</a> to run code here.');
-      return;
+  function renderResult(res) {
+    runBtn.textContent = '▶ Run';
+    const statusId = res.status && res.status.id;
+    if (statusId === 3) {
+      setRun('output', `<pre class="run-output">${esc(res.stdout)}</pre>`);
+    } else if (statusId === 6) {
+      setRun('compile-error', `<strong>Compilation failed</strong><pre class="run-output">${esc(res.compile_output)}</pre>`);
+    } else if (statusId === 5 || statusId === 15) {
+      setRun('runtime-error', '<strong>Stopped for running too long</strong> — the sandbox capped the program at its time limit. Check for an infinite loop.');
+    } else {
+      const desc = (res.status && (res.status.id + ' ' + res.status.description)) || 'unknown error';
+      setRun('runtime-error', `<strong>Run failed — ${esc(desc)}</strong>${res.stderr ? `<pre class="run-output">${esc(res.stderr)}</pre>` : ''}`);
     }
-    // Supersede the prior in-flight request (FR-020a): its handlers are sequence-guarded below, so
-    // it can never paint over the new run's result.
+  }
+
+  runBtn.addEventListener('click', () => {
+    // Supersede the prior in-flight run: its handlers are sequence-guarded below, so it can never
+    // paint over the new run's result.
     const seq = ++runSeq;
     if (controller) controller.abort();
     const ctl = new AbortController();
     controller = ctl;
-    const timeout = setTimeout(() => ctl.abort(), 30000); // FR-020c: fixed 30s bound
-    // The key only ever travels in request headers — never into the DOM, the panel, or console.
+    const timeout = setTimeout(() => ctl.abort(), 30000); // fixed 30s bound
     const source = el.querySelector('#scratchpad').value
       + '\n\nfun main() {\n    val result = ' + item.sampleCall + '\n    println(result)\n}\n';
     setRun('pending', 'Running your code against the sample case…');
     runBtn.textContent = '▶ Running…';
-    fetch('https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true', {
+    // The public instance needs no auth: no key, no headers beyond content type. It reports
+    // enable_wait_result=false, so submit for a token and poll until the status is terminal.
+    fetch('https://ce.judge0.com/submissions?base64_encoded=false', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-RapidAPI-Key': key,
-        'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ language_id: 111, source_code: source }),
       signal: ctl.signal,
     })
@@ -166,28 +173,37 @@ function renderDetail(el, snapshot, item) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       })
-      .then(res => {
-        clearTimeout(timeout);
-        if (seq !== runSeq) return; // superseded by a newer run — the panel belongs to that one
-        runBtn.textContent = '▶ Run';
-        const statusId = res.status && res.status.id;
-        if (statusId === 3) {
-          setRun('output', `<pre class="run-output">${esc(res.stdout)}</pre>`);
-        } else if (statusId === 6) {
-          setRun('compile-error', `<strong>Compilation failed</strong><pre class="run-output">${esc(res.compile_output)}</pre>`);
-        } else {
-          const desc = (res.status && (res.status.id + ' ' + res.status.description)) || 'unknown error';
-          setRun('runtime-error', `<strong>Run failed — ${esc(desc)}</strong>${res.stderr ? `<pre class="run-output">${esc(res.stderr)}</pre>` : ''}`);
-        }
-      })
-      .catch(err => {
-        clearTimeout(timeout);
-        if (seq !== runSeq) return; // superseded — never render a stale failure
-        runBtn.textContent = '▶ Run';
-        setRun('needs-connection', err.name === 'AbortError'
-          ? 'The runner timed out after 30 seconds. Check your connection and try again.'
-          : "Couldn't reach the runner. Check your connection and try again.");
-      });
+      .then(res => poll(res.token))
+      .catch(err => fail(err));
+
+    function poll(token) {
+      return fetch('https://ce.judge0.com/submissions/' + token + '?base64_encoded=false', { signal: ctl.signal })
+        .then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(res => {
+          if (seq !== runSeq) return; // superseded — the panel belongs to that one
+          if (res.status && (res.status.id === 1 || res.status.id === 2)) {
+            return new Promise(resolve => setTimeout(resolve, 1500)).then(() => poll(token));
+          }
+          clearTimeout(timeout);
+          renderResult(res);
+        });
+    }
+
+    function fail(err) {
+      clearTimeout(timeout);
+      if (seq !== runSeq) return; // superseded — never render a stale failure
+      runBtn.textContent = '▶ Run';
+      if (err && /^HTTP 429/.test(err.message)) {
+        setRun('rate-limited', 'The runner is busy right now (its free tier is rate-limited). Wait a moment and press Run again.');
+      } else if (err && err.name === 'AbortError') {
+        setRun('needs-connection', 'The runner timed out after 30 seconds. Check your connection and try again.');
+      } else {
+        setRun('needs-connection', "Couldn't reach the runner. Check your connection and try again.");
+      }
+    }
   });
 }
 
