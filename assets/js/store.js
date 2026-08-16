@@ -245,12 +245,14 @@ export const Store = {
 
   // ---- settings ----
   getSettings() {
-    return read('settings', {
-      theme: 'auto',
-      interviewDate: null,
-      lastSeenChangelog: null,
-      judge0ApiKey: null, // RapidAPI Judge0 CE key — candidate-supplied, never shipped by the app
-    });
+    const stored = read('settings', null) || {};
+    // 003: the code runner no longer uses a credential (Judge0 CE public instance is keyless).
+    // Discard any stale RapidAPI key left by 002 — it must never be sent, exported, or kept.
+    if (stored.judge0ApiKey !== undefined) {
+      delete stored.judge0ApiKey;
+      write('settings', stored);
+    }
+    return { theme: 'auto', interviewDate: null, lastSeenChangelog: null, ...stored };
   },
   setSettings(s) { return write('settings', { ...this.getSettings(), ...s }); },
 

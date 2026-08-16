@@ -282,9 +282,9 @@ h3 { font-size: 15px; margin: 0 0 8px; }
 .run-result { border: 1px solid var(--border); border-left: 4px solid var(--border); background: var(--bg-card); border-radius: var(--radius-sm); padding: 14px; font-size: 13.5px; margin-top: 12px; }
 .run-result a { color: var(--accent); }
 .run-result--pending { border-left-color: var(--amber); }
-.run-result--needs-key, .run-result--not-runnable { border-left-color: var(--border); color: var(--muted); }
+.run-result--not-runnable { border-left-color: var(--border); color: var(--muted); }
 .run-result--compile-error, .run-result--runtime-error { border-left-color: var(--red); }
-.run-result--needs-connection { border-left-color: var(--amber); }
+.run-result--needs-connection, .run-result--rate-limited { border-left-color: var(--amber); }
 .run-result--output { border-left-color: var(--accent); }
 .run-output { background: #0a0d12; color: #d4d8de; border-radius: var(--radius-sm); padding: 12px; margin-top: 10px; font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
 :root[data-theme="light"] .run-output { background: #0d1117; }
