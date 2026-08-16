@@ -19,6 +19,11 @@ export const App = {
   snapshot: null,
   pendingDiff: null,
   sessionActive: false,
+  // Holds the manifest while the cold-cache content phase still owes us a library. The shell
+  // snapshot borrows the disk manifest's version, so checkForUpdates() short-circuits on the
+  // version compare and would never notice that `items` is still empty — without this, one failed
+  // pack fetch on first boot strands the app on "Loading your library…" permanently.
+  contentPhasePending: null,
 };
 
 const routes = {
@@ -221,6 +226,9 @@ function initSearch() {
 // fetch failure abandons the attempt with the stored snapshot untouched, no tick migration, no
 // persist, and no toast; the device keeps working and retries at the next natural trigger.
 async function checkAndHoldDiff() {
+  // A first boot whose content phase failed has no library at all, and the version compare below
+  // cannot detect that. Finish the boot before considering any update.
+  if (App.contentPhasePending) { await runContentPhase(); return; }
   try {
     const diff = await checkForUpdates(App.snapshot);
     if (diff && diff.hasUpdates) {
@@ -229,6 +237,31 @@ async function checkAndHoldDiff() {
     }
   } catch (e) {
     // Offline, or a partial pack fetch rejected — stay quiet; nothing was mutated.
+  }
+}
+
+// Boot phase 2, retryable. On success the full snapshot replaces the shell placeholder and the
+// mounted view re-renders in place (no hash change occurs, so render() is called explicitly). On
+// failure the manifest stays parked in App.contentPhasePending so the next natural trigger —
+// focus, visibilitychange, or reconnecting — tries again; the candidate keeps seeing the loading
+// placeholders rather than an error, exactly as a slow first load looks.
+let contentPhaseInFlight = false;
+async function runContentPhase() {
+  const manifest = App.contentPhasePending;
+  // focus/visibilitychange can fire repeatedly while 89 pack fetches are still outstanding; one
+  // attempt at a time is enough.
+  if (!manifest || contentPhaseInFlight) return;
+  contentPhaseInFlight = true;
+  try {
+    const snapshot = await bootContent(manifest, raiseStorageBanner);
+    App.contentPhasePending = null;
+    App.snapshot = snapshot;
+    buildIndex(snapshot.items);
+    render();
+  } catch (e) {
+    console.error('content phase failed; will retry on the next focus/online trigger', e);
+  } finally {
+    contentPhaseInFlight = false;
   }
 }
 
@@ -323,23 +356,15 @@ async function main() {
   render();
   hideBootStatus();
 
+  // Phase 2 (content): cold cache only. Parked before the sync is wired so a retry, not a version
+  // check, is what the triggers run while the library is still missing.
+  App.contentPhasePending = manifest;
+
   // Automatic sync (FR-010): check once after the shell-phase render — never blocking first paint —
   // and on every later focus/visibilitychange/online trigger (wired in initAutoSync).
   const syncTrigger = initAutoSync();
-  syncTrigger();
 
-  // Phase 2 (content): cold cache only. Fetch everything in the background; when it resolves, swap
-  // the full snapshot in and re-render the currently-mounted view in place (no hash change occurs,
-  // so render() must be called explicitly here).
-  if (manifest) {
-    bootContent(manifest, raiseStorageBanner).then(snapshot => {
-      App.snapshot = snapshot;
-      buildIndex(snapshot.items);
-      render();
-    }).catch(e => {
-      console.error('content phase failed; staying on the shell snapshot', e);
-    });
-  }
+  if (manifest) runContentPhase(); else syncTrigger();
 }
 
 main();
