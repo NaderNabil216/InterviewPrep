@@ -1,0 +1,4 @@
+3-copy: 1,207,286 chars  ->  629 items ~ 8,165,407
+1-copy:   413,311 chars  ->  629 items ~ 2,795,405
+qa n=64  in 120-250: 18  >250: 46  >350: 7  <80: 0
+items with no refs: 24

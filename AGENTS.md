@@ -1,8 +1,9 @@
 # AGENTS.md
 
 Offline-capable Android interview study site. Vanilla HTML/CSS/ES modules + JSON content packs.
-**No build step, no npm, no package.json, no framework, no test suite, and this directory is not a
-git repo** (no git commands). Node is used only for the CLI tools under `tools/`.
+**No build step, no npm, no package.json, no framework, no test suite.** Node is used only for the
+CLI tools under `tools/`. It is a git repository — work on a branch off `main`, never commit to
+`main` directly.
 
 Two barely-overlapping kinds of work:
 1. **App code** — `index.html`, `assets/js/**`, `assets/css/app.css`
@@ -95,6 +96,8 @@ Shared modules: `store.js` (persistence), `content.js` (fetch/diff/merge), `srs.
   (629 items across 89 registered packs as of manifest 2026.08.17).
 - `validate.mjs` has 14 gates and a `--final` flag: several gates (per-track counts, difficulty
   mix, ref-host allowlist, near-duplicates) warn during a staged expansion and error at `--final`.
-- `InterviewPrep/` (nested subdirectory of the same name) is an unused Spec Kit scaffold — ignore it
-  unless explicitly asked about Spec Kit.
+- `InterviewPrep/` (nested subdirectory of the same name) is a Spec Kit scaffold; its tooling is
+  untracked — ignore it unless explicitly asked about Spec Kit. **`InterviewPrep/specs/` is tracked**
+  and holds each feature's spec, plan, contracts, tasks and verification records; read
+  `specs/<feature>/` before changing what that feature built.
 - `.claude/launch.json` defines a `prep-site` launch config running `python3 tools/serve.py` on 8777.

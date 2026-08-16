@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A local, offline-capable Android interview study site. Vanilla HTML/CSS/ES modules + JSON content
 packs. **No build step, no npm, no package.json, no framework, no CDN, no test suite.** Node is used
-only for the CLI tools under `tools/`. This directory is **not** a git repository.
+only for the CLI tools under `tools/`. It **is** a git repository, working through PRs off `main`.
 
 Two distinct kinds of work happen here, and they barely overlap:
 1. **App code** — `index.html`, `assets/js/**`, `assets/css/app.css`
@@ -143,7 +143,11 @@ depend on.
   `--final`. Gate 15 errors on any ` ``` ` in a prose field (`q`, `answer`, `shortAnswer`,
   `prompt`, `referenceAnswer`, `framework`, `followUps`, `traps`, `hints`, `summary`, `label`,
   `description`) — `md.js` has no fenced-code support, so prose must never carry one.
-- `InterviewPrep/` (a nested subdirectory of the same name) is an unused Spec Kit scaffold — its
-  `.specify/` templates and `speckit-*` skills have nothing to do with this app. Ignore it unless
-  explicitly asked about Spec Kit.
+- `InterviewPrep/` (a nested subdirectory of the same name) is a Spec Kit scaffold. Its tooling —
+  `.specify/` templates, `.opencode/`, `speckit-*` skills — has nothing to do with this app and is
+  untracked; ignore it unless explicitly asked about Spec Kit. **`InterviewPrep/specs/` is the
+  exception and is tracked**: it holds the spec, plan, research, contracts, tasks and verification
+  records for each feature (`001-fill-content-gap`, `002-improvements`). Read the relevant
+  `specs/<feature>/` before changing what that feature built — it is where the reasoning lives, and
+  `tasks.md` carries the per-task completion record.
 - `.claude/launch.json` defines a `prep-site` launch config running `python3 tools/serve.py` on 8777.

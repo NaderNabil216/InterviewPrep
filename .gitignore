@@ -4,6 +4,14 @@
 # Local-only Claude Code settings (machine-specific permission overrides)
 .claude/settings.local.json
 
-# Unused Spec Kit scaffold nested in this directory — unrelated to the app,
-# see CLAUDE.md "Notes". Kept on disk, just not tracked here.
-/InterviewPrep/
+# IDE state — machine-specific, no value to anyone else
+.idea/
+
+# The Spec Kit scaffold nested in this directory. Its tooling is not part of the
+# app and stays untracked (.opencode/ alone is ~61 MB), but InterviewPrep/specs/
+# holds the actual feature planning and verification records for this repo, so
+# that one subtree IS tracked. The exclusion has to list children rather than the
+# directory itself — git cannot re-include a path whose parent directory is
+# excluded, so `/InterviewPrep/` plus a negation would silently do nothing.
+/InterviewPrep/*
+!/InterviewPrep/specs/

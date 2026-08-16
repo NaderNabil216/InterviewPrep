@@ -1,0 +1,24 @@
+{
+  "exportedAt": "2026-08-13T10:35:44.700Z",
+  "kind": "aip-progress-export",
+  "version": 1,
+  "progress": {},
+  "session": {
+    "lastItemId": null,
+    "lastView": "dashboard",
+    "history": []
+  },
+  "plan": {
+    "mode": "free",
+    "activePlan": "14day",
+    "startedAt": null,
+    "done": {},
+    "checked": {}
+  },
+  "settings": {
+    "theme": "auto",
+    "interviewDate": null,
+    "lastSeenChangelog": null
+  },
+  "mockResults": []
+}

@@ -1,0 +1,32 @@
+
+(seed) stored snapshot v2026.08.17, 89 packs
+
+== US3 steps 1-2, 4: automatic apply, toast, plan-tick re-anchoring ==
+  [PASS] US3.2 content syncs with no button press (a toast names what changed) — toast: "Content updated — 3 new, 5 changed. 2 plan ticks re-anchored."
+  [PASS] US3.2 the stored snapshot advanced to the disk version — 2026.08.15 -> 2026.08.17
+  [PASS] US3.2 nothing blocked on a decline/accept click (no modal or confirm in the DOM) — no modal/dialog/update control present
+  [PASS] US3.4 toast also names how many plan ticks were re-anchored — toast: "Content updated — 3 new, 5 changed. 2 plan ticks re-anchored."
+  [PASS] US3.4 getPlanState().done carries the migrated material signatures (ticks not cleared) — done has 2 signature(s); checked reset to {}
+
+== US3 step 3: no manual update surfaces ==
+  [PASS] US3.3 no Update button, no What's New nav, no "Up to date"/"Update available" text — nav: Dashboard, Plan, Topics, Drill, DSA, System Design, Mock, Cheat Sheets
+
+== US3 step 5: pending diff must not apply mid-session ==
+  [PASS] US3.5 sync does NOT apply while a Drill session is active — stored still v2026.08.14, 0 toasts
+  [PASS] US3.5 the held diff applies as soon as the session ends — stored now v2026.08.17 — "Content updated — 3 new, 5 changed."
+
+== US3 step 6: offline, then reconnect ==
+  [PASS] US3.6 while offline the sync cannot complete and nothing is mutated — stored still v2026.08.13, navigator.onLine=false
+  [PASS] US3.6 reconnecting syncs on the browser's own online event, with no user action — stored now v2026.08.17 — "Content updated — 3 new, 5 changed."
+
+== US3 step 7: blocked pack request (FR-007a all-or-nothing) ==
+  [PASS] US3.7 a blocked pack abandons the sync: stored snapshot still reports the old version — stored v2026.08.12
+  [PASS] US3.7 no toast on the abandoned attempt — 0 toasts
+  [PASS] US3.7 plan ticks untouched by the abandoned attempt — checked keys: 0:0,0:1 (unchanged)
+  [PASS] US3.7 no error surfaced to the candidate — no storage banner, no error copy in view
+  [PASS] US3.7 unblocking lets the next trigger complete the sync normally — stored now v2026.08.17 — "Content updated — 3 new, 5 changed. 2 plan ticks re-anchored."
+
+== US3 step 8: unchanged index costs one manifest fetch, zero packs (FR-011) ==
+  [PASS] US3.8 each focus/visibility trigger issues exactly one manifest request — 10 manifest requests over 5 focus+visibilitychange cycles (10 triggers)
+  [PASS] US3.8 no pack traffic at all while the index is unchanged — 0 pack requests
+  [PASS] US3 no console errors beyond the deliberate offline/blocked fetch failures — clean (2 expected network-simulation failures)
