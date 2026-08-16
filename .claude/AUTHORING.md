@@ -38,7 +38,7 @@ Every item, every type:
 }
 ```
 
-- `level` is 1–4 — 1 Basics, 2 Mid-Level, 3 Senior, 4 Staff. Assign the **lowest** level at which a
+- `level` is 1–4 — 1 Basics, 2 Mid-Level, 3 Senior, 4 Lead. Assign the **lowest** level at which a
   candidate could be expected to answer it. Level inflation is the failure mode to avoid.
 - `refs` — **1 or 2, required on every item**, `checked` always exactly `"2026-08-09"`.
 - `addedIn` — always exactly `"2026.08.9"`.

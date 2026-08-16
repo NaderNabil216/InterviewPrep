@@ -151,12 +151,35 @@ for (const packMeta of manifest.packs) {
       if (Array.isArray(item.hints) && item.hints.length !== 3) {
         warn(`gate 7  ${item.id}: dsa item has ${item.hints.length} hints, expected exactly 3`);
       }
+      // FR-019b (sampleCall) — staged like the other rollout gates: missing during a batch is a
+      // warning, still-missing at --final is an error.
+      if (typeof item.sampleCall !== 'string' || !item.sampleCall.trim()) {
+        staged(`gate 7  ${item.id}: dsa item missing a non-empty "sampleCall"`);
+      }
     }
     if (item.type === 'design' && !item.isFramework) {
       for (const f of ['requirements', 'rubric', 'timerMinutes']) {
         const v = item[f];
         if (v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length)) {
           err(`gate 7  ${item.id}: design scenario missing "${f}"`);
+        }
+      }
+    }
+    // FR-027a/FR-027b (clarifyingQuestions) — required on EVERY design item, framework item included
+    // (unlike the requirements/rubric/timerMinutes check above), with at least 3 plain-string
+    // entries. The element-shape checks exist because validate.mjs type-checks no array's element
+    // shape today — without them the array-of-objects shape FR-027a rules out would pass silently.
+    if (item.type === 'design') {
+      const cq = item.clarifyingQuestions;
+      if (!Array.isArray(cq) || !cq.length) {
+        staged(`gate 7  ${item.id}: design item missing "clarifyingQuestions"`);
+      } else {
+        if (cq.length < 3) {
+          staged(`gate 7  ${item.id}: design item has ${cq.length} clarifying questions, minimum is 3`);
+        }
+        const bad = cq.filter(e => typeof e !== 'string' || !e.trim().length);
+        if (bad.length) {
+          staged(`gate 7  ${item.id}: clarifyingQuestions must be non-empty plain strings, found ${bad.length} invalid entry(ies)`);
         }
       }
     }
