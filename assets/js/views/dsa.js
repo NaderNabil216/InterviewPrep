@@ -39,8 +39,13 @@ function renderList(el, snapshot, query) {
   el.querySelectorAll('.item-row').forEach(r => r.addEventListener('click', () => navigate('dsa', r.dataset.id)));
 }
 
+function esc(s) {
+  return (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
 function renderDetail(el, snapshot, item) {
   const scratch = Store.getScratch(item.id) || { code: item.starter || '', revealed: false };
+  const runnable = !!(item.sampleCall && item.sampleCall.trim());
 
   el.innerHTML = `
     <button class="btn btn--ghost" id="back" style="margin-bottom:10px;">← All problems</button>
@@ -81,15 +86,16 @@ function renderDetail(el, snapshot, item) {
 
       <div class="stack">
         <div class="card">
-          <h3>Your Kotlin scratchpad</h3>
-          <textarea class="scratchpad" id="scratchpad" spellcheck="false">${scratch.code}</textarea>
-          <p class="faint" style="margin-top:8px;">Saved automatically to this browser. Not graded — just a place to think in code.</p>
+          <div class="row" style="justify-content:space-between;">
+            <h3 style="margin:0;">Your Kotlin scratchpad</h3>
+            <button class="btn" id="run-btn" ${runnable ? '' : 'disabled title="No runnable sample case for this problem"'}>▶ Run</button>
+          </div>
+          <textarea class="scratchpad code-editor" id="scratchpad" spellcheck="false">${scratch.code}</textarea>
+          <p class="faint" style="margin-top:8px;">Saved automatically to this browser. Press Run to execute it against the sample case on Judge0 CE.</p>
         </div>
+        <div class="run-result run-result--idle" id="run-result">${runnable ? 'No run yet — press Run to execute your code on the sample case.' : 'This problem has no runnable sample case.'}</div>
         <div class="rate-row">
-          <button class="rate-btn" data-rate="again">Again</button>
-          <button class="rate-btn" data-rate="hard">Hard</button>
-          <button class="rate-btn" data-rate="good">Good</button>
-          <button class="rate-btn" data-rate="easy">Easy</button>
+          <button class="rate-btn rate-btn--complete" id="mark-complete">Mark complete</button>
         </div>
       </div>
     </div>
@@ -106,10 +112,83 @@ function renderDetail(el, snapshot, item) {
   el.querySelector('#scratchpad').addEventListener('input', (e) => {
     Store.setScratch(item.id, { ...Store.getScratch(item.id), code: e.target.value });
   });
-  el.querySelectorAll('.rate-btn').forEach(b => b.addEventListener('click', () => {
-    rate(item.id, b.dataset.rate);
-    toast(`Marked "${b.dataset.rate}".`);
-  }));
+  el.querySelector('#mark-complete').addEventListener('click', () => {
+    const res = rate(item.id, 'good');
+    toast(`Marked complete — next review ${res.due}.`);
+  });
+
+  // ---- Run (Judge0 CE via RapidAPI, US6) ----
+  const runBtn = el.querySelector('#run-btn');
+  // FR-020a: one in-flight request per view instance, but pressing Run again while a request is
+  // pending aborts the prior one cleanly (never both results racing to display). A fresh
+  // AbortController + timeout per request, and a sequence guard so only the newest run can render.
+  let controller = null;
+  let runSeq = 0;
+
+  function setRun(css, html) {
+    const box = el.querySelector('#run-result');
+    if (!box) return; // view swapped mid-flight
+    box.className = 'run-result run-result--' + css;
+    box.innerHTML = html;
+  }
+
+  if (!runnable) return; // Run disabled from the markup; never issue a request
+
+  runBtn.addEventListener('click', () => {
+    const key = (Store.getSettings().judge0ApiKey || '').trim();
+    if (!key) {
+      setRun('needs-key', 'No code runner key. Add a Judge0 CE key in <a href="#/settings">Settings</a> to run code here.');
+      return;
+    }
+    // Supersede the prior in-flight request (FR-020a): its handlers are sequence-guarded below, so
+    // it can never paint over the new run's result.
+    const seq = ++runSeq;
+    if (controller) controller.abort();
+    const ctl = new AbortController();
+    controller = ctl;
+    const timeout = setTimeout(() => ctl.abort(), 30000); // FR-020c: fixed 30s bound
+    // The key only ever travels in request headers — never into the DOM, the panel, or console.
+    const source = el.querySelector('#scratchpad').value
+      + '\n\nfun main() {\n    val result = ' + item.sampleCall + '\n    println(result)\n}\n';
+    setRun('pending', 'Running your code against the sample case…');
+    runBtn.textContent = '▶ Running…';
+    fetch('https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-RapidAPI-Key': key,
+        'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
+      },
+      body: JSON.stringify({ language_id: 111, source_code: source }),
+      signal: ctl.signal,
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(res => {
+        clearTimeout(timeout);
+        if (seq !== runSeq) return; // superseded by a newer run — the panel belongs to that one
+        runBtn.textContent = '▶ Run';
+        const statusId = res.status && res.status.id;
+        if (statusId === 3) {
+          setRun('output', `<pre class="run-output">${esc(res.stdout)}</pre>`);
+        } else if (statusId === 6) {
+          setRun('compile-error', `<strong>Compilation failed</strong><pre class="run-output">${esc(res.compile_output)}</pre>`);
+        } else {
+          const desc = (res.status && (res.status.id + ' ' + res.status.description)) || 'unknown error';
+          setRun('runtime-error', `<strong>Run failed — ${esc(desc)}</strong>${res.stderr ? `<pre class="run-output">${esc(res.stderr)}</pre>` : ''}`);
+        }
+      })
+      .catch(err => {
+        clearTimeout(timeout);
+        if (seq !== runSeq) return; // superseded — never render a stale failure
+        runBtn.textContent = '▶ Run';
+        setRun('needs-connection', err.name === 'AbortError'
+          ? 'The runner timed out after 30 seconds. Check your connection and try again.'
+          : "Couldn't reach the runner. Check your connection and try again.");
+      });
+  });
 }
 
 export function renderDsa(el, { snapshot, param, query }) {

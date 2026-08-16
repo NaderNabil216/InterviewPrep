@@ -152,15 +152,18 @@ button { font-family: inherit; cursor: pointer; }
 .icon-btn { background: none; border: none; font-size: 17px; padding: 7px 9px; border-radius: var(--radius-sm); color: var(--text-dim); }
 .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 
-.update-btn {
-  position: relative; display: flex; align-items: center; gap: 6px;
-  background: var(--bg-card); border: 1px solid var(--border); color: var(--text-dim);
-  font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 20px;
+/* Shell-phase loading indicator — visible from first paint until app.js hides it (US2/FR-004). */
+.boot-status {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--text-faint); font-size: 14px; gap: 10px;
 }
-.update-btn:hover { border-color: var(--accent); color: var(--text); }
-.update-btn.has-updates { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg-card)); animation: pulse-glow 2.4s ease-in-out infinite; }
-.update-btn__badge { background: var(--accent); color: var(--accent-contrast); font-size: 11px; font-weight: 800; border-radius: 10px; padding: 1px 6px; }
-@keyframes pulse-glow { 0%,100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 40%, transparent); } 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); } }
+.boot-status::before {
+  content: ''; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: boot-spin 0.9s linear infinite;
+}
+.boot-status[hidden] { display: none; }
+@keyframes boot-spin { to { transform: rotate(360deg); } }
 
 .view { flex: 1; max-width: 1120px; width: 100%; margin: 0 auto; padding: 28px 20px 80px; }
 
@@ -256,10 +259,9 @@ h3 { font-size: 15px; margin: 0 0 8px; }
 .refs-box a { display: block; margin-bottom: 3px; }
 .rate-row { display: flex; gap: 8px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border-soft); flex-wrap: wrap; }
 .rate-btn { flex: 1; min-width: 90px; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-card); font-weight: 700; font-size: 13px; text-align: center; }
-.rate-btn[data-rate="again"] { color: var(--red); } .rate-btn[data-rate="again"]:hover { background: color-mix(in srgb, var(--red) 15%, var(--bg-card)); border-color: var(--red); }
-.rate-btn[data-rate="hard"] { color: var(--amber); } .rate-btn[data-rate="hard"]:hover { background: color-mix(in srgb, var(--amber) 15%, var(--bg-card)); border-color: var(--amber); }
-.rate-btn[data-rate="good"] { color: var(--blue); } .rate-btn[data-rate="good"]:hover { background: color-mix(in srgb, var(--blue) 15%, var(--bg-card)); border-color: var(--blue); }
-.rate-btn[data-rate="easy"] { color: var(--accent); } .rate-btn[data-rate="easy"]:hover { background: color-mix(in srgb, var(--accent) 15%, var(--bg-card)); border-color: var(--accent); }
+/* Single-action marking (US4): the one rating a candidate can give is "Mark complete". */
+.rate-btn--complete { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.rate-btn--complete:hover { background: color-mix(in srgb, var(--accent) 12%, var(--bg-card)); border-color: var(--accent); }
 .notes-box textarea { width: 100%; min-height: 70px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); padding: 10px; font-size: 13px; font-family: inherit; resize: vertical; }
 .item-nav { display: flex; justify-content: space-between; margin-top: 18px; }
 
@@ -276,6 +278,17 @@ h3 { font-size: 15px; margin: 0 0 8px; }
 .hint-item div { padding: 0 14px 12px; font-size: 13.5px; }
 .scratchpad { width: 100%; min-height: 220px; background: #0a0d12; color: #d4d8de; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; font-family: var(--mono); font-size: 13px; resize: vertical; }
 :root[data-theme="light"] .scratchpad { background: #0d1117; }
+.code-editor { line-height: 1.5; tab-size: 2; }
+.run-result { border: 1px solid var(--border); border-left: 4px solid var(--border); background: var(--bg-card); border-radius: var(--radius-sm); padding: 14px; font-size: 13.5px; margin-top: 12px; }
+.run-result a { color: var(--accent); }
+.run-result--pending { border-left-color: var(--amber); }
+.run-result--needs-key, .run-result--not-runnable { border-left-color: var(--border); color: var(--muted); }
+.run-result--compile-error, .run-result--runtime-error { border-left-color: var(--red); }
+.run-result--needs-connection { border-left-color: var(--amber); }
+.run-result--output { border-left-color: var(--accent); }
+.run-output { background: #0a0d12; color: #d4d8de; border-radius: var(--radius-sm); padding: 12px; margin-top: 10px; font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
+:root[data-theme="light"] .run-output { background: #0d1117; }
+.run-result button:disabled, #run-btn:disabled { opacity: .45; cursor: not-allowed; }
 .checklist { display: flex; flex-direction: column; gap: 6px; }
 .checklist label { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; padding: 6px 8px; border-radius: var(--radius-sm); }
 .checklist label:hover { background: var(--bg-hover); }

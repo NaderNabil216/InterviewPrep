@@ -30,17 +30,21 @@ export function renderDashboard(el, { snapshot }) {
   const session = Store.getSession();
   const settings = Store.getSettings();
   const progress = Store.getProgress();
-  const totalItems = snapshot.items.length;
-  const knownCount = Object.values(progress).filter(p => p.status === 'known').length;
-  const seenCount = Object.keys(progress).length;
-  const due = dueCount(snapshot.items);
-  const mastery = masteryByTrack(snapshot.items);
+  // Shell-phase marker: on a cold cache the snapshot has no items yet, but the view must not
+  // present that as a real "you've done nothing" zero. Gate on the marker, not on each value, so a
+  // genuine zero still renders as 0 once content is loaded.
+  const shellPhase = snapshot.items.length === 0;
+  const totalItems = shellPhase ? null : snapshot.items.length;
+  const knownCount = shellPhase ? null : Object.values(progress).filter(p => p.status === 'known').length;
+  const seenCount = shellPhase ? null : Object.keys(progress).length;
+  const due = shellPhase ? null : dueCount(snapshot.items);
+  const mastery = shellPhase ? {} : masteryByTrack(snapshot.items);
   const days = daysUntil(settings.interviewDate);
   const { day, plan } = planTasksForToday(snapshot);
 
   // Free study still gets a "today" surface — never an empty or broken slot (FR-012).
   const freeMode = (Store.getPlanState().mode || 'free') === 'free';
-  const unseen = snapshot.items.filter(i => !progress[i.id]);
+  const unseen = shellPhase ? [] : snapshot.items.filter(i => !progress[i.id]);
   const weakestTracks = Object.entries(mastery)
     .filter(([, m]) => m.total > 0)
     .sort((a, b) => (a[1].known / a[1].total) - (b[1].known / b[1].total))
@@ -57,7 +61,7 @@ export function renderDashboard(el, { snapshot }) {
       <div>
         <div class="eyebrow">Dashboard</div>
         <h1>Welcome back</h1>
-        <p class="muted">Snapshot v${snapshot.version} · ${totalItems} items · ${seenCount} touched · ${knownCount} known</p>
+        <p class="muted">Snapshot v${snapshot.version} · ${totalItems ?? '—'} items · ${seenCount ?? '—'} touched · ${knownCount ?? '—'} known</p>
       </div>
       ${days !== null ? `
         <div class="countdown">
@@ -84,9 +88,9 @@ export function renderDashboard(el, { snapshot }) {
 
       <div class="card">
         <div class="eyebrow">Review queue</div>
-        <h2 style="margin-top:6px;">${due} due for drill</h2>
-        <p class="faint">${due > 0 ? 'Spaced-repetition items are ready to review now.' : 'Nothing due right now — keep reading new material.'}</p>
-        <button class="btn ${due > 0 ? 'btn--primary' : ''}" id="go-drill" style="margin-top:10px;">Start drill →</button>
+        <h2 style="margin-top:6px;">${due === null ? '—' : due} due for drill</h2>
+        <p class="faint">${due === null ? 'Loading your review queue…' : due > 0 ? 'Spaced-repetition items are ready to review now.' : 'Nothing due right now — keep reading new material.'}</p>
+        <button class="btn ${due && due > 0 ? 'btn--primary' : ''}" id="go-drill" style="margin-top:10px;">Start drill →</button>
       </div>
     </div>
 
@@ -109,7 +113,7 @@ export function renderDashboard(el, { snapshot }) {
       <div class="row" style="justify-content:space-between;">
         <div>
           <div class="eyebrow">Today · Free study</div>
-          <h2 style="margin-top:6px;">${due} due · ${unseen.length} still unseen</h2>
+          <h2 style="margin-top:6px;">${due === null ? '—' : due} due · ${shellPhase ? '—' : unseen.length} still unseen</h2>
           <p class="faint">No fixed schedule. Clear what is due, then take the next thing from your weakest track.</p>
         </div>
         <button class="btn" data-nav="plan">Change mode →</button>
@@ -121,13 +125,13 @@ export function renderDashboard(el, { snapshot }) {
               <span class="item-row__q">${renderInline(i.q)}</span>
               <span class="faint">${i.track}</span>
             </div>`).join('')}
-        </div>` : '<p class="faint" style="margin-top:10px;">You have seen every item — drill what is due.</p>'}
+        </div>` : shellPhase ? '<p class="faint" style="margin-top:10px;">Loading your library…</p>' : '<p class="faint" style="margin-top:10px;">You have seen every item — drill what is due.</p>'}
     </div>` : ''}
 
     <div class="card">
       <div class="eyebrow">Mastery by track</div>
       <div style="margin-top:12px;">
-        ${Object.entries(mastery).sort((a,b) => b[1].total - a[1].total).map(([track, m]) => {
+        ${shellPhase ? '<p class="faint">Loading track mastery…</p>' : Object.entries(mastery).sort((a,b) => b[1].total - a[1].total).map(([track, m]) => {
           const pct = Math.round((m.known / m.total) * 100);
           const label = (snapshot.packMeta.find(p => p.track === track) || {}).title || track;
           return `

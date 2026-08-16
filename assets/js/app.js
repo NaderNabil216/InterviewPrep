@@ -1,8 +1,8 @@
 // app.js — hash router, boot sequence, global chrome (theme, search, update button).
 import { Store, onStorageFailure, migrateTicks } from './store.js';
-import { boot, checkForUpdates, applyUpdate } from './content.js';
-import { buildIndex, search } from './search.js';
-import { stripMarkdown, renderInline } from './md.js';
+import { bootShell, bootContent, checkForUpdates, applyUpdate } from './content.js';
+import { buildIndex, search, debounce } from './search.js';
+import { stripMarkdown } from './md.js';
 
 import { renderDashboard } from './views/dashboard.js';
 import { renderPlan } from './views/plan.js';
@@ -13,12 +13,12 @@ import { renderDsa } from './views/dsa.js';
 import { renderDesign } from './views/design.js';
 import { renderMock } from './views/mock.js';
 import { renderCheatsheets } from './views/cheatsheets.js';
-import { renderWhatsNew } from './views/whatsnew.js';
 import { renderSettings } from './views/settings.js';
 
 export const App = {
   snapshot: null,
   pendingDiff: null,
+  sessionActive: false,
 };
 
 const routes = {
@@ -31,7 +31,6 @@ const routes = {
   design: renderDesign,
   mock: renderMock,
   cheatsheets: renderCheatsheets,
-  whatsnew: renderWhatsNew,
   settings: renderSettings,
 };
 
@@ -128,6 +127,13 @@ function setActiveNav(view) {
 function render() {
   const { view, param, query } = parseHash();
   const fn = routes[view] || routes.dashboard;
+  // Leaving a Drill/Mock session by navigating away clears the session flag — a sync pending on
+  // App.sessionActive must not stay blocked forever because the candidate quit mid-session. Once
+  // clear, an already-detected diff applies right away (no modal, no confirm).
+  if (view !== 'drill' && view !== 'mock') {
+    if (App.sessionActive) App.sessionActive = false;
+    applyPendingSync();
+  }
   setActiveNav(view === 'item' ? 'topics' : view);
   const el = document.getElementById('view');
   el.innerHTML = '';
@@ -181,7 +187,10 @@ function initSearch() {
       e.preventDefault(); open();
     } else if (e.key === 'Escape' && !overlay.hidden) close();
   });
-  input.addEventListener('input', () => {
+  // Every keystroke updates the box itself (that was never the bottleneck); the search compute +
+  // results rebuild run on a ~150ms trailing debounce so a 10-char burst settles in one pass,
+  // within 300ms of the last keystroke. Clearing stays synchronous so the prompt state never lags.
+  const debouncedSearch = debounce(() => {
     const hits = search(input.value);
     if (!hits.length) {
       results.innerHTML = input.value ? '<div class="search-results__empty">No matches.</div>' : '<div class="search-results__empty">Type to search all ~600 items…</div>';
@@ -190,6 +199,13 @@ function initSearch() {
     results.innerHTML = hits.map(h =>
       `<div class="search-results__item" data-id="${h.id}"><strong>${stripMarkdown(h.q)}</strong><div class="faint">${h.track} · ${h.topic}</div></div>`
     ).join('');
+  }, 150);
+  input.addEventListener('input', () => {
+    if (!input.value.trim()) {
+      results.innerHTML = '<div class="search-results__empty">Type to search all ~600 items…</div>';
+      return;
+    }
+    debouncedSearch();
   });
   results.addEventListener('click', (e) => {
     const row = e.target.closest('.search-results__item');
@@ -197,143 +213,61 @@ function initSearch() {
   });
 }
 
-// ---------- update flow ----------
-// SC-015: a device that cannot store the update should say so rather than fail quietly. Consulted
-// before applying, where the browser exposes it.
-async function storageOutlook(diff) {
-  if (!navigator.storage || !navigator.storage.estimate) return '';
-  let est;
-  try { est = await navigator.storage.estimate(); } catch (e) { return ''; }
-  if (!est || !est.quota) return '';
-  const mb = (n) => (n / 1048576).toFixed(1) + ' MB';
-  const projected = JSON.stringify({ packs: diff._diskPacks, plans: diff._diskPlans }).length;
-  const headroom = est.quota - (est.usage || 0);
-  const tight = projected > headroom;
-  return `<p class="${tight ? 'muted' : 'faint'}">
-    New library ≈ ${mb(projected)} · using ${mb(est.usage || 0)} of ${mb(est.quota)} available.
-    ${tight ? '<strong>This device may not have room for the update.</strong> Export your progress before applying.' : ''}
-  </p>`;
-}
-
-function renderDiffModal(diff) {
-  const rows = [
-    ...diff.added.map(it => `<div class="diff-list__row"><span class="chip chip--new">NEW</span> ${stripMarkdown(it.q)}</div>`),
-    ...diff.updated.map(it => `<div class="diff-list__row"><span class="chip">UPDATED</span> ${stripMarkdown(it.q)}</div>`),
-    ...diff.removedIds.map(id => `<div class="diff-list__row"><span class="chip">REMOVED</span> ${id}</div>`),
-  ].join('') || '<div class="diff-list__row faint">No item-level changes — metadata only.</div>';
-
-  const releaseNotes = (diff.newReleases || []).map(r =>
-    `<li><strong>${r.version}</strong> — ${renderInline(r.summary || '')}</li>`
-  ).join('');
-
-  // Re-anchor plan ticks against the OUTGOING snapshot — the plan they were earned on exists only
-  // inside the snapshot this update replaces. Computed here so the candidate reads what will be
-  // cleared before accepting (FR-020), and applied only if they do.
-  const planState = Store.getPlanState();
-  const { done: migratedDone, cleared } = migrateTicks(App.snapshot, planState);
-  const clearedNotice = cleared.length ? `
-    <div class="card" style="margin-top:10px;">
-      <strong>${cleared.length} plan tick${cleared.length === 1 ? '' : 's'} will be cleared.</strong>
-      <p class="faint">These tasks link to no study material, so there is nothing to re-attach them to.
-      Every tick on a task with material keeps its meaning.</p>
-      <ul class="faint">${cleared.map(l => `<li>${renderInline(l)}</li>`).join('')}</ul>
-    </div>` : '';
-
-  showModal(`
-    <h2>Update available — ${diff.fromVersion} → ${diff.toVersion}</h2>
-    <p class="muted">${diff.added.length} new · ${diff.updated.length} updated · ${diff.removedIds.length} removed.
-    Your progress, notes, and drill schedule are stored separately and will not be affected.</p>
-    ${releaseNotes ? `<ul>${releaseNotes}</ul>` : ''}
-    ${clearedNotice}
-    <div id="storage-outlook"></div>
-    <div class="diff-list">${rows}</div>
-    <div class="btn-row">
-      <button class="btn btn--primary" id="confirm-update">Apply update</button>
-      <button class="btn btn--ghost" id="cancel-update">Not now</button>
-    </div>
-  `, (root) => {
-    storageOutlook(diff).then(html => {
-      const slot = root.querySelector('#storage-outlook');
-      if (slot && html) slot.innerHTML = html;
-    });
-    root.querySelector('#confirm-update').addEventListener('click', async () => {
-      const btn = root.querySelector('#confirm-update');
-      btn.disabled = true;
-      // Ordering is load-bearing: re-anchor ticks while the outgoing plan is still reachable.
-      if (Object.keys(planState.checked || {}).length) {
-        try { Store.setPlanState({ done: migratedDone, checked: {} }); } catch (e) { /* reported */ }
-      }
-      let snapshot;
-      try {
-        snapshot = await applyUpdate(diff);
-      } catch (e) {
-        // The previous snapshot is untouched — the candidate stays on the library they had.
-        // The banner has already been raised by store.js; keep the modal open so they can retry.
-        btn.disabled = false;
-        console.error(e);
-        return;
-      }
-      App.snapshot = snapshot;
-      buildIndex(snapshot.items);
-      App.pendingDiff = null;
-      setUpdateButton(false);
-      closeModal();
-      toast(`Updated to ${diff.toVersion}. ${diff.added.length} new items added.`);
-      render();
-    });
-    root.querySelector('#cancel-update').addEventListener('click', closeModal);
-  });
-}
-
-function setUpdateButton(hasUpdates, count) {
-  const btn = document.getElementById('update-btn');
-  const label = btn.querySelector('.update-btn__label');
-  const badge = document.getElementById('update-badge');
-  if (hasUpdates) {
-    btn.classList.add('has-updates');
-    label.textContent = 'Update available';
-    badge.hidden = false;
-    badge.textContent = count;
-  } else {
-    btn.classList.remove('has-updates');
-    label.textContent = 'Up to date';
-    badge.hidden = true;
+// ---------- automatic content sync ----------
+// FR-010: triggered on a schedule — once right after the shell-phase render (never blocking first
+// paint), on visibilitychange/focus, and on the browser's online event. FR-010a: a found diff is
+// held as App.pendingDiff until no Drill/Mock session is active. FR-007a: all-or-nothing — the
+// complete new content set is fetched by checkForUpdates() BEFORE anything is mutated, so any
+// fetch failure abandons the attempt with the stored snapshot untouched, no tick migration, no
+// persist, and no toast; the device keeps working and retries at the next natural trigger.
+async function checkAndHoldDiff() {
+  try {
+    const diff = await checkForUpdates(App.snapshot);
+    if (diff && diff.hasUpdates) {
+      App.pendingDiff = diff;
+      await applyPendingSync();
+    }
+  } catch (e) {
+    // Offline, or a partial pack fetch rejected — stay quiet; nothing was mutated.
   }
 }
 
-async function initUpdateButton() {
-  document.getElementById('update-btn').addEventListener('click', async () => {
-    if (App.pendingDiff && App.pendingDiff.hasUpdates) {
-      renderDiffModal(App.pendingDiff);
-      return;
-    }
-    const btn = document.getElementById('update-btn');
-    btn.querySelector('.update-btn__label').textContent = 'Checking…';
-    try {
-      const diff = await checkForUpdates(App.snapshot);
-      if (diff && diff.hasUpdates) {
-        App.pendingDiff = diff;
-        setUpdateButton(true, diff.added.length + diff.updated.length);
-        renderDiffModal(diff);
-      } else {
-        setUpdateButton(false);
-        toast("You're already on the latest content.");
-      }
-    } catch (e) {
-      console.error(e);
-      setUpdateButton(false);
-      toast('Could not check for updates (are you serving over http://localhost?).');
-    }
-  });
-
-  // Silent background check on load, badge-only (no modal).
+async function applyPendingSync() {
+  const diff = App.pendingDiff;
+  if (!diff || !diff.hasUpdates || App.sessionActive) return;
+  App.pendingDiff = null;
+  let snapshot;
   try {
-    const diff = await checkForUpdates();
-    if (diff && diff.hasUpdates) {
-      App.pendingDiff = diff;
-      setUpdateButton(true, diff.added.length + diff.updated.length);
+    // Ordering is load-bearing: re-anchor ticks while the OUTGOING snapshot is still in place —
+    // the plan they were earned on exists only inside the snapshot this update replaces.
+    const planState = Store.getPlanState();
+    const checkedCount = Object.keys(planState.checked || {}).filter(k => planState.checked[k]).length;
+    const { done: migratedDone, cleared } = migrateTicks(App.snapshot, planState);
+    if (checkedCount) {
+      try { Store.setPlanState({ done: migratedDone, checked: {} }); } catch (e) { /* reported */ }
     }
-  } catch (e) { /* offline or first run — fine, stay quiet */ }
+    snapshot = await applyUpdate(diff);
+    App.snapshot = snapshot;
+    buildIndex(snapshot.items);
+    const reanchored = checkedCount - cleared.length;
+    let msg = `Content updated — ${diff.added.length} new, ${diff.updated.length} changed.`;
+    if (reanchored > 0) msg += ` ${reanchored} plan tick${reanchored === 1 ? '' : 's'} re-anchored.`;
+    else if (cleared.length) msg += ` ${cleared.length} plan tick${cleared.length === 1 ? '' : 's'} cleared (no material).`;
+    toast(msg);
+    render();
+  } catch (e) {
+    // applyUpdate's own failure leaves the previous snapshot intact (store.js raises the storage
+    // banner). No sync toast — the device keeps working and retries at the next trigger.
+    console.error(e);
+  }
+}
+
+function initAutoSync() {
+  const trigger = () => checkAndHoldDiff();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) trigger(); });
+  window.addEventListener('focus', trigger);
+  window.addEventListener('online', trigger);
+  return trigger;
 }
 
 // ---------- nav wiring ----------
@@ -354,6 +288,11 @@ function checkProtocol() {
 }
 
 // ---------- boot ----------
+function hideBootStatus() {
+  const el = document.getElementById('boot-status');
+  if (el) el.hidden = true;
+}
+
 async function main() {
   if (!checkProtocol()) return;
   initStorageBanner();
@@ -361,8 +300,14 @@ async function main() {
   initNav();
   initSearch();
 
+  // Phase 1 (shell): render from the stored snapshot instantly, or from a minimal manifest-backed
+  // placeholder if this is a true cold cache — nav + dashboard are interactive before any pack has
+  // finished fetching. The content phase (below) never blocks this first paint.
+  let manifest = null;
   try {
-    App.snapshot = await boot(raiseStorageBanner);
+    const shell = await bootShell();
+    App.snapshot = shell.snapshot;
+    manifest = shell.manifest;
   } catch (e) {
     console.error(e);
     document.getElementById('view').innerHTML = `
@@ -371,11 +316,30 @@ async function main() {
         <p>${e.message}</p>
         <p class="faint">Make sure you're serving from /Users/nn/InterviewPrep via <code>bash tools/serve.sh</code>.</p>
       </div>`;
+    hideBootStatus();
     return;
   }
   buildIndex(App.snapshot.items);
-  await initUpdateButton();
   render();
+  hideBootStatus();
+
+  // Automatic sync (FR-010): check once after the shell-phase render — never blocking first paint —
+  // and on every later focus/visibilitychange/online trigger (wired in initAutoSync).
+  const syncTrigger = initAutoSync();
+  syncTrigger();
+
+  // Phase 2 (content): cold cache only. Fetch everything in the background; when it resolves, swap
+  // the full snapshot in and re-render the currently-mounted view in place (no hash change occurs,
+  // so render() must be called explicitly here).
+  if (manifest) {
+    bootContent(manifest, raiseStorageBanner).then(snapshot => {
+      App.snapshot = snapshot;
+      buildIndex(snapshot.items);
+      render();
+    }).catch(e => {
+      console.error('content phase failed; staying on the shell snapshot', e);
+    });
+  }
 }
 
 main();
