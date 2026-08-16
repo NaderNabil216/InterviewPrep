@@ -1,6 +1,6 @@
 {
-  "version": "2026.08.16",
-  "generatedAt": "2026-08-13",
+  "version": "2026.08.17",
+  "generatedAt": "2026-08-14",
   "stackSnapshot": {
     "kotlin": "2.4.10 stable; 2.4.20-RC (Aug 2026); the 2.3 line stabilized nested typealiases, explicit backing fields, unused-return-value checker",
     "compose": "BOM 2026.06.01 / core 1.11.4",
@@ -11,7 +11,7 @@
     "playPolicy": "targetSdk 36 required by 2026-08-31 (extension window to 2026-11-01); 16 KB page sizes required for updates from 2027-02-01",
     "kmp": "Compose Multiplatform for iOS stable; CMP 1.11 line stable, 1.12 in beta; Room/DataStore/ViewModel/Paging KMP-ready"
   },
-  "stackSnapshotChecked": "2026-08-13",
+  "stackSnapshotChecked": "2026-08-14",
   "packs": [
     {
       "id": "kotlin-a",
@@ -559,6 +559,11 @@
     }
   ],
   "releases": [
+    {
+      "version": "2026.08.17",
+      "date": "2026-08-14",
+      "summary": "US6-9: DSA sampleCalls, plain-English shortAnswers (629 items), system-design clarify-first, two-phase framework"
+    },
     {
       "version": "2026.08.16",
       "date": "2026-08-13",

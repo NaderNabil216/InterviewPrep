@@ -16,10 +16,14 @@
         "storage"
       ],
       "q": "Design Google-Photos-style background photo backup",
+      "shortAnswer": [
+        "Google-Photos-class background backup: photos upload automatically, deduplicated and organized, without breaking the camera or the battery budget at ~500M MAU.",
+        "MediaStore capture hooks feed a Room pending queue; WorkManager uploads under `unmetered` constraints, chunked for resume, with client-side perceptual hashing and server-side byte dedupe.",
+        "Interviewers probe the media pipeline and dedupe, immutable content-addressed blobs, quota and hot-versus-cold tiering, non-destructive edits, and failure quarantine with retry."
+      ],
       "prompt": "Design background photo/video backup: photos taken on a phone are uploaded automatically, deduplicated, organized, and searchable — without breaking the camera or the battery budget.\n\nAssume ~500M MAU, GB-scale uploads, and that 'the user never thinks about it' is the product bar. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "The hard parts are the **media pipeline** (capture → queue → upload with dedupe) and the **storage/query** backend (org by date, search, dedupe at scale). Expect probing on background constraints and dedupe.",
+      "framework": "The hard parts are the **media pipeline** (capture → queue → upload with dedupe) and the **storage/query** backend (org by date, search, dedupe at scale). Run the two-phase framework; expect probing on background constraints and dedupe.",
       "requirements": [
-        "Clarify what to back up: photos, videos, metadata, edits",
         "Design the capture hook and the pending-queue",
         "Design upload: network gating, resumability, ordering",
         "Design deduplication: same photo taken twice, re-sync, EXIF",
@@ -63,7 +67,12 @@
           "checked": "2026-08-13"
         }
       ],
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17",
+      "clarifyingQuestions": [
+        "What should be backed up — photos, videos, metadata, edits — in what order of importance?",
+        "What is the free-tier quota, and where is the paid boundary?",
+        "How much battery and data may backup consume, and how much control does the user have?"
+      ]
     },
     {
       "id": "sd-0015",
@@ -78,10 +87,14 @@
         "local-first"
       ],
       "q": "Design Dropbox-style file sync",
+      "shortAnswer": [
+        "Dropbox-class file sync: device files mirror to the cloud and other devices, with deltas, tombstones, and conflict detection on a flaky network.",
+        "The core is an append-only local journal as the source of truth, content-addressed chunks for block-level delta upload, and a restart-safe pull-apply-push reconcile loop.",
+        "Grading centers on conflict detection with version vectors, tombstone and garbage collection kept separate, resumable chunked upload, and convergence after long offline periods."
+      ],
       "prompt": "Design a Dropbox-style file sync client: files on the device are mirrored to the cloud and to other devices, with deltas, tombstones for deletes, and conflict detection.\n\nAssume ~100M MAU, GB-scale files, and that 'it just works on a flaky network' is the bar. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "The hard core is **the local journal + reconciliation** — a log-structured store of every mutation with a version vector, plus delta upload. Interviewers probe conflict detection and the sync loop's correctness under failure.",
+      "framework": "The hard core is **the local journal + reconciliation** — a log-structured store of every mutation with a version vector, plus delta upload. Run the two-phase framework; interviewers probe conflict detection and the sync loop's correctness under failure.",
       "requirements": [
-        "Clarify the sync contract: full mirror vs selective folders",
         "Design the local change journal (append-only log of mutations)",
         "Design the file store: chunks, content-addressing, dedupe",
         "Design delta sync: block-level vs file-level",
@@ -125,7 +138,12 @@
           "checked": "2026-08-13"
         }
       ],
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17",
+      "clarifyingQuestions": [
+        "Is the product a full mirror or selective folder sync?",
+        "Which platforms must stay in sync — mobile-only, or desktop too?",
+        "What consistency guarantee matters most: propagation latency, or conflict-free merging?"
+      ]
     },
     {
       "id": "sd-0016",
@@ -140,10 +158,14 @@
         "abr"
       ],
       "q": "Design a video streaming client",
+      "shortAnswer": [
+        "A Netflix-class mobile video client: adaptive bitrate playback, next-episode prefetch, DRM, cross-device resume, and offline downloads on a cellular phone.",
+        "Segment-based delivery; adaptive bitrate picks quality from smoothed throughput per window; buffer starts fast at 2–4 seconds, then stays ahead at 20–30.",
+        "Probes target the buffer and first-frame budget, quality chosen to prevent rebuffers, DRM licence lifetime and at-rest encryption, and cellular clamping, a 720p cap."
+      ],
       "prompt": "Design a mobile video streaming client (Netflix-class): adaptive bitrate playback, prefetch for the next episode, DRM, resume across devices, and offline downloads — on a phone that is also on a cellular network.\n\nAssume ~100M MAU and a catalog of high-quality content. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "The player pipeline (adaptive streaming, buffering policy) is the center; the interviewer also wants the **prefetch/download** planning and **DRM** path. Expect probing on the buffer and the 'first frame fast' budget.",
+      "framework": "The player pipeline (adaptive streaming, buffering policy) is the center; the interviewer also wants the **prefetch/download** planning and **DRM** path. Run the two-phase framework; expect probing on the buffer and the 'first frame fast' budget.",
       "requirements": [
-        "Clarify the formats and the delivery pipeline (HLS/DASH segments)",
         "Design the player pipeline: manifest, segments, demux, decode, render",
         "Design adaptive bitrate: selection policy, bandwidth estimation",
         "Design the buffer strategy: start budget, underflow, pause-on-buffer",
@@ -187,7 +209,12 @@
           "checked": "2026-08-13"
         }
       ],
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17",
+      "clarifyingQuestions": [
+        "What formats and delivery pipelines must be supported — HLS, DASH, or both?",
+        "What is the first-frame budget and the acceptable rebuffer rate?",
+        "Which devices and networks must the adaptive stream survive?"
+      ]
     },
     {
       "id": "sd-0017",
@@ -202,10 +229,14 @@
         "reliability"
       ],
       "q": "Design a checkout and payment flow",
+      "shortAnswer": [
+        "A checkout and payment flow where a user is never charged twice and never told failed when it actually succeeded, at ~10M daily checkouts.",
+        "Idempotency first: client-generated `orderId` and per-attempt `requestId` make retry safe; one terminal success, CONFIRMED, confirmed by querying the server, never the PSP callback.",
+        "Grading hits network loss at every state with safe retries, webhook reconciliation of PENDING, tokenization shrinking PCI scope, idempotent refunds, and perfect settlement match."
+      ],
       "prompt": "Design the mobile checkout and payment flow: add a payment method, place an order, handle the network dying mid-payment, and make sure a user is never charged twice and never told 'failed' when it actually succeeded.\n\nAssume ~10M daily checkouts, high-stakes correctness, and a fraud constraint. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "A reliability-and-consistency design. The interviewer wants **idempotency** (the order id), the **payment-state machine** with a clear terminal 'confirm' step, and the retry/fraud story. Runtime design is secondary.",
+      "framework": "A reliability-and-consistency design. Run the two-phase framework; the interviewer wants **idempotency** (the order id), the **payment-state machine** with a clear terminal 'confirm' step, and the retry/fraud story. Runtime design is secondary.",
       "requirements": [
-        "Clarify the payment methods and flows (card, wallet, BNPL)",
         "Design the order creation with idempotency",
         "Design the payment state machine and its transitions",
         "Design the confirmation step — the only point of truth",
@@ -249,7 +280,12 @@
           "checked": "2026-08-13"
         }
       ],
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17",
+      "clarifyingQuestions": [
+        "Which payment methods must be supported — card, wallet, BNPL?",
+        "How strong must idempotency be — what is the acceptable double-charge risk?",
+        "Which PSP(s) are we integrating with, and what does their webhook contract look like?"
+      ]
     },
     {
       "id": "sd-0018",
@@ -264,10 +300,14 @@
         "realtime"
       ],
       "q": "Design a real-time collaborative editor on mobile",
+      "shortAnswer": [
+        "A Google-Docs-class mobile editor: multiple users edit one document with live presence cursors, working offline and converging on reconnect over flaky networks.",
+        "Pick a CRDT like Yjs: commutative by construction, so offline merging needs no central transform; characters carry stable ids, edits apply at frame latency.",
+        "Interviewers want the OT-versus-CRDT trade-off argued correctly, presence lossy and separate from content, concurrency-safe range-based undo, and a convergence checksum against silent divergence."
+      ],
       "prompt": "Design a real-time collaborative text editor for mobile (Google-Docs-class): multiple users edit the same document with live presence cursors, working offline and converging when they reconnect.\n\nAssume a mobile-first client with flaky networks, ~5M concurrent editors, and latency under ~1 s for a cursor to appear. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "The core is **concurrency control** (CRDT vs OT), the client-server topology (presence + auth + persistence), and the mobile-specific constraints (battery, offline, keyboard latency). Expect a debate about OT vs CRDT — know the trade-offs.",
+      "framework": "The core is **concurrency control** (CRDT vs OT), the client-server topology (presence + auth + persistence), and the mobile-specific constraints (battery, offline, keyboard latency). Run the two-phase framework; expect a debate about OT vs CRDT — know the trade-offs.",
       "requirements": [
-        "Clarify the concurrency model: OT vs CRDT and why",
         "Design the document model (sequence of characters with stable ids)",
         "Design the local editing latency budget",
         "Design the sync loop and the offline buffer",
@@ -310,7 +350,14 @@
           "url": "https://developer.android.com/jetpack/compose/state",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "clarifyingQuestions": [
+        "Is the concurrency model our choice (OT vs CRDT), or is it fixed by the requirement?",
+        "How many concurrent editors must a document support?",
+        "What document sizes must be supported, and what is the mobile latency budget?",
+        "Is real-time collaboration the primary case, or is offline solo editing primary?"
+      ],
+      "updatedIn": "2026.08.17"
     }
   ]
 }

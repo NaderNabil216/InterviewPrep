@@ -16,9 +16,9 @@
       ],
       "q": "What is WAL mode and why should Room use it?",
       "shortAnswer": [
-        "WAL (write-ahead logging) appends committed pages to a separate -wal file instead of overwriting the main database, so readers and the writer never block each other.",
-        "Readers see a consistent snapshot while writes are in flight, and commits are serialized through a single writer — so SQLite still allows only one writer at a time even in WAL.",
-        "Room enables WAL by default (setWriteAheadLoggingEnabled), and the cost is the extra -wal/-shm files plus checkpointing I/O, with SQLITE_BUSY still possible on write/write contention."
+        "WAL (write-ahead logging) appends committed pages to a separate `-wal` file instead of overwriting the main database, so readers and the writer never block each other.",
+        "Readers see a consistent snapshot while writes are in flight, and commits go through a single writer — so SQLite still allows only one writer at a time, even in WAL.",
+        "Room enables WAL by default (`setWriteAheadLoggingEnabled`). The cost: extra `-wal`/`-shm` files, checkpointing I/O, and `SQLITE_BUSY` is still possible on write/write contention."
       ],
       "answer": "#### Journal modes\nSQLite writes transactions either into a **rollback journal** (copying old pages and overwriting the main file) or, in **WAL mode**, by appending new pages to a separate `-wal` file. Room enables WAL by default, so you get three files: `app.db`, `app.db-wal`, `app.db-shm`.\n\n#### Why WAL wins for an app\n- **Readers never block the writer, and the writer never blocks readers** — reads run against a consistent snapshot while an insert is in flight.\n- Commits are group-committed and serialized by the single writer.\n- Long-running reads never see a torn state.\n\nThat's exactly what a Room-backed feed needs: constant reads plus occasional writes without spurious `SQLITE_BUSY`.\n\n#### The costs\n- Three files to manage: copying just `app.db` while `-wal` holds data yields a stale or corrupt backup — checkpoint first.\n- Checkpointing (merging `-wal` back into the main file) costs I/O and can briefly stall.\n- WAL does **not** create multiple writers — `SQLITE_BUSY` still appears on write/write contention.\n\n#### When to disable\nA tiny, write-heavy, single-purpose database can use `PRAGMA journal_mode=DELETE`; otherwise keep WAL — it's the right default for an app database.",
       "code": [
@@ -49,7 +49,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0024",
@@ -64,9 +65,9 @@
       ],
       "q": "What is the N+1 query problem and how does Room help you avoid it?",
       "shortAnswer": [
-        "N+1 is fetching N parent rows, then running one query per parent for its children — 1 + N round trips that grows linearly and can ANR a main-thread list load.",
-        "Room's @Relation inside a @Transaction function does it in two queries: the parents, then a single IN(...) fetch of all children, assembled in memory.",
-        "The same bug hides in per-item secondary queries in a PagingSource or in per-row lazy loads in the UI — any loop that queries per item is N+1 wearing different clothes."
+        "N+1 means fetching N parent rows, then running one query per parent for its children — 1 + N round trips. It grows linearly and can ANR a main-thread list load.",
+        "Room's `@Relation` inside a `@Transaction` function does it in two queries: the parents, then one `IN (...)` fetch of all children, assembled in memory.",
+        "The same bug hides in per-item queries inside a `PagingSource`, or per-row lazy loads in the UI. Any loop that queries per item is N+1 wearing different clothes."
       ],
       "answer": "#### The pattern\nN+1 means a list query fetches N parents, then a loop fetches children one parent at a time — `1 + N` queries. At N=500 in a `for` loop that's 501 round trips; on the main thread it's an ANR.\n\n#### The Room fix\n`@Relation` in a `@Transaction` DAO function collapses this to **two queries**: the parents, then one `IN (...)` for every child set, assembled into the object graph in memory. The `@Transaction` is mandatory for relation reads — Room uses it to keep the snapshot consistent while the parent and child selects run.\n\n#### Where it hides\n- **PagingSource**: a secondary per-row query inside `load()` makes every loaded page N+1.\n- **UI lazy loads**: a composable calling `dao.commentsFor(postId)` per visible row.\n- **Deep relations** (post → comments → author) where `@Relation` doesn't compose — write an explicit `JOIN` returning flat rows or a mapped shape.\n\n#### The counter-pattern\n'Just JOIN everything' is not the fix either: a join that multiplies a row per child creates a cartesian product with wrong counts and fat results. The rule is fetch the set you need in the fewest queries — which Room's relations already encode.",
       "code": [
@@ -92,7 +93,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0025",
@@ -107,9 +109,9 @@
       ],
       "q": "Files dir vs cache dir — where do you put files and how do you clean up?",
       "shortAnswer": [
-        "filesDir holds app-private files that survive until the app is uninstalled; cacheDir holds temporary data the system may reclaim when storage runs low.",
-        "Anything you can rebuild — downloaded copies, image thumbnails, logs — belongs in cache; durable user data belongs in files.",
-        "The system reclaiming cache is best-effort and unprompted, so you still delete expired cache yourself rather than waiting on the OS."
+        "`filesDir` holds app-private files that survive until the app is uninstalled. `cacheDir` holds temporary data the system may reclaim when storage runs low.",
+        "Anything you can rebuild — downloaded copies, image thumbnails, logs — belongs in cache. Durable user data belongs in files.",
+        "System cache reclaiming is best-effort and unprompted, so you still delete expired cache yourself instead of waiting on the OS."
       ],
       "answer": "#### Two directories\n`context.filesDir` is your app's **private, durable** storage — files survive until the app is uninstalled. `context.cacheDir` is **temporary** — the system may delete cache contents when storage runs low, and can wipe it at any time.\n\n#### What goes where\n- **Cache**: anything you can re-download or re-create — image thumbnails, downloaded copies, debug logs.\n- **Files**: user data and anything that must survive — offline drafts, edited media you keep, cached API data you can't regenerate cheaply.\n\n#### Cleanup is still on you\nThe system reclaiming cache is *best-effort and unprompted*. Delete expired cache yourself — a sweep on app start or when storage dips — or it lingers indefinitely. And both directories are deleted on uninstall and are app-private.\n\n#### The rules of thumb\nUse `getExternalFilesDir` only when you want files in a user-visible location, never for secrets — files in the app sandbox are readable by anything that can reach the app's storage. And remember this is for blobs: small key/value data belongs in DataStore, queryable data in Room.",
       "code": [
@@ -135,7 +137,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0026",
@@ -150,9 +153,9 @@
       ],
       "q": "How do you encrypt data at rest on Android today?",
       "shortAnswer": [
-        "The OS already provides encryption at rest via file-based encryption; app-level encryption is for specific sensitive values you don't want readable by anything that can read the app's storage.",
-        "The modern pattern is a Keystore-backed key (AES/GCM, never extractable, backed by the TEE/StrongBox) that encrypts a per-app data key, or SQLCipher to encrypt the entire Room database.",
-        "Jetpack Security's security-crypto is deprecated — the current guidance is raw Keystore APIs, SQLCipher, or a maintained library, and a hardcoded key defeats the entire purpose."
+        "The OS already encrypts at rest via file-based encryption. App-level encryption is for specific sensitive values you don't want readable by anything that can read the app's storage.",
+        "The modern pattern is a Keystore-backed key (AES/GCM, never extractable, backed by the TEE/StrongBox) that encrypts a per-app data key — or SQLCipher to encrypt the whole Room database.",
+        "Jetpack Security's `security-crypto` is deprecated. Current guidance: raw Keystore APIs, SQLCipher, or a maintained library. A hardcoded key defeats the entire purpose."
       ],
       "answer": "#### The layers\nAndroid already encrypts at rest through **file-based encryption** at the OS level. App-level encryption is for values you don't want readable by anything that can read the app's storage — tokens, keys, sensitive blobs.\n\n#### The Keystore pattern\nThe Android Keystore (`AndroidKeyStore` provider) generates keys that **never leave secure hardware** (TEE/StrongBox). The pattern is two keys: a Keystore-bound master key and a per-app data key it wraps — or encrypt directly with an AES/GCM key from `KeyGenParameterSpec` + `Cipher`. Key bytes are never extractable, so a dump of the app's data yields ciphertext only.\n\n#### SQLCipher\nFor an encrypted Room database, SQLCipher replaces SQLite: every page is encrypted, keyed by a passphrase you derive from a Keystore key — never hardcoded. Room 2.2+ accepts a `SupportSQLiteOpenHelper.Factory`, so `SQLCipherOpenHelperFactory` swaps in without changing your DAOs or migrations.\n\n#### The deprecation trap\n**Jetpack Security (`security-crypto`) is deprecated.** Answering with it is dated; the guidance is raw Keystore, SQLCipher, or a maintained library.\n\n#### Real talk\nEncrypt the values that matter, keep the DB key in the Keystore, exclude secrets from backups, and accept SQLCipher's small performance cost.",
       "code": [
@@ -183,7 +186,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0027",
@@ -198,9 +202,9 @@
       ],
       "q": "How does a PagingSource work, and what triggers invalidation?",
       "shortAnswer": [
-        "A PagingSource maps LoadParams (refresh/append/prepend plus load size) to a LoadResult.Page or Error, and the pager calls load() lazily as the UI scrolls, off the main thread.",
-        "Invalidation fires when the backing data changes — Room invalidates automatically when a tracked table changes — and the UI receives a fresh PagingData stream; you can also invalidate() manually.",
-        "insertSeparators injects UI-only rows (headers, ads, dividers) into the page stream, and testing drains the pager synchronously with pager.flow.asSnapshot { }."
+        "A `PagingSource` maps `LoadParams` (refresh/append/prepend plus load size) to a `LoadResult.Page` or `Error`. The pager calls `load()` lazily as the UI scrolls, off the main thread.",
+        "Invalidation fires when the backing data changes — Room does it automatically when a tracked table changes — and the UI gets a fresh `PagingData` stream. You can also call `invalidate()` manually.",
+        "`insertSeparators` injects UI-only rows (headers, ads, dividers) into the page stream. For tests, drain the pager synchronously with `pager.flow.asSnapshot { }`."
       ],
       "answer": "#### PagingSource\nA `PagingSource<Key, Value>` maps `LoadParams` — the load type (refresh/append/prepend) plus the requested load size — to a `LoadResult`: `LoadResult.Page(data, prevKey, nextKey)` or `LoadResult.Error`. The pager calls `load()` lazily as the UI scrolls, off the main thread. Keys are yours: a `null` next key means the end of pagination.\n\n#### Invalidation\n`invalidate()` tells the pager its snapshot is stale. Room calls it automatically when a tracked table changes, so the UI gets a fresh `PagingData` stream. An in-flight `load()` still finishes but its result is discarded and re-requested. Manual refresh = `pager.refresh()` or re-collecting a new `PagingData`.\n\n#### Separators\n`insertSeparators { before, after -> ... }` injects UI-only rows — headers, ads, date dividers — into the page stream. It runs per adjacent pair, which is why it can't be expressed as a plain `map`.\n\n#### Testing\nTest a `PagingSource` directly by calling `load()` with a `TestLoadParams`. For end-to-end, `pager.flow.asSnapshot { }` drains the flow synchronously in a coroutine test and asserts on the resulting list — the standard way to avoid flaky UI tests.\n\n#### Don't\nHold activity references in a `PagingSource`, block `load()` on the main thread, or index into `PagingData` — it's a stream of transformations, not a `List`.",
       "code": [
@@ -231,7 +235,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0028",
@@ -246,9 +251,9 @@
       ],
       "q": "How does Coil load and cache images, and how would you design an image loader?",
       "shortAnswer": [
-        "Coil caches in three tiers: a memory LRU keyed by request signature, an OkHttp-backed disk cache that honors Cache-Control, and the network — and it decodes at the requested size so memory cost tracks the view, not the file.",
-        "The cache key combines URL, requested size, and transformations, so the same URL at two sizes is two entries and a blurred variant is not interchangeable with the raw image.",
-        "A good design mirrors Coil: a two-tier cache behind a deduplicating engine that shares one network fetch among identical concurrent requests, with LRU eviction trimmed on low memory."
+        "Coil caches in three tiers: a memory LRU keyed by request signature, an OkHttp-backed disk cache that honors `Cache-Control`, and the network. It decodes at the requested size, so memory tracks the view, not the file.",
+        "The cache key combines URL, requested size, and transformations. The same URL at two sizes is two entries, and a blurred variant is not interchangeable with the raw image.",
+        "A good design mirrors Coil: a two-tier cache behind a deduplicating engine, so identical concurrent requests share one network fetch, with LRU eviction trimmed on low memory."
       ],
       "answer": "#### The tiers\nCoil caches in three places: a **memory cache** (LRU, keyed by the request signature), a **disk cache** (OkHttp-backed, honoring `Cache-Control` headers), and the network itself. Decoding pulls the bitmap into memory at the **requested size** — `Size.ORIGINAL` or `Size(w, h)` — so you never decode a 4000px photo into a 200dp view.\n\n#### The key\nThe cache key combines URL, requested size, and transformations. Same URL at two sizes is two entries; a `blur` or rounded variant is a distinct entry, not interchangeable with the raw image. Coil 3 composes this from the request via `ImageLoader` components.\n\n#### Eviction\nThe memory cache is trimmed on `onTrimMemory` through the ImageLoader's component; the disk cache has a configured max size. Both evict least-recently-used first.\n\n#### How I'd design one\nThe architecture I'd reach for: a memory cache for decode-speed hits, a disk cache for decode-time hits, and a request engine that **deduplicates** — identical concurrent requests share one network fetch and fan out to all waiters. Sizing decodes to the view's `Size`, so memory is bounded by screens, not by file size. That is, essentially, Coil's architecture.\n\n#### Coil 3\nConfigure the singleton `ImageLoader` (disk cache size and path), and in Compose use `AsyncImage` with `coilSize()` for correct request sizing.",
       "code": [
@@ -274,7 +279,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0029",
@@ -289,9 +295,9 @@
       ],
       "q": "How do WebSockets work on Android, and how do you keep a long-lived connection alive?",
       "shortAnswer": [
-        "A WebSocket upgrades a normal HTTP GET with Upgrade: websocket, the server replies 101 Switching Protocols, and both sides then exchange frames over the same TCP connection — OkHttp's newWebSocket() is the client API.",
-        "Long-lived connections die silently from NAT timeouts, carrier idle timers, process death, and Doze, so a heartbeat ping/pong is mandatory to detect a dead socket.",
-        "Reconnect on failure with exponential backoff plus jitter, cap attempts, and re-sync state with the server — an instant reconnect loop turns a restart into a thundering herd."
+        "A WebSocket starts as a normal HTTP GET with `Upgrade: websocket`. The server replies `101 Switching Protocols`, and both sides then exchange frames over the same TCP connection. OkHttp's `newWebSocket()` is the client API.",
+        "Long-lived connections die silently from NAT timeouts, carrier idle timers, process death, and Doze. A heartbeat ping/pong is mandatory to detect a dead socket.",
+        "Reconnect on failure with exponential backoff plus jitter, cap attempts, and re-sync state with the server. An instant reconnect loop turns a restart into a thundering herd."
       ],
       "answer": "#### The handshake\nA WebSocket begins as an HTTP request carrying `Upgrade: websocket`; the server responds `101 Switching Protocols`, and both sides then exchange **frames** — text, binary, ping, pong, close — over the same TCP connection. OkHttp: `client.newWebSocket(request, listener)` returns a `WebSocket` to `send()` frames on, and the listener gets `onOpen`, `onMessage`, `onClosed`, `onFailure`.\n\n#### Why they die\nNAT timeouts, carrier idle timers, process death, and Doze all kill long-lived connections — often silently. A dead socket can sit there looking connected. **Heartbeat** is the fix: send ping frames on a timer and treat a missing pong (or a read timeout) as dead.\n\n#### Reconnect\nTreat `onFailure` — any I/O error, including a server restart — as the reconnect trigger. Back off **exponentially with jitter**, cap the delay and the attempt count, then degrade to a manual-refresh state instead of looping forever.\n\n#### Re-sync\nAfter reconnecting, the server may have missed messages and the client may hold stale state: resubscribe to topics and re-sync from a known cursor rather than assuming the stream resumed where it stopped.\n\n#### Coroutines\nBridge OkHttp's callback API with `suspendCancellableCoroutine`, or use Ktor's WebSockets for a suspend-first API.",
       "code": [
@@ -322,7 +328,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0030",
@@ -337,9 +344,9 @@
       ],
       "q": "FCM data messages vs notification messages — when do you use which?",
       "shortAnswer": [
-        "Notification messages are rendered by the system into the tray — your code runs in the foreground, but in the background the system handles them and your process may not run at all.",
-        "Data messages always reach FirebaseMessagingService.onMessageReceived — foreground or background — so they're the only reliable way to trigger app work from a push.",
-        "FCM is best-effort, not guaranteed: delivery can be delayed or dropped, payloads are capped near 4 KB, and notification permission on Android 13+ gates the tray entry."
+        "Notification messages are rendered by the system into the tray. In the foreground your code still runs, but in the background the system handles them and your process may not run at all.",
+        "Data messages always reach `FirebaseMessagingService.onMessageReceived`, foreground or background — so they're the only reliable way to trigger app work from a push.",
+        "FCM is best-effort, not guaranteed: delivery can be delayed or dropped, payloads are capped near 4 KB, and on Android 13+ notification permission gates the tray entry."
       ],
       "answer": "#### Two message types\n- **Notification messages** (`notification` block): FCM and the system render the tray entry. In the foreground, `onMessageReceived` still fires; in the background the system handles display and your app may never run.\n- **Data messages** (only `data`): always delivered to `FirebaseMessagingService.onMessageReceived`, foreground or background — the reliable way to trigger a sync or app work from a push.\n\n#### Delivery reality\nFCM is **best-effort, not guaranteed**. Delivery can be delayed or dropped under normal priority, when TTL expires, or if the OS killed the process. That's why offline-first apps treat a push as a hint and re-sync on open rather than trusting it.\n\n#### Limits and rules\n- Payloads are capped around **4 KB** per message — send an id plus a marker, then fetch the real data from your API.\n- **Notification permission** (Android 13+) is a prerequisite for showing a tray notification.\n- `onMessageReceived` must be quick: schedule heavy work on `WorkManager`, don't block the callback.\n- Use `collapse_key` / notification tags to dedupe a burst of noisy events.\n\n#### The pattern\nData message → 'something changed' signal → WorkManager or a quick fetch. Notification message → 'tell the user now' display. Know which one your app actually needs.",
       "code": [
@@ -365,7 +372,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0031",
@@ -380,9 +388,9 @@
       ],
       "q": "How do you build a background sync engine for an offline app?",
       "shortAnswer": [
-        "WorkManager is the scheduler: PeriodicWorkRequest for recurring sync, OneTimeWorkRequest and chained continuations for one-off pipelines, setUniqueWork to dedupe, and constraints like network-connected and battery-not-low.",
-        "The engine is a queue drained by a worker: a Room outbox table holds pending mutations, the worker POSTs them and marks done on ack, retrying per item with Result.retry() and exponential backoff.",
-        "Sync must be resumable and idempotent — persisted offsets and idempotency keys — and a push is a hint to sync soon, never the delivery mechanism itself."
+        "WorkManager is the scheduler: `PeriodicWorkRequest` for recurring sync, `OneTimeWorkRequest` plus chained continuations for one-off pipelines, `setUniqueWork` to dedupe, and constraints like network-connected and battery-not-low.",
+        "The engine is a queue drained by a worker: a Room outbox table holds pending mutations, the worker POSTs them and marks them done on ack, retrying per item with `Result.retry()` and exponential backoff.",
+        "Sync must be resumable and idempotent — persisted offsets and idempotency keys. A push is a hint to sync soon, never the delivery mechanism itself."
       ],
       "answer": "#### The scheduler\nWorkManager is the Android-sanctioned way to run background work. `PeriodicWorkRequest` (minimum 15-minute interval) handles recurring sync; `OneTimeWorkRequest` plus `WorkContinuation.then()` builds pipelines; `setUniqueWork` dedupes by name; constraints gate on network, battery, and charging. It **guarantees execution** — the OS defers work, but it runs, surviving process death.\n\n#### The engine shape\nA sync engine is a queue drained by a worker:\n- a Room **outbox** table holds pending mutations (operation, payload, status, retry count),\n- the worker pops items, POSTs to the server, and marks them done on ack,\n- failures return `Result.retry()` with exponential backoff.\n\nRetry **per item, not per batch** — one poison mutation shouldn't block the whole queue. Keep an idempotency key per mutation so a retried write never double-applies.\n\n#### Freshness vs reliability\nRecurring sync is the background path; user-initiated actions and manual refresh are `OneTimeWorkRequest` triggers. A push message is a *hint* to sync soon — never the delivery mechanism itself.\n\n#### Power\nThe system defers work in Doze and on constrained networks. Your job is to make the worker resumable — persisted offsets, idempotency keys — not to fight the scheduler with a foreground service.",
       "code": [
@@ -413,7 +421,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

@@ -12,9 +12,9 @@
       "tags": ["perfetto", "systrace", "tracing"],
       "q": "You have a janky screen. How do you capture and read a Perfetto trace?",
       "shortAnswer": [
-        "Capture with the System Tracing record button in Developer Options, the perfetto command-line tool with a trace config, or a TraceConfig plus the Perfetto SDK from your app.",
-        "Open it in the Perfetto UI: find the main-thread track, look for the widest slice inside Choreographer#doFrame, and check GC, Binder, and the RenderThread around it.",
-        "Systrace is the older wrapper around the same tracing stack — Perfetto is the current tool."
+        "Capture with System Tracing in Developer Options, the `perfetto` command-line tool with a trace config, or a TraceConfig plus the Perfetto SDK from your app.",
+        "Open it in the Perfetto UI: find the main-thread track, take the widest slice inside `Choreographer#doFrame`, and check GC, Binder, and the RenderThread around it.",
+        "Systrace is the older wrapper over the same tracing stack — Perfetto is the current tool."
       ],
       "answer": "#### Capturing\n- **Developer Options → System Tracing**: pick buffers and categories, then record a short window around the jank.\n- **Command line**: `adb shell perfetto -t 10s -b 64mb sched freq idle binder_driver gfx view am wm` writes a `.perfetto-trace` you pull with `adb pull`.\n- **In app**: add your own slices with `android.os.Trace.beginSection` (or `androidx.tracing.Trace`) so your code appears as named sections on the main thread.\nInclude `gfx`, `view`, `am`, and `binder_driver` categories; without `gfx` you lose the frame timeline that marks each vsync.\n#### Reading it\nThe main-thread track is where frame work lives: an input event → `Choreographer#doFrame` → measure/layout/draw. The widest slice *inside* that window is your suspect — click it to read its wall-clock duration and its children. Then look sideways: a long `Binder:transaction` means you're waiting on another process; a GC slice means allocation pressure; a gap on the RenderThread means GPU or upload cost.\nDon't read CPU usage — read slice durations. A thread can sit at 5% CPU while a single 50 ms slice is your bug.",
       "code": [
@@ -37,7 +37,8 @@
         { "title": "Inspect app performance with system tracing", "url": "https://developer.android.com/topic/performance/tracing", "checked": "2026-08-13" },
         { "title": "Capture system traces with Systrace", "url": "https://developer.android.com/studio/profile/systrace", "checked": "2026-08-13" }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pe-0014",
@@ -48,9 +49,9 @@
       "tags": ["macrobenchmark", "benchmarking", "compilation-mode"],
       "q": "How do you write a Macrobenchmark, and what does CompilationMode control?",
       "shortAnswer": [
-        "A Macrobenchmark drives a full app journey — cold start, scroll — with real user interactions via UI Automator, run from an instrumented test on a device.",
-        "It reports metric bundles like StartupTimingMetric and FrameTimingMetric; you choose the startup mode (COLD/WARM) and how many iterations to average.",
-        "CompilationMode decides whether the app's code is AOT-compiled before the run — Partial() mirrors a release install with a Baseline Profile, Full() pre-compiles everything, None() measures interpreted startup."
+        "A Macrobenchmark drives a full app journey — cold start, scroll — with real user interactions via UI Automator, run as an instrumented test on a device.",
+        "It reports metric bundles like `StartupTimingMetric` and `FrameTimingMetric`; you pick the startup mode (COLD/WARM) and how many iterations to average.",
+        "`CompilationMode` decides whether code is AOT-compiled before the run: `Partial()` mimics a release install with a Baseline Profile, `Full()` pre-compiles everything, `None()` measures a bare install."
       ],
       "answer": "#### Writing one\nMacrobenchmark runs the **target app** as a black box from an `androidTest` module, scripting user actions with UI Automator. A `@get:Rule MacrobenchmarkRule` wraps `measureRepeated`: you declare metrics, iterations, and startup mode, and inside the block you script the journey — `pressHome()` then `startActivityAndWait()` for a cold start.\n- **`StartupTimingMetric`** → TTID/TTFD.\n- **`FrameTimingMetric`** → frame durations and jank stats for a scroll.\n- **`MemoryUsageMetric`** → PSS/RSS over the run.\nUse a **release** build and a real device; the numbers only mean something when they match what users get.\n#### CompilationMode\nART compiles code at different times; the mode tells the runner how to prepare the app before measuring:\n- `CompilationMode.None()` — nothing AOT'd; the interpreter and JIT cost (what a bare install looks like).\n- `CompilationMode.Partial()` — AOT-compiles exactly what a Baseline Profile covers, mimicking a production install with a profile.\n- `CompilationMode.Full()` — everything AOT'd; a best case, not a shipping case.\nPick the mode that answers the question: \"did my Baseline Profile help?\" is `Partial()` versus `None()`, not a stopwatch.",
       "code": [
@@ -72,7 +73,8 @@
       "refs": [
         { "title": "Macrobenchmark", "url": "https://developer.android.com/topic/performance/benchmarking/macrobenchmark-overview", "checked": "2026-08-13" }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pe-0015",
@@ -83,9 +85,9 @@
       "tags": ["recomposition", "compose", "state"],
       "q": "What causes a Composable to recompose, and when is that expensive?",
       "shortAnswer": [
-        "A Composable recomposes when state it reads changes — recomposition is re-executing the function body with the new values, not a re-layout or re-draw.",
+        "A Composable recomposes when state it reads changes — recomposition re-runs the function body with new values, not a re-layout or re-draw.",
         "Skipping happens when the compiler proves the inputs are unchanged: stable or immutable parameters let Compose skip the subtree.",
-        "Recomposing a frame is normal; the perf problem is a huge subtree recomposing on every animation tick because a state read sits too high in the tree."
+        "Recomposing a frame is normal; the problem is a huge subtree recomposing every animation tick because a state read sits too high in the tree."
       ],
       "answer": "#### What triggers it\nRecomposition re-runs the *function body* of the composables whose **read state changed** since the last composition. A `MutableState` read inside `FeedScreen` marks that scope dirty; when it changes, Compose re-executes `FeedScreen` and, unless it can skip, the subtree. Layout and draw then follow only for anything whose size or drawing changed — recomposition alone doesn't re-layout.\n#### Skipping and stability\nThe compiler emits a `skippable` composable when it can prove its parameters are unchanged since the last call — that proof relies on **stability**. An immutable `data class` is stable; a `List` parameter (an interface) and a class with `var` fields are unstable by default, so the subtree re-runs every time.\n#### When it's expensive\n- Reading state high in the tree — a whole screen's state collected at the root — recomposes everything beneath it.\n- Building large collections or doing real work in the body (sorting, parsing) on every recomposition.\n- Unstable parameters defeating skip on hot paths.\nFix by moving state reads down to the component that renders the value, using `remember` and `derivedStateOf` for derived values, and keeping parameters stable. Verify with the Layout Inspector's recomposition counts and the compiler metrics report.",
       "code": [
@@ -107,7 +109,8 @@
       "refs": [
         { "title": "Compose performance", "url": "https://developer.android.com/develop/ui/compose/performance", "checked": "2026-08-13" }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pe-0016",
@@ -118,9 +121,9 @@
       "tags": ["overdraw", "layouts", "recyclerview"],
       "q": "A legacy View-based screen janks when scrolling. Where do you look first?",
       "shortAnswer": [
-        "Enable Debug GPU Overdraw in Developer Options: the red and purple bands show pixels painted more than twice, and nested backgrounds are the usual cause.",
-        "Check the RecyclerView item layouts for nested layout_weight, which forces two measure passes per item and multiplies across recycling.",
-        "Then flatten hierarchies — redundant backgrounds, merge, ViewStub, ConstraintLayout — and confirm each fix with a FrameTimingMetric benchmark."
+        "Enable Debug GPU Overdraw in Developer Options: red and purple bands show pixels painted more than twice, and nested backgrounds are the usual cause.",
+        "Check RecyclerView item layouts for nested `layout_weight`, which forces two measure passes per item and multiplies across recycling.",
+        "Then flatten hierarchies — redundant backgrounds, `merge`, ViewStub, ConstraintLayout — and confirm each fix with a `FrameTimingMetric` benchmark."
       ],
       "answer": "#### Overdraw\nEvery `View.onDraw` paints over what's beneath it. A root `windowBackground`, an item `background`, a child `background`, and a text shadow can paint the same pixel four times. **Debug GPU Overdraw** colors each pixel by overdraw count (blue ≤1, green 2, pink 3, red ≥4) — red bands inside a list item mean it paints itself several times on every scroll. Remove redundant backgrounds (the theme's `windowBackground` already covers the Activity), and use `clipToOutline` so rounded corners actually clip.\n#### Nested weights\n`layout_weight` forces **two measure passes** for that branch (`onMeasure` runs twice). Inside a RecyclerView item this multiplies: every recycled item re-measures on every bind. Replace weight-based rows with `ConstraintLayout` (single-pass measurement) or fixed-size constraints. `RecyclerView` also wants deterministic item sizes — `WRAP_CONTENT` height forces re-measurement on bind.\n#### The rest\n- `ViewStub` for rarely-shown sections (no inflation until used).\n- `merge` to strip a redundant root.\n- Keep the item layout flat, and measure with `FrameTimingMetric` before and after — \"looks smoother\" is not a regression test.",
       "code": [
@@ -143,7 +146,8 @@
         { "title": "Debug GPU overdraw", "url": "https://developer.android.com/topic/performance/rendering/overdraw", "checked": "2026-08-13" },
         { "title": "Slow rendering | Android vitals", "url": "https://developer.android.com/topic/performance/vitals/render", "checked": "2026-08-13" }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pe-0017",
@@ -154,8 +158,8 @@
       "tags": ["bitmap", "image-loading", "memory"],
       "q": "How do images actually consume memory, and how do you load them efficiently?",
       "shortAnswer": [
-        "A decoded bitmap costs width times height times bytes-per-pixel in heap — a 4000x3000 ARGB_8888 image is ~48 MB no matter how small the file is on disk.",
-        "Sample with inSampleSize (or an image library like Coil or Glide) so you decode only the pixels you'll display, at the target density.",
+        "A decoded bitmap costs width times height times bytes-per-pixel in heap — a 4000x3000 ARGB_8888 image is ~48 MB, whatever the file size on disk.",
+        "Sample with `inSampleSize` (or a library like Coil or Glide) so you decode only the pixels you'll display, at the target density.",
         "Check the Memory Profiler's image section: full-resolution bitmaps resized to fit a small ImageView are the classic 50 MB surprise."
       ],
       "answer": "#### The pixel math\nDisk size is compressed bytes; heap size is **pixels**. `ARGB_8888` is 4 bytes per pixel, `RGBA_F16` is 8. A 12 MP photo is 4000 × 3000 × 4 ≈ 48 MB in memory. Decode it into a 200 dp `ImageView` and you've spent ~48 MB to display ~0.2 MP — a memory problem, and a main-thread cost if decoded on the UI thread.\n#### Efficient loading\n- **Downsample**: set `inJustDecodeBounds = true`, read the bounds, then decode with a power-of-two `inSampleSize` so the decoded size is near the view's pixel size.\n- **Match density**: use `inDensity` and `inTargetDensity` so you don't decode a full-size image and then downscale it in the view.\n- **Use a library** (Coil, Glide) that does sampling, memory and disk caching, and background decoding for you.\n- **Prefetch carefully**: an in-memory LRU cache is bounded, but a full-resolution bitmap sitting in it is one frame away from OOM.\nThe Memory Profiler shows bitmap bytes per image and a total image size, which makes mis-sized decodes visible in one screen.",
@@ -179,7 +183,8 @@
         { "title": "Manage your app's memory", "url": "https://developer.android.com/topic/performance/memory", "checked": "2026-08-13" },
         { "title": "Inspect memory with the Memory Profiler", "url": "https://developer.android.com/studio/profile/memory-profiler", "checked": "2026-08-13" }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pe-0018",
@@ -190,9 +195,9 @@
       "tags": ["strictmode", "main-thread", "io"],
       "q": "How do you find disk I/O happening on the main thread?",
       "shortAnswer": [
-        "Enable StrictMode in debug builds — the thread policy's detectDiskReads, detectDiskWrites, and detectNetwork surface the violation with a stack trace in logcat.",
+        "Enable StrictMode in debug builds — the thread policy's `detectDiskReads`, `detectDiskWrites`, and `detectNetwork` surface the violation with a stack trace in logcat.",
         "The VM policy adds a second class: leaked Closeables and SQLite objects.",
-        "Fix by moving the I/O off-thread with withContext(Dispatchers.IO), and keep StrictMode debug-only so you don't ship the penalty."
+        "Fix by moving I/O off the main thread with `withContext(Dispatchers.IO)`, and keep StrictMode debug-only so you don't ship the penalty."
       ],
       "answer": "#### StrictMode\n`StrictMode` detects policy violations at runtime. The **thread policy** flags main-thread disk reads, disk writes, and network calls; the **VM policy** flags leaked `Closeable`s and SQLite objects. Enable with `penaltyLog()` (logcat, with the exact stack) or `penaltyDeath()` (crash) in a `BuildConfig.DEBUG` build. The stack trace is the point — it names the calling code, so you fix the source, not the symptom.\nWhat it catches is what a Perfetto trace shows as a wide main-thread slice: file reads and writes, `SharedPreferences` `.commit()` on the main thread, and network calls in handlers. Anything slower than a few milliseconds on the main thread is both an ANR risk and a frame-time cost.\n#### Fixing\n- Wrap blocking work in `withContext(Dispatchers.IO)` from a coroutine.\n- Cache hot reads in memory.\n- For one-off background work use `WorkManager`, not a bare thread.\nStrictMode is a tripwire, not a profiler: it samples, and it's absent in release. Keep it on in debug builds so regressions surface in CI, and use Perfetto when you need the frame-level picture.",
       "code": [
@@ -214,7 +219,8 @@
       "refs": [
         { "title": "StrictMode | Android Developers", "url": "https://developer.android.com/reference/android/os/StrictMode", "checked": "2026-08-13" }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pe-0019",
@@ -225,9 +231,9 @@
       "tags": ["network", "payload", "compression"],
       "q": "Your API returns a 5 MB JSON feed. How do you make the network cost sane?",
       "shortAnswer": [
-        "A 5 MB JSON is both a transfer cost and a parse cost — it usually dwarfs the images, so the fix starts on the server.",
-        "Request only what the screen needs (field projection plus pagination), enable gzip, and cache with Cache-Control or ETag so revisits are 304s.",
-        "On the client, keep one OkHttpClient with an HTTP cache and a connection pool — every new connection costs a TCP plus TLS handshake."
+        "A 5 MB JSON costs you twice: transfer and parse. It usually dwarfs the images, so the fix starts on the server.",
+        "Ask for only what the screen needs — field projection plus pagination — turn on gzip, and cache with `Cache-Control` or `ETag` so revisits come back as 304s.",
+        "On the client, keep one `OkHttpClient` with an HTTP cache and a connection pool. Every new connection pays for a TCP and a TLS handshake."
       ],
       "answer": "#### Diagnose before optimizing\nMeasure the payload per screen. A 5 MB JSON is uncompressed text; gzip typically cuts it 70–90%, and pagination stops the client ever loading it all. The images are usually secondary — a 5 MB feed of tiny thumbnails means the JSON (and its parse) is the real bill.\n#### The levers\n- **Projection**: `?fields=id,title,thumbnail` so the server sends only what the screen draws.\n- **Pagination**: page 1 renders, page 2 prefetches.\n- **Compression**: gzip or brotli on the server; `Accept-Encoding` is handled by OkHttp automatically.\n- **HTTP caching**: `Cache-Control: max-age` or `ETag` plus `If-None-Match` — a 304 response is ~zero body bytes, so revisits stop re-downloading.\n- **Connection reuse**: one pooled client (keep-alive, HTTP/2 multiplexing) avoids a TCP + TLS handshake per request — on a slow network that handshake can cost more than the body.\nCaching is where most teams lose: without `Cache-Control` headers, every visit is a full re-download. Enable the disk cache and verify with an HTTP inspector.",
       "code": [
@@ -249,7 +255,8 @@
       "refs": [
         { "title": "Transfer data without draining the battery", "url": "https://developer.android.com/training/efficient-downloads", "checked": "2026-08-13" }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pe-0020",
@@ -260,9 +267,9 @@
       "tags": ["android-vitals", "play-console", "thresholds"],
       "q": "What is Android Vitals, and how does a 'bad' rating actually affect you?",
       "shortAnswer": [
-        "Android vitals is Google Play's health dashboard built from real devices: crashes, ANRs, slow rendering, startup time, and battery metrics.",
-        "The core vitals — user-perceived crash rate, ANR rate, and excessive partial wake locks — have published bad-behavior thresholds; crash overall is 1.09%, ANR overall is 0.47%.",
-        "Crossing a threshold makes your app less discoverable in Play and can add a warning to the store listing — it's a ranking and trust signal, not just a report."
+        "Android vitals is Play's health dashboard built from real devices: crashes, ANRs, slow rendering, startup time, and battery metrics.",
+        "The core vitals — user-perceived crash rate, ANR rate, excessive partial wake locks — have published thresholds: crash 1.09%, ANR 0.47% overall.",
+        "Crossing a threshold makes your app less discoverable in Play and can add a warning to the listing — it's a ranking and trust signal, not just a report."
       ],
       "answer": "#### What it measures\nAndroid vitals aggregates field data per app-day: **user-perceived crash rate**, **user-perceived ANR rate**, **excessive partial wake locks**, slow rendering (16–700 ms), frozen frames (over 700 ms), slow sessions, startup time, and memory (LMK kills, RSS). \"User-perceived\" means only sessions where the user was actively engaged count.\n#### Thresholds that matter\nPublished bad-behavior thresholds (current values):\n- Crash rate: **1.09%** overall across devices, **8%** per device model.\n- ANR rate: **0.47%** overall, **8%** per model.\n- Excessive partial wake locks: **5%** overall — with Play store-visibility impact flagged from 2026.\n- Startup is \"excessive\" when cold ≥5 s, warm ≥2 s, hot ≥1.5 s (TTID).\n#### How it gates discovery\nIf you exceed an overall threshold, Play **reduces visibility** of your app across devices; per-device violations reduce visibility on those devices and can show a warning on the store listing. So vitals isn't just monitoring — a bad rating has direct commercial cost.\nTreat it as the field arm of your performance program: vitals for the user-facing health picture, Macrobenchmarks for reproducible lab numbers, JankStats for screen-level attribution.",
       "code": [
@@ -285,7 +292,8 @@
         { "title": "Monitor app health with Android vitals", "url": "https://developer.android.com/topic/performance/vitals", "checked": "2026-08-13" },
         { "title": "Android vitals and app quality in Play Console", "url": "https://support.google.com/googleplay/android-developer/answer/7385505", "checked": "2026-08-13" }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pe-0021",
@@ -296,9 +304,9 @@
       "tags": ["baseline-profiles", "r8", "ci"],
       "q": "How do you generate a Baseline Profile, verify it applied, and keep it fresh in CI?",
       "shortAnswer": [
-        "Generate with the Baseline Profile Gradle plugin — it runs a real user journey, records which classes and methods execute, and writes baseline-prof.txt into your module.",
-        "Verify it applied by checking the install-time AOT state in logcat or by comparing CompilationMode.Partial() against None() in a startup Macrobenchmark.",
-        "In CI, regenerate on every significant release and diff the profile, so newly added code paths don't silently fall out of the AOT'd set."
+        "Generate with the Baseline Profile Gradle plugin — it runs a real user journey, records which classes and methods execute, and writes `baseline-prof.txt` into your module.",
+        "Verify it applied by checking install-time AOT state in logcat, or by comparing `CompilationMode.Partial()` against `None()` in a startup Macrobenchmark.",
+        "In CI, regenerate before every significant release and diff the profile, so new code paths don't silently fall out of the AOT'd set."
       ],
       "answer": "#### What generating does\nThe plugin (`com.android.baselineprofile`) runs a `@BaselineProfileRule` test that scripts the app's critical journeys — launch, scroll, open detail. It records the executed classes and methods into `baseline-prof.txt`. At install time ART AOT-compiles exactly that set, so startup and scroll code runs compiled instead of interpreted — typically 20–30% faster cold start. Startup Profiles (`includeInStartupProfile = true`) additionally reorder DEX layout.\n#### Verifying it applied\n- Install with the profile and check logcat for the profile installer's AOT status.\n- Best: Macrobenchmark with `CompilationMode.Partial()` (profile present) versus `CompilationMode.None()` (bare). If there's no measurable gap, the profile isn't covering the code you think it is — usually because the generator's journey doesn't match the shipped code.\n#### CI\nMake profile generation a release-time task, not a one-off: regenerate before shipping, and fail CI if the Partial-versus-None gap regresses. A profile generated on a debug build, or one never regenerated after a refactor, is silent — the app ships without the AOT coverage you believe it has.",
       "code": [
@@ -321,7 +329,8 @@
         { "title": "Baseline Profiles", "url": "https://developer.android.com/topic/performance/baselineprofiles/overview", "checked": "2026-08-13" },
         { "title": "Macrobenchmark", "url": "https://developer.android.com/topic/performance/benchmarking/macrobenchmark-overview", "checked": "2026-08-13" }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

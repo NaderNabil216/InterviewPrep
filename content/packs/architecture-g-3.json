@@ -17,9 +17,9 @@
       ],
       "q": "What is the difference between modularizing by layer and by feature, and when would you choose feature modules?",
       "shortAnswer": [
-        "Layer modules group by technology — `ui`, `domain`, `data` — while feature modules group by product slice — `search`, `profile`, `checkout`.",
-        "Feature-first is the default for a real app: a team or a screen owns its slice end to end, dependencies stay shallow, and a change lives in one module.",
-        "Layer-shaped modules earn their place for shared infrastructure — design system, network, database — that many features reuse and that nobody should own privately."
+        "Layer modules group by technology — `ui`, `domain`, `data`. Feature modules group by product slice — `search`, `profile`, `checkout`.",
+        "Feature-first is the default for a real app. A team or a screen owns its slice end to end, dependencies stay shallow, and a change lives in one module.",
+        "Layer-shaped modules still earn their place for shared infrastructure — design system, network, database — that many features reuse and nobody should own privately."
       ],
       "answer": "#### What each means\n- **Layer modules** (`:ui`, `:domain`, `:data`) group by *technology*. Every feature's screens live together in one place.\n- **Feature modules** (`:feature:search`, `:feature:profile`) group by *product slice*. A feature owns its UI, state, and data end to end.\n\n#### Why feature-first wins as the default\n- **Shallow dependencies** — the search feature depends on a couple of core modules, not on every other feature. The graph stays acyclic and buildable in parallel.\n- **Change locality** — a screen tweak touches one module. With layer modules that same tweak rebuilds the shared `:ui` module that every feature compiles against, and an average build time spikes with the module count.\n- **Ownership** — a team can own `:feature:checkout` without tripping over another team's UI code.\n\n#### Where layers still make sense\nShared *infrastructure* features must not each reimplement: `:core:designsystem`, `:core:network`, `:core:database`, `:core:common`. Those are layer-shaped because they are cross-cutting, reused, and want one owner.\n\nThe hybrid is the norm — feature modules for product slices, core layer modules for shared plumbing. Layer-only modularization is mostly ceremony: every change still ripples through the shared modules, so you pay the modularization tax without the build-time benefit.",
       "code": [
@@ -45,7 +45,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ar-0029",
@@ -60,9 +61,9 @@
       ],
       "q": "What does api/impl separation look like at the module level, and what shape should the module dependency graph take?",
       "shortAnswer": [
-        "Split a module into an `:api` module holding interfaces and models and an `:impl` module holding the implementation; consumers depend only on `:api`, wired up at the app root.",
-        "The graph must be acyclic and point from stable core outward — features on top never reach sideways into each other.",
-        "Because the `:api` ABI is stable, editing `:impl` recompiles one module instead of every consumer — that isolation is the main build-time and boundary win."
+        "Split a module in two: an `:api` module holding interfaces and models, an `:impl` module holding the implementation. Consumers depend only on `:api`, and the app root wires them together.",
+        "The graph must stay acyclic and point from the stable core outward. Features sit on top and never reach sideways into each other.",
+        "Because the `:api` ABI is stable, editing `:impl` recompiles one module instead of every consumer. That isolation is the main build-time and boundary win."
       ],
       "answer": "#### The pattern\n`:core:data:api` declares `interface UserRepository` plus the domain models it returns — no Retrofit, no Room, no implementation. `:core:data:impl` provides the concrete class. Features depend on `:api`; the `:app` module binds interface to implementation at the DI root. This is dependency inversion applied at module boundaries.\n\n#### What you get\n- **Independent compilation** — because the `:api` module's ABI is stable, editing `:impl` rebuilds `:impl` alone. Without the split, a one-line data change recompiles every module that ever touched the data layer.\n- **Direction enforced by the graph** — \"the UI may not call the network\" stops being a convention and becomes a missing dependency.\n- **Testability** — a feature unit test injects a fake `UserRepository`, because the feature only ever sees the interface.\n\n#### The dependency graph\n- **Acyclic, by construction.** A cycle (`feature:a` → `feature:b` → `feature:a`) is a design smell that Gradle compiles happily until it breaks your build cache; break it by extracting the shared piece into a new module.\n- **Stable core, volatile surface.** Core modules depend on nothing app-specific; features depend on core and never on each other. Cross-feature needs — navigation, shared models — move *down* into core or a shared contract module, never sideways.\n\n#### Measuring\n`./gradlew :app:dependencies` prints the graph; every arrow you can justify pointing inward is architecture doing its job.",
       "code": [
@@ -88,7 +89,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ar-0030",
@@ -104,9 +106,9 @@
       ],
       "q": "How do convention plugins keep a multi-module build consistent, and what should one contain?",
       "shortAnswer": [
-        "A convention plugin is Gradle code that applies a bundle of configuration — plugins, compile options, dependencies — so every module is configured identically by one line.",
-        "`build-logic` holds the plugins, and a `libs.versions.toml` version catalog is the single place dependency coordinates live.",
-        "You end up with per-kind plugins — `myapp.android.library`, `.compose`, `.application` — and module build files shrink to a plugin id plus a dependencies block."
+        "A convention plugin is Gradle code that applies one bundle of configuration — plugins, compile options, dependencies — so a single line configures every module identically.",
+        "`build-logic` holds the plugins, and a `libs.versions.toml` version catalog is the one place dependency coordinates live.",
+        "You end up with one plugin per kind of module — `myapp.android.library`, `.compose`, `.application` — and each build file shrinks to a plugin id plus a dependencies block."
       ],
       "answer": "#### Why boilerplate is a bug\nTwenty build files each setting `compileSdk`, `minSdk`, Kotlin options, and test dependencies drift the moment one of them is edited. Convention plugins centralize the default: one line in a module replaces the repetition, and a version bump happens in exactly one place.\n\n#### The layout\n`build-logic/` is itself a build whose `convention` subproject publishes plugins, either as precompiled script plugins or `Plugin<Project>` classes:\n\n- `build-logic/convention/src/main/kotlin/MyAppLibraryPlugin.kt` — applies `com.android.library` + Kotlin\n- `build-logic/convention/src/main/kotlin/MyAppComposePlugin.kt` — adds Compose compiler + UI dependencies\n- `build-logic/convention/src/main/kotlin/MyAppHiltPlugin.kt` — adds KSP + the Hilt plugin\n\n#### What one contains\n- `pluginManager.apply(...)` — the Android/Kotlin plugins it wraps. AGP 9 applies the Kotlin plugin itself, so convention plugins no longer add `org.jetbrains.kotlin.android`.\n- `android { compileSdk = 36; defaultConfig.minSdk = 24 }` — the compile defaults every module inherits.\n- Dependencies shared by that kind of module, read from the **version catalog** (`libs.versions.toml`), so versions live in one file and `libs.` accessors are generated for you.\n\n#### Rules of thumb\nKeep a thin base Android plugin and layer feature-specific ones (`compose`, `hilt`) on top. Avoid parameterized mega-plugins: if a module needs to opt out with conditionals, the plugin is too broad. And keep plugin code in `build-logic` — app build files should never hide real configuration.",
       "code": [
@@ -143,7 +145,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ar-0031",
@@ -160,8 +162,8 @@
       "q": "What counts as a module's public API surface, and how do you keep module boundaries from silently leaking?",
       "shortAnswer": [
         "A module's surface is its public Kotlin types plus anything its `api` dependencies re-export — the ABI other modules compile against.",
-        "`implementation` dependencies stay invisible to consumers, `internal` visibility keeps helper types off the surface, and `api` is a deliberate exception for types that genuinely appear in signatures.",
-        "Boundaries leak through leaked types, transitively exposed dependencies, and wrong-direction edges — and each has a detection tool: dependency reports, visibility, and CI checks."
+        "`implementation` dependencies stay invisible to consumers, and `internal` keeps helper types off the surface. `api` is a deliberate exception for types that genuinely appear in signatures.",
+        "Boundaries leak through leaked types, transitively exposed dependencies, and wrong-direction edges. Each has a detection tool: dependency reports, visibility, and CI checks."
       ],
       "answer": "#### What the surface is\nConsumers compile against a module's public classes, functions, and models — and against anything its `api` dependencies re-export. That ABI is the contract: removing a parameter or changing a return type breaks every consumer and recompiles the world.\n\n#### The mechanics that hold it\n- **`implementation` vs `api`.** `implementation(libs.gson)` keeps Gson invisible to consumers — they cannot compile against it, and when Gson changes they are not rebuilt. `api(libs.coroutines.core)` exposes the dependency because `Flow` legitimately appears in your public signatures. Default to `implementation`; `api` is a decision, not a default.\n- **`internal` visibility.** A public type with internal members still leaks them to Kotlin consumers — member visibility is part of the ABI. Keep the exported surface small and written down, in a module README, so \"what may be used\" is explicit.\n- **Dependency direction.** The `:data:api` models are shared *forward* into features; nothing below the data layer may know a feature exists.\n\n#### Detecting leaks\n- `./gradlew :feature:search:dependencies` shows exactly what is on the compile classpath.\n- A dependency-analysis check in CI fails the build on an undeclared or wrong-direction dependency.\n- `internal` on every implementation class and `implementation` on every dependency you did not consciously promote.\n\nThe test: can a consumer reach a class your module's README never mentions? If yes, the boundary leaked.",
       "code": [
@@ -192,7 +194,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ar-0032",
@@ -208,9 +211,9 @@
       ],
       "q": "Where does feature-flag infrastructure belong in your architecture, and how do you design toggles so they stay removable?",
       "shortAnswer": [
-        "Flags are read by feature code, so expose one `FeatureFlagProvider` interface injected through the DI graph — the single seam tests can fake and features consume consistently.",
+        "Feature code reads flags, so expose one `FeatureFlagProvider` interface injected through the DI graph — the single seam tests can fake and features consume consistently.",
         "Classify flags — release, experiment, permission, and ops kill-switches — because each has different defaults, lifetimes, and test matrices.",
-        "Every flag needs an owner, a removal date, and tests in both toggle positions; a flag that outlives its owner is technical debt that can no longer be retired safely."
+        "Every flag needs an owner, a removal date, and tests in both toggle positions. A flag that outlives its owner becomes debt that can no longer be retired safely."
       ],
       "answer": "#### Where the seam is\nThe architecture question is how flags *reach* feature code. Expose one `FeatureFlagProvider` interface injected like any dependency — a ViewModel takes it in its constructor. That seam is what makes a flag testable (fake the provider in a unit test) and what stops string-keyed `if (isEnabled(\"...\"))` calls from scattering across screens with no type safety.\n\n#### Classification drives design\n- **Release flags** gate a feature during rollout; default off, removed once the rollout completes. Test both positions.\n- **Experiment flags** are assignment-driven: sticky per user, and the exposure event is logged separately from the outcome.\n- **Permission flags** reduce exposure to a new risky capability such as an SDK; default off and hard to turn on by accident.\n- **Ops flags (kill switches)** default *on* — the only flag you still want available after a bad release ships, because mobile cannot roll back.\n\n#### Keeping them removable\nA flag with no owner, no removal date, and no tests is how a codebase accumulates 2ⁿ untested configurations. Enforce the lifecycle in review: each flag ships with an owner and a removal ticket. Remove the branch first, then delete the flag — in that order.\n\n#### The rollout half\nCombine flags with Play's staged rollout — small percentages, halt criteria defined before you start, Android vitals watched. The kill switch is the last line of defense, not the first.",
       "code": [
@@ -241,7 +244,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ar-0033",
@@ -258,7 +262,7 @@
       "q": "How does the module structure have to change when dozens of teams build one app?",
       "shortAnswer": [
         "Modules become team boundaries: each team owns a feature module end to end, and cross-team collaboration happens through small, stable contract interfaces, not shared source.",
-        "The coordination cost grows with the number of arrows between teams, so the module graph should mirror the org graph — every arrow a consciously owned contract.",
+        "Coordination cost grows with the number of arrows between teams, so the module graph should mirror the org graph — every arrow a consciously owned contract.",
         "Add the process that makes it scale: CODEOWNERS, architecture review on public-surface changes, ADRs, and a CI check that rejects wrong-direction dependencies."
       ],
       "answer": "#### Modules as org boundaries\nAt one team, module boundaries are an engineering preference. At dozens of teams they are the org chart: `:feature:search` is owned by the Search team, `:feature:payments` by Payments. CODEOWNERS enforces ownership, and each module's public API surface is that team's SLA — change it and you break a customer.\n\n#### Contracts beat shared code\nTwo teams rarely need each other's internals; they need a small interface — a navigation contract, a data-availability contract. Publish it in a stable contracts module, version it, and let each side implement against it. The alternative — feature A reaching into feature B's classes — creates the cross-team compile dependency that makes a 40-module app build like a monolith.\n\n#### The dependency graph as a coordination map\nEvery arrow in the module graph is a coordination relationship. Keep the graph matching the org: shallow, acyclic, feature-on-core. When a change needs an edge that is not there, that is a design review, not a quick hack — the edge becomes a recurring tax on both teams.\n\n#### What else holds it together\n- **Architecture review** on any public-surface change.\n- **ADRs** recording why a module is shaped that way — teams turn over fast and the *why* otherwise dies.\n- A **dependency-analysis check in CI** that fails on undeclared or wrong-direction dependencies automatically.\n\nNow in Android is the canonical worked example of a team-sized modular codebase worth citing in an interview.",
@@ -290,7 +294,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ar-0034",
@@ -306,9 +311,9 @@
       ],
       "q": "Your ViewModel has fifteen dependencies and manages six screens' worth of state. How do you spot the problem, and how do you split it?",
       "shortAnswer": [
-        "Symptoms: more than a handful of `StateFlow`s, dependencies you cannot justify in one sentence each, or state that only one region of one screen actually reads.",
-        "Split by region of the screen, not by method — each visual region gets its own small state holder with its own loading, error, and data state.",
-        "The screen keeps one thin coordinator that composes the region states and owns navigation effects; each region holder is tested in isolation."
+        "The symptoms: more than a handful of `StateFlow`s, dependencies you cannot justify in one sentence each, or state only one region of one screen ever reads.",
+        "Split by region of the screen, not by method. Each visual region gets its own small state holder with its own loading, error, and data state.",
+        "The screen keeps one thin coordinator that composes the region states and owns navigation effects. Each region holder is then tested on its own."
       ],
       "answer": "#### Spotting it\nA ViewModel past roughly five to eight `StateFlow`s, or a constructor whose dependencies you cannot justify in one sentence each, is a god object in the making. The tell-tale is that some state is *only* read by one region of one screen, yet it lives in a class every region depends on. When a change to one feature's state requires retesting six others, the class is the problem.\n\n#### How to split — by region, not by method\nA Profile screen with a header, stats, and settings is really three features. Give each a state holder with its own `StateFlow<RegionUiState>`: `ProfileHeaderViewModel` for name and avatar edits, `StatsViewModel` for session counts, `SettingsViewModel` for toggles and persistence. Each is small, single-purpose, and testable on its own.\n\nThe screen keeps one thin coordinator that *composes* the region states and owns navigation effects — it does not re-own their data.\n\n#### Why this survives\nBecause the split follows the UI, the boundaries stay obvious as the product grows. It maps to Compose cleanly: `hiltViewModel()` scoped per region inside the screen, `collectAsStateWithLifecycle()` per holder. When a region is reused on another screen — the header in search results — its holder moves somewhere shared without dragging the rest along.",
       "code": [
@@ -339,7 +344,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ar-0035",
@@ -355,9 +361,9 @@
       ],
       "q": "What threading policy do you enforce in the architecture, and where do the thread boundaries live?",
       "shortAnswer": [
-        "The rule: the UI layer runs on Main and never blocks it, the data layer owns all blocking work, and middle layers are dispatcher-agnostic.",
-        "Thread boundaries live in the data layer — `withContext(io)` and `flowOn(io)` at the repository or data source — so suspend functions stay main-safe by default.",
-        "Dispatchers are injected through a qualifier, never hardcoded, so tests can substitute `StandardTestDispatcher` and `Dispatchers.setMain`."
+        "The rule: the UI layer runs on Main and never blocks it, the data layer owns all blocking work, and the layers in between name no dispatcher at all.",
+        "Thread boundaries live in the data layer — `withContext(io)` or `flowOn(io)` at the repository or data source — so suspend functions are main-safe by default.",
+        "Inject dispatchers through a qualifier instead of hardcoding them, so a test can swap in `StandardTestDispatcher` and `Dispatchers.setMain`."
       ],
       "answer": "#### The policy\nThree rules cover most Android threading bugs:\n1. **UI on Main, always.** Compose renders on Main; nothing in the UI layer blocks it.\n2. **Data on background.** All I/O — network, database, files — runs on a background dispatcher.\n3. **Middle layers dispatcher-agnostic.** A use case or ViewModel that touches no I/O should not name a dispatcher; it inherits whatever context the caller provides. The moment you see `withContext(Dispatchers.IO)` in a ViewModel, the boundary has leaked.\n\n#### Where boundaries live\nIn the **data layer** — inside the repository or data source. `suspend fun` is the boundary: a repository function does its own `withContext(io)`, and a ViewModel calls it as suspend, so it never needs to know which thread the I/O ran on. For cold flows, `flowOn(io)` moves the producer off Main while the collector stays where it is.\n\n#### Mechanics\n- Inject dispatchers through a `@IoDispatcher` / `@DefaultDispatcher` qualifier so production runs on real pools and tests inject `StandardTestDispatcher`.\n- Use `Dispatchers.Main.immediate` in the UI layer where re-entrancy matters; never `runBlocking` there.\n- Know the defaults' pitfalls: `Dispatchers.IO` is unbounded, Room and Retrofit run on their own pools, and a Room `Flow` query still needs `flowOn` if a blocking join follows.\n\nMain-safety is a *property of the architecture*: a senior answer names the layer that owns the boundary, not just the API.",
       "code": [
@@ -388,7 +394,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ar-0036",
@@ -405,7 +412,7 @@
       "shortAnswer": [
         "Testability is decided at design time: a class is testable when its dependencies can be replaced by fakes, which means they are injected, not constructed inside.",
         "Logic tied to the Android framework — Context, Activity, threads — needs an emulator or Robolectric; pure Kotlin logic runs in a plain JVM test in milliseconds.",
-        "So the architecture choices that make fast unit tests possible — constructor injection, interfaces at boundaries, framework-free business rules — are the same choices that make a codebase cheap to change."
+        "So the choices that make fast unit tests possible — constructor injection, interfaces at boundaries, framework-free business rules — are the same choices that make a codebase cheap to change."
       ],
       "answer": "#### The framing\nA test is only as cheap as the seams the design left you. \"Testable\" is not something you bolt on with a mocking framework afterward; it is whether the production code *allows* a fake to stand in.\n\n#### What makes a class testable\n1. **Dependencies are injected.** A constructor that takes `UserRepository` is testable — pass a fake. A class that calls `UserRepository.getInstance()` or builds its own Retrofit is not; the test has to fight the production wiring.\n2. **Logic is pure.** Business rules in plain Kotlin functions run on the JVM with no Android runtime: instant, deterministic, debuggable.\n3. **Framework code is thin.** The closer logic sits to `Context`, `Activity`, and `Dispatchers.Main`, the more tests need Robolectric or instrumentation. Push that coupling to the edges and keep the middle framework-free.\n\n#### The architectural payoff\nThese are architecture decisions — DI, interfaces at boundaries, framework-free domain — and they are exactly what makes unit tests fast and reliable. When a codebase is hard to test, the honest diagnosis is usually architectural: too much wiring inside classes, too many singletons, logic fused to Android types.\n\nInterviewers probe this because it predicts whether you will build systems that are easy to change with confidence. Testability is a design goal you plan for, not a tool you reach for.",
       "code": [
@@ -436,7 +443,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ar-0037",
@@ -452,9 +460,9 @@
       ],
       "q": "As a staff engineer, how do you decide when clean architecture is the right call, and how do you migrate a legacy codebase without rewriting it?",
       "shortAnswer": [
-        "Apply architecture at the hard boundaries — where a dependency is expensive or security and ownership matter — and skip it where the code is a thin pass-through.",
-        "Dogma is when the pattern costs more than the coupling it prevents; you cut layers when the second consumer never arrives.",
-        "Migrate by the strangler pattern: wrap the legacy path behind a new interface, move consumers one at a time, and delete the old path only when nothing references it."
+        "Apply architecture at the hard boundaries — where a dependency is expensive, or where security and ownership matter. Skip it where the code is a thin pass-through.",
+        "It becomes dogma when the pattern costs more than the coupling it prevents. Cut layers when the second consumer never arrives.",
+        "Migrate with the strangler pattern: wrap the legacy path behind a new interface, move consumers one at a time, and delete the old path only once nothing references it."
       ],
       "answer": "#### When architecture earns its keep\nClean architecture pays for itself where coupling is expensive: security-sensitive paths like payments and auth, long-lived contracts across teams, or rules that change without touching I/O. It is dead weight where the code is a one-line pass-through — a use case that just calls a repository is indirection, not design. The staff-level skill is naming which boundaries in *this* codebase justify the ceremony. Dogma is applying the pattern before asking what it prevents.\n\n#### The review heuristic\nFor any proposed architecture I ask three things. Does it remove a real failure mode? Is the cost named — files, indirection, onboarding time? Could a junior implement it after one conversation? A proposal failing all three is over-engineered no matter how textbook it looks. When reviewing, I probe the edges hardest: what happens to errors, to lifecycle, and to the six months after launch.\n\n#### Migrating legacy, not rewriting\nRewrites die quietly — no product value while they run, while the old system keeps shipping features the rewrite then chases. Instead use the **strangler pattern**:\n\n1. Pick one vertical slice — a screen, a flow.\n2. Wrap the legacy path behind a new interface with an anti-corruption layer, so new code never touches the old shapes directly.\n3. Move consumers one at a time; each step ships.\n4. Delete the old path only when nothing references it.\n\nBig-bang rewrites fail because they defer all value to the end; incremental migration ships value at every step and keeps the app releasable.",
       "code": [
@@ -486,7 +494,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

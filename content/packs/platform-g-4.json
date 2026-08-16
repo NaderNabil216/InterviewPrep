@@ -9,12 +9,16 @@
       "topic": "UI & configuration",
       "level": 1,
       "type": "qa",
-      "tags": ["dark-theme", "theme", "ui-mode"],
+      "tags": [
+        "dark-theme",
+        "theme",
+        "ui-mode"
+      ],
       "q": "How does Android dark theme work, and what does your app have to do to support it?",
       "shortAnswer": [
-        "Dark theme comes from the `uiMode` configuration: the app follows the system's dark setting by default via `DayNight`-based themes and `values-night` resources.",
-        "The work is mostly using theme attributes (`?attr/colorSurface`) and day/night variants for drawables and colors instead of hard-coded literals.",
-        "You can force a theme with `AppCompatDelegate.setDefaultNightMode` (light/dark/system/follow system at night) — the Activity recreates when `uiMode` changes."
+        "Dark theme comes from the `uiMode` configuration. The app follows the system's dark setting by default via `DayNight` themes and `values-night` resources.",
+        "The work is mostly using theme attributes like `?attr/colorSurface` and day/night variants for drawables and colors instead of hard-coded literals.",
+        "You can force a theme with `AppCompatDelegate.setDefaultNightMode` (light, dark, system, follow system). The `Activity` recreates when `uiMode` changes."
       ],
       "answer": "#### The configuration\n`uiMode` is a configuration axis (`UI_MODE_NIGHT_NO`/`UI_MODE_NIGHT_YES`). When the system switches light↔dark, the platform re-resolves resources and recreates your Activity. To participate you inherit from a day/night theme: `Theme.AppCompat.DayNight`, `Theme.Material3.DayNight`, or `Theme.Material.DayNight`. That alone makes `?attr/` colors — `colorPrimary`, `colorSurface`, `colorOnSurface` — switch correctly, because `values-night` holds the dark variants.\n\n#### The discipline\n- Use theme attributes in layouts and code instead of `@color/` literals or `Color.parseColor`: `?attr/colorSurface` rather than white.\n- `android:forceDarkAllowed` (View) is the emergency auto-inversion for legacy apps; it does not produce good results and is not a substitute for `values-night` resources.\n- Drawables and images with baked-in colors need night variants in `drawable-night/` or a `ColorFilter` driven by theme attributes.\n- System bars should be styled with the theme (`windowLightStatusBar`/`statusBarColor` from theme attrs) so you do not get a white status bar in dark mode.\n\n#### Controlling it\n`AppCompatDelegate.setDefaultNightMode(NIGHT_MODE_NO | YES | SYSTEM | FOLLOW_SYSTEM)` forces a theme at runtime and persists across launches; the config change triggers recreation, so a `ViewModel` (or `onSaveInstanceState`) is where state must live. Auto-light-at-sunrise (`NIGHT_MODE_AUTO_TIME`) is deprecated.\n\n#### The gotcha\nRecreation on theme change is real — the same lifecycle as a rotation. Any Activity that survives poorly or re-reads a cached theme will flash or leak. Also, third-party Views that hard-code colors will not follow your theme.",
       "code": [
@@ -34,9 +38,14 @@
         "Forgetting that `uiMode` recreation also hits the status-bar style, giving a light bar on a dark screen."
       ],
       "refs": [
-        { "title": "Dark theme", "url": "https://developer.android.com/guide/topics/ui/look-and-feel/darktheme", "checked": "2026-08-13" }
+        {
+          "title": "Dark theme",
+          "url": "https://developer.android.com/guide/topics/ui/look-and-feel/darktheme",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0042",
@@ -44,12 +53,16 @@
       "topic": "Behavior changes",
       "level": 3,
       "type": "qa",
-      "tags": ["targetsdk", "behavior-changes", "compatibility-framework"],
+      "tags": [
+        "targetsdk",
+        "behavior-changes",
+        "compatibility-framework"
+      ],
       "q": "Walk through raising `targetSdkVersion`. What are the mechanical steps, and what do the behavior changes actually break?",
       "shortAnswer": [
-        "You set `targetSdkVersion` in Gradle, run the app against the new API level to trip the behavior changes, fix what the compatibility framework gates, and bump the version before Play's deadline.",
-        "Behavior changes are keyed by targetSdk: some apply to every app (enforcement-style), most only when the app *targets* the new level — the compatibility framework (the `Compat` class) keeps an app target old even on a new OS.",
-        "The painful ones are runtime changes not caught at compile time: edge-to-edge, notification trampolines, PendingIntent mutability, exact alarms, full-screen intents, 16 KB page size, and storage restrictions."
+        "You bump `targetSdkVersion` in Gradle, run against the new API level to trip the behavior changes, fix what the compatibility framework gates, and ship before Play's deadline.",
+        "Behavior changes are keyed by targetSdk: most apply only when the app *targets* the new level. The compatibility framework (the `Compat` class) lets an app behave old even on a new OS.",
+        "The painful ones are runtime changes compile time cannot catch: edge-to-edge, trampolines, `PendingIntent` mutability, exact alarms, full-screen intents, 16 KB page size, and storage restrictions."
       ],
       "answer": "#### What targetSdk means\n`targetSdkVersion` is a promise to the OS: I have been tested against API N and I expect API N behavior. Behavior changes are read from the manifest at install/runtime — raise it and you opt into new rules, often *on old devices too* (the OS knows what you target, not what version you run on). That is why bumping target can break things without a single new-API call.\n\n#### The mechanical steps\n1. Bump `compileSdk`/`targetSdk`/`minSdk` in `build.gradle`, run on the new emulator, and watch logcat for deprecations and gated behaviors.\n2. Go through the release notes' *behavior changes for apps targeting* section line by line — every change lists the affected API and the detection path.\n3. The **compatibility framework** (`CompatibilityChange` + the `Compat` class in the platform) lets the system apply a mix of behaviors while you roll out: you can force-enable or disable changes for your package to test them incrementally before committing to the target.\n4. Run the compatibility dashboard in App Quality Insights to see which changes your app actually trips.\\n\\n#### The class of breakage that hurts\\nCompile-time errors you fix mechanically. The damage is *runtime*: **edge-to-edge enforcement** (targetSdk 35+ repaints under the bars), **16 KB page sizes** (targetSdk 35+ needs 16 KB-aligned native libs from Feb 2027), **exact-alarm and full-screen-intent permissions**, **notification trampolines**, **PendingIntent mutability**, **scoped storage** — all silent behavior shifts that pass a normal test pass.",
       "code": [
@@ -69,10 +82,19 @@
         "Shipping a target bump with 16 KB-unaligned native libraries and failing the new hardware."
       ],
       "refs": [
-        { "title": "Android 17 behavior changes", "url": "https://developer.android.com/about/versions/17/behavior-changes-all", "checked": "2026-08-13" },
-        { "title": "Target API level requirement", "url": "https://developer.android.com/google/play/requirements/target-sdk", "checked": "2026-08-13" }
+        {
+          "title": "Android 17 behavior changes",
+          "url": "https://developer.android.com/about/versions/17/behavior-changes-all",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Target API level requirement",
+          "url": "https://developer.android.com/google/play/requirements/target-sdk",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0043",
@@ -80,12 +102,16 @@
       "topic": "Permissions",
       "level": 3,
       "type": "qa",
-      "tags": ["local-network", "play-policy", "data-safety"],
+      "tags": [
+        "local-network",
+        "play-policy",
+        "data-safety"
+      ],
       "q": "What changed around local-network access and Play data safety?",
       "shortAnswer": [
-        "On Android 13+, `CHANGE_NETWORK_STATE`/`CHANGE_WIFI_STATE` no longer grant the ability to talk to local network devices; Android 16 gates that behind `NEARBY_WIFI_DEVICES` with the `usesPermissionFlags` runtime access.",
+        "On Android 13+, `CHANGE_NETWORK_STATE` and `CHANGE_WIFI_STATE` no longer grant access to local network devices. Android 16 gates that behind `NEARBY_WIFI_DEVICES`, a runtime permission.",
         "Play requires a data-safety declaration covering what you collect, transmit, and share — and it must match what your code and libraries actually do.",
-        "The fine is not automated code scanning — you attest; Google can audit, and mismatches are policy violations that risk removal."
+        "The declaration is self-attested, not code-scanned: you sign it, Google can audit, and a mismatch is a policy violation that risks removal."
       ],
       "answer": "#### Local network access\nHistorically `CHANGE_WIFI_STATE`/`CHANGE_NETWORK_STATE` implied local-network reachability. That grant is gone: targeting Android 13+, `NEARBY_WIFI_DEVICES` (the `neverForLocation` variant) is the way to *control* nearby Wi-Fi devices, and Android 16 moves actual discovery/connection behind the runtime-access flag so the user gets a real consent moment. The practical consequence: apps that talk to a home IoT hub or a printer must migrate from the old permissions to `NEARBY_WIFI_DEVICES` — declared with `android:usesPermissionFlags=\"neverForLocation\"` when you do not use it for location — and handle the runtime grant. This is exactly the class of change that a `targetSdk` bump silently trips: you compile fine, and local-device features stop working on new devices.\n\n#### Play data safety\nEvery Play listing needs a **Data safety** section: which data you collect (types), whether it is shared, encrypted, or deletable, and your security practices. The declaration is self-attested, but Play cross-checks it against your app's behavior and libraries (e.g. analytics SDKs that collect identifiers count even if you do not read them). Honest, specific declarations beat vague ones: over-declaring shrinks installs, under-declaring is a policy strike. The two go together in interviews as 'permission hygiene meets policy' — the OS grants data access, Play polices how you use it.",
       "code": [
@@ -105,10 +131,19 @@
         "Omitting a library's data collection from the data-safety declaration."
       ],
       "refs": [
-        { "title": "Nearby Wi-Fi devices permission", "url": "https://developer.android.com/about/versions/13/behavior-changes-13", "checked": "2026-08-13" },
-        { "title": "Play data safety", "url": "https://support.google.com/googleplay/android-developer/answer/10787469", "checked": "2026-08-13" }
+        {
+          "title": "Nearby Wi-Fi devices permission",
+          "url": "https://developer.android.com/about/versions/13/behavior-changes-13",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Play data safety",
+          "url": "https://support.google.com/googleplay/android-developer/answer/10787469",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0044",
@@ -116,12 +151,17 @@
       "topic": "Platform internals",
       "level": 3,
       "type": "qa",
-      "tags": ["art", "jit", "aot", "pgc"],
+      "tags": [
+        "art",
+        "jit",
+        "aot",
+        "pgc"
+      ],
       "q": "How does ART execute your Kotlin, and what is the role of the JIT versus the AOT compiler?",
       "shortAnswer": [
-        "ART runs your app in a background thread: the JIT interprets and profiles hot code, then compiles it, and the Ahead-of-Time compiler (`dex2oat`) creates a full or partial native image at install/update time.",
-        "The profile-guided compiler (`--compiler-filter`) mixes them — a 'speed-profile' install compiles only the methods the runtime profile says matter, keeping install fast and startup quick.",
-        "Since Android 7 code is never interpreted forever on the hot path; the JIT and AOT cooperate, and `dex2oat` output is verified and stored per-app."
+        "ART runs your code in three ways: the interpreter for cold paths, the JIT which profiles hot code and compiles it at runtime, and `dex2oat` which compiles ahead of time at install or update.",
+        "The profile-guided compiler (`--compiler-filter`) mixes them: a 'speed-profile' install compiles only the methods the runtime profile says matter, keeping installs fast and startups quick.",
+        "JIT and AOT cooperate: hot paths are never interpreted forever, and `dex2oat` output is verified and stored per app."
       ],
       "answer": "#### The three ways ART runs code\n- **Interpreter**: slow, used at first run and for cold paths. On modern Android the JIT replaces it for hot methods.\n- **JIT (Just-In-Time)**: at runtime, a background thread profiles which methods are hot and compiles them to native machine code on the fly. The JIT also emits a **profile** file recording what you actually execute.\n- **AOT (Ahead-Of-Time)**: `dex2oat` runs at install/update/first-boot and compiles dex to native `.oat` files. The `--compiler-filter` decides how much: `speed-profile` (compile the profiled hot paths), `speed` (everything), `verify` (verify dex, interpret the rest).\n\n#### The cooperation\nThe system stores a *profile* from your previous runs. On the next install/update, `dex2oat --compiler-filter=speed-profile` compiles exactly those methods AOT, so your startup hot path is native from launch — and the JIT continues profiling new hot code during the session, letting a later `BackgroundDexOptJob` re-compile with a richer profile. That is the profile-guided model: fast installs, fast startups, and adaptive optimization.\n\n#### Why it matters\n- First-run slowness is real but bounded: the JIT compiles as you go.\n- Apps that call into a huge dependency graph (reflection-heavy Kotlin serialization, DI) show up as heavy interpreter time until profiled.\n- `debuggable` disables optimization, which is why debug builds feel different — and why release-only bugs appear in optimization.\\n- On 16 KB-page devices (mandatory Feb 2027), the native runtime and your `.so`/`.oat` must be 16 KB-aligned or the app fails to load.",
       "code": [
@@ -141,10 +181,19 @@
         "Forgetting that `verify` filter devices (weak hardware) still JIT, so interpreter-heavy code dominates first frames."
       ],
       "refs": [
-        { "title": "ART runtime", "url": "https://source.android.com/docs/core/runtime", "checked": "2026-08-13" },
-        { "title": "JIT compiler", "url": "https://source.android.com/docs/core/runtime/jit-compiler", "checked": "2026-08-13" }
+        {
+          "title": "ART runtime",
+          "url": "https://source.android.com/docs/core/runtime",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "JIT compiler",
+          "url": "https://source.android.com/docs/core/runtime/jit-compiler",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0045",
@@ -152,12 +201,17 @@
       "topic": "App startup & performance",
       "level": 2,
       "type": "qa",
-      "tags": ["multidex", "dex", "64k", "startup"],
+      "tags": [
+        "multidex",
+        "dex",
+        "64k",
+        "startup"
+      ],
       "q": "What is the 64K method limit, and does multidex still matter in 2026?",
       "shortAnswer": [
-        "A single dex file cannot hold more than 64K method references, so apps crossing that need multidex: a primary `classes.dex` plus `classes2.dex`, `classes3.dex`, ...",
-        "Since `minSdk >= 21` multidex is automatic in AGP (no `MultiDex.install` call needed) and the real cost is startup — the JIT/AOT must load and verify many dex files.",
-        "2026's mitigation is DEX **compression** via `android:compressNativeLibs`/`isSplitRequired` style options and `--dex-merged` tooling; the deeper answer is shrinking your method surface, not just splitting it."
+        "One dex file cannot hold more than 64K method references. Apps that cross that limit need multidex: a primary `classes.dex` plus `classes2.dex`, `classes3.dex`, and so on.",
+        "Since `minSdk >= 21`, multidex is automatic in AGP — no `MultiDex.install` call — and the real cost is startup: the JIT/AOT must load and verify many dex files.",
+        "2026's mitigations are DEX **compression** and `dex-merger` tooling, but the deeper answer is shrinking your method surface, not just splitting it."
       ],
       "answer": "#### The limit\nThe dex format addresses methods with 16 bits, so one dex file can reference at most 65,536 methods. Hit it and `DexIndexOverflowException` fails the build. Dependencies are the usual cause — a few heavy libraries (Retrofit + OkHttp + a DI framework + protobuf) blow through it fast.\n\n#### Multidex\nMultidex splits the app into a primary dex and a chain of secondary dexes. On `minSdk >= 21` (ART), this is the default and automatic — AGP emits the split classes at build and ART handles them natively, so there is no `MultiDex.install()` application call needed (that only applies to legacy Dalvik, `minSdk < 21`).\n\n#### The real cost: startup\nEvery extra dex file is one more thing the JIT/AOT must load, verify, and profile. The primary dex holds the classes the `Application`/first frames need, and keeping dependencies like your DI graph out of the boot path is a genuine startup technique (`startup profile`, shrinker `keep` rules, `--dex-merging`). The build-side lever is **DEX compression** (AGP's `android.dexOptions`/`compressedDex` equivalents and `dex-merger`) which trades install size for load time on capable devices.\n\n#### The strategic answer\nMultidex is a symptom. The 2026 approach is: keep dependencies honest (R8 shrinks aggressively), avoid monolithic frameworks in the hot path, and treat the primary dex as a curated startup surface. And since Android 12+ has 16 KB page-aligned dex via the runtime, the load-time cost of many small dexes is a real, measurable startup tax — measure it with a profile.",
       "code": [
@@ -177,9 +231,14 @@
         "Forgetting R8's keep rules, so the shrinker removes the classes you need and runtime reflection breaks."
       ],
       "refs": [
-        { "title": "Multidex", "url": "https://developer.android.com/studio/build/multidex", "checked": "2026-08-13" }
+        {
+          "title": "Multidex",
+          "url": "https://developer.android.com/studio/build/multidex",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0046",
@@ -187,12 +246,16 @@
       "topic": "Platform internals",
       "level": 3,
       "type": "qa",
-      "tags": ["ndk", "jni", "native-code"],
+      "tags": [
+        "ndk",
+        "jni",
+        "native-code"
+      ],
       "q": "When does an Android app go native, and what are the JNI rules that keep it alive?",
       "shortAnswer": [
         "NDK/JNI is for CPU-heavy work — codecs, signal processing, game engines, crypto — where JIT-compiled Kotlin still loses to tuned C++.",
-        "JNI is a C ABI layer between the VM and native code: every JNI call has per-call overhead, so you batch boundary crossings and copy data in bulk instead of one field at a time.",
-        "The crash class is native memory errors (SEGV, heap corruption) and JNI misuse — local references must be released (or return), and you must not store JNI references across threads without a GlobalRef."
+        "JNI is a C ABI layer between the VM and native code. Every JNI call has overhead, so batch boundary crossings and copy data in bulk instead of one field at a time.",
+        "The crash classes are native memory errors (SEGV, heap corruption) and JNI misuse: release local references (or return), and never store JNI references across threads without a `GlobalRef`."
       ],
       "answer": "#### Why native at all\nThe JIT makes Kotlin fast, but sustained heavy compute — video encode, DSP, physics, cryptography — still justifies C/C++ where cache behavior and SIMD matter. The NDK (`ndk-build` or CMake) compiles for each ABI (`arm64-v8a`, `x86_64`, ...) into `.so` libraries you load with `System.loadLibrary`.\n\n#### The JNI contract\nJNI is the boundary: Kotlin declares `external fun` (the VM finds the `JNIEXPORT` symbol by name), and native code calls back into the VM through the `JNIEnv*`. The rules that keep a process alive:\n- **Boundary cost**: each JNI call crosses the VM boundary. Pass a `ByteArray`/buffer once and operate in bulk rather than thousands of `GetIntField` calls.\n- **Local references** live for the call frame; use `ReleaseLocalRef` (or just return) and never stash them in globals. Across threads, promote with `NewGlobalRef` and delete when done.\n- **Don't hold a JNIEnv** beyond the thread that owns it; attach worker threads with `AttachCurrentThread`.\n- **Native memory is not GC'd**: your C++ must free what it allocates; leaks show up as RSS growth, not OOM dialogs.\n- **Alignment**: with the 16 KB page-size requirement (Feb 2027), native libraries must be 16 KB-aligned or the loader refuses them.\n\n#### The crash signature\nMost native crashes are SEGV/ABRT from `free()` misuse, buffer overruns, or dereferencing a freed `GlobalRef`. The stack shows `libc.so`/your `.so` frames — get the tombstone (`debuggerd`) and use ASan builds for reproducible heap errors.",
       "code": [
@@ -212,10 +275,19 @@
         "Storing a JNIEnv in a global and using it from another thread."
       ],
       "refs": [
-        { "title": "NDK", "url": "https://developer.android.com/ndk/guides", "checked": "2026-08-13" },
-        { "title": "JNI best practices", "url": "https://developer.android.com/training/articles/perf-jni", "checked": "2026-08-13" }
+        {
+          "title": "NDK",
+          "url": "https://developer.android.com/ndk/guides",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "JNI best practices",
+          "url": "https://developer.android.com/training/articles/perf-jni",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0047",
@@ -223,12 +295,17 @@
       "topic": "IPC & Binder",
       "level": 4,
       "type": "qa",
-      "tags": ["binder", "kernel", "mmap", "ipc"],
+      "tags": [
+        "binder",
+        "kernel",
+        "mmap",
+        "ipc"
+      ],
       "q": "How does Binder actually work under the hood? What is the kernel's role?",
       "shortAnswer": [
-        "Binder is a character driver in the kernel — `/dev/binder` — that mediates every cross-process call: the caller copies a `transaction` (parcel + target) into a shared `mmap`'d buffer, and the kernel wakes the target to consume it.",
-        "Each process `mmap`s a small kernel region; the kernel copies the caller's parcel in and the receiver reads it, so there is only one copy of the data, no socket, no userspace handshake.",
-        "Threads and references are also kernel-managed: threads pool per process, Binder *nodes* hold UID/PID of the owner (identity checks), and the driver enforces that a strong ref must exist to call."
+        "Binder is a kernel character driver — `/dev/binder` — that mediates cross-process calls. The caller writes a `transaction` (parcel plus target) into a shared `mmap`'d buffer, and the kernel wakes the target to consume it.",
+        "Each process `mmap`s a small kernel region. The kernel copies the caller's parcel in once and the receiver reads it — one copy, no socket, no userspace handshake.",
+        "Threads and references are kernel-managed too: threads pool per process, Binder *nodes* carry the owner's UID and PID, and the driver requires a strong reference before a call."
       ],
       "answer": "#### The driver\\nThe kernel exposes `/dev/binder` (plus `/dev/binderfs` for vendor HALs). When `A` calls a method on a remote `IBinder`, its binder thread pool marshals the arguments into a `Parcel`, allocates a `transaction` buffer from the **mmap'd region** B set up with the driver, and asks the driver to dispatch. The driver finds B's process and target object, wakes a thread from B's pool to unmarshal and execute, then mirrors the reply the same way.\n\n#### One-copy property\nProcess A's parcel write happens in kernel space into a buffer the driver carved from B's `mmap`. B reads that buffer directly — one copy, no double buffer. This is why Binder outperforms other IPC: sockets need a copy per hop plus a userspace protocol.\n\n#### Identity and refcounting\nThe driver tags every transaction with the **UID and PID** of the caller. That is the *only* reliable identity: `Binder.getCallingUid` reads it, and spoofing requires root. Each remote object is a kernel **node** that counts strong/weak refs and holds the owner's identity; the driver only permits a transaction to a node with an active strong reference. That is what makes `linkToDeath` and `transact` against a dead process deterministic: when a process dies, the kernel drops its nodes and notifies every holder.\n\n#### Threading model\\nThe driver distributes incoming transactions round-robin over the recipient's binder thread pool (`BINDER_SET_MAX_THREADS`, default 15). A call is **synchronous**: the calling thread blocks until the reply lands, so the classic deadlock is a pool exhausted by callbacks.",
       "code": [
@@ -248,9 +325,14 @@
         "Holding synchronous binder calls on the main thread and deadlocking on a full pool."
       ],
       "refs": [
-        { "title": "Binder overview", "url": "https://source.android.com/docs/core/architecture/ipc/binder-overview", "checked": "2026-08-13" }
+        {
+          "title": "Binder overview",
+          "url": "https://source.android.com/docs/core/architecture/ipc/binder-overview",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0048",
@@ -258,12 +340,16 @@
       "topic": "Components & navigation",
       "level": 2,
       "type": "qa",
-      "tags": ["bound-service", "serviceconnection", "ipc"],
+      "tags": [
+        "bound-service",
+        "serviceconnection",
+        "ipc"
+      ],
       "q": "What is the difference between a started and a bound service, and what must `ServiceConnection` callbacks handle?",
       "shortAnswer": [
-        "A started service runs until it stops itself (`startService`/`stopSelf`); a bound service exists to be called — it lives while at least one client is connected.",
-        "Binding is asynchronous: `bindService` returns immediately, and `ServiceConnection.onServiceConnected` (on the main thread) delivers the `IBinder` you use to call the service.",
-        "The classic bug is the Activity that forgets `unbindService` on `onDestroy` (leaked connection and 'Service not registered' crashes) and assuming `onServiceConnected` arrives on the main thread — it does, and doing heavy work there is an ANR."
+        "A started service runs until it stops itself with `stopSelf`. A bound service exists to be called: it lives while at least one client is connected.",
+        "Binding is asynchronous: `bindService` returns immediately, and `ServiceConnection.onServiceConnected` — on the main thread — later delivers the `IBinder` you use.",
+        "Classic bugs: forgetting `unbindService` in `onDestroy` (leaked connection, 'Service not registered' crash), and heavy work in `onServiceConnected`, which is main-thread and can ANR."
       ],
       "answer": "#### Started vs bound\n`Context.startService` starts a service in the background for a job with no client. `Context.bindService` connects to an existing service or starts one in 'bound' mode: the service stays alive as long as any client is bound (or a started part is still running). A hybrid service does both — `START_STICKY` for the job plus bindings for the UI.\n\n#### The binding dance\n`bindService(intent, conn, Context.BIND_AUTO_CREATE)` returns a boolean *immediately*; the actual result arrives later, on the main thread, via `ServiceConnection`:\n- `onServiceConnected(name, binder)` — success; cast the `IBinder` (for a local service, the classic `LocalBinder` exposes a typed interface) and cache it.\n- `onServiceDisconnected(name)` — the *process* died (or the service crashed). Do not rely on it for normal unbinds.\n- `onBindingDied(name)` — Android 8+, called when the binding target is killed; recreate or show state.\n\n#### What trips people\n- **Leaks**: every `bindService` must be balanced by `unbindService` (same token) — in `onStop`/`onDestroy` paired with the `bindService` call. Leaked connections keep the process referenced and throw `Service not registered` when you unbind twice.\n- **Threading**: the callbacks are main-thread. Reading a heavy Binder result there blocks the UI.\n- **Null binders**: `onServiceConnected` delivers the binder after `onCreate` — never assume your field is set the moment `bindService` returns.\n- **IPC shape**: the `IBinder` you get is a *handle*; calling through it is a Binder transaction, so arguments must be Parcelable/`Parcel`-safe. For a local (same-process) service it is an in-process `LocalBinder`.",
       "code": [
@@ -283,9 +369,14 @@
         "Unbinding from a fragment's `onDestroy` and from the Activity's too — double-unbind crash."
       ],
       "refs": [
-        { "title": "Services overview", "url": "https://developer.android.com/guide/components/services", "checked": "2026-08-13" }
+        {
+          "title": "Services overview",
+          "url": "https://developer.android.com/guide/components/services",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0049",
@@ -293,12 +384,16 @@
       "topic": "Components & navigation",
       "level": 2,
       "type": "qa",
-      "tags": ["context", "contextwrapper", "application-context"],
+      "tags": [
+        "context",
+        "contextwrapper",
+        "application-context"
+      ],
       "q": "What are the different `Context`s in an Android app, and why does scope matter?",
       "shortAnswer": [
-        "Every app has several `Context` instances — `Application`, `Activity`, `Service`, `BroadcastReceiver`, and wrapped variants (`ContextThemeWrapper`, `ContextWrapper` subclasses) — differing in what they can do.",
-        "An `Application` context is a singleton with no UI and no task; it is safe to hold forever, so use it for singletons, and you must use it for anything longer-lived than an Activity.",
-        "An `Activity` context carries its theme, locale, and window — required for inflating views and showing dialogs — but it leaks if you hold it past the Activity's death."
+        "Every app has several `Context` instances — `Application`, `Activity`, `Service`, `BroadcastReceiver`, plus wrapped variants like `ContextThemeWrapper` — each with different abilities.",
+        "An `Application` context is a singleton with no UI and no task. It is safe to hold forever, so use it for singletons and anything that outlives an `Activity`.",
+        "An `Activity` context carries its theme, locale, and window — needed for inflating views and showing dialogs — but it leaks if you hold it past the Activity's death."
       ],
       "answer": "#### The family\n`Activity` and `Service` are `Context`s with lifecycles; `Application` is the process-wide singleton; `BroadcastReceiver` exposes a `Context` valid only while `onReceive` runs (its `getApplicationContext()` is the safe escape hatch). `ContextThemeWrapper` wraps any context with a theme — that is what you get when you need `context` + `theme` for inflating. `ContextWrapper` is the delegation base class: you can wrap a context to override parts (permission checks, resources) — `TintContextWrapper` and similar patterns live on it.\n\n#### What scope buys you\n- **Activity context**: has a theme, a window, a task, and a configuration. Use it for `LayoutInflater`, dialogs/`Toast` from an activity, starting UI. But it dies with the Activity — keep it only as long as the Activity.\n- **Application context**: process-lifetime, no theme/task. Safe in singletons, static caches, long-lived services. You cannot show a dialog from it (no window token — you need `TYPE_APPLICATION` overlay + special access, or a themed activity), and `startActivity` needs `FLAG_ACTIVITY_NEW_TASK`.\n\n#### The leak\nHolding an Activity `Context` in a static, a singleton, or a `LocalBroadcast`/observer that outlives the Activity leaks the whole view hierarchy and its `Window`. The fix is holding `getApplicationContext()` in anything process-scoped and being strict about unregistering lifecycle-scoped listeners. The same rule makes `Service` contexts tricky: services outlive Activities, so never let a service hand an Activity reference into a queue the service owns.",
       "code": [
@@ -318,9 +413,14 @@
         "Inflating with an Application context and losing the theme (no `ContextThemeWrapper`)."
       ],
       "refs": [
-        { "title": "Context reference", "url": "https://developer.android.com/reference/android/content/Context", "checked": "2026-08-13" }
+        {
+          "title": "Context reference",
+          "url": "https://developer.android.com/reference/android/content/Context",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0050",
@@ -328,12 +428,16 @@
       "topic": "Process death & state",
       "level": 3,
       "type": "qa",
-      "tags": ["savedstatehandle", "savedstate-registry", "process-death"],
+      "tags": [
+        "savedstatehandle",
+        "savedstate-registry",
+        "process-death"
+      ],
       "q": "How does `SavedStateHandle` work with the `SavedStateRegistry`, and when is it actually needed?",
       "shortAnswer": [
-        "`SavedStateRegistryController` is the framework's key-value state store for a view (Activity/Fragment); it saves a `Bundle` on `onSaveInstanceState` and restores it on recreation or process death.",
-        "`SavedStateHandle` is the ViewModel-facing API into that store: a `SavedStateProvider` backed by a `Bundle`, so `MutableLiveData`/`MutableStateFlow` values survive by default.",
-        "You need it when a ViewModel must survive process death — screen state (scroll, form, selected item) — but anything already in the Bundle, navigation, or a repository already survives without it."
+        "`SavedStateRegistryController` is the framework's state store for a view: it saves a `Bundle` on `onSaveInstanceState` and restores it on recreation or process death.",
+        "`SavedStateHandle` is the ViewModel-facing API into that store, backed by a `Bundle`, so `MutableLiveData` or `MutableStateFlow` values survive by default.",
+        "You need it when a ViewModel must survive process death — scroll, form, selected item. Anything already in the `Bundle`, navigation, or a repository survives without it."
       ],
       "answer": "#### The plumbing\nEvery Activity/Fragment owns a `SavedStateRegistry`, driven by `SavedStateRegistryController`: on `onSaveInstanceState` it asks every registered `SavedStateProvider` for a `Bundle` and packs it in; on recreation (rotation or process death) it replays those Bundles. Components that want to survive register a provider and key their data under a unique key.\n\n#### SavedStateHandle\n`SavedStateHandle` is that mechanism exposed to a ViewModel: the `SavedStateViewModelFactory` registers the ViewModel as a provider and hands it a `SavedStateHandle` wrapping the restored bundle. Reading/writing `SavedStateHandle` (via `getStateFlow`/`getLiveData` or `this[\"key\"]`) automatically persists on save and restores on recreation — including after **process death**, which plain `onSaveInstanceState` also does (that is the whole point: the saved bundle is delivered to the new process).\n\n#### When you need it\n- **Yes**: form fields, bottom-sheet selection, a `pager` position, filters — anything the user typed/selected that a ViewModel owns and that should come back after the OS killed the app. `SavedStateHandle` is the canonical home for it.\n- **No**: data you can rebuild (fetch again from a repository), data already in the navigation backstack, or large payloads (an image bitmap) — the saved bundle is persisted to disk and has size limits (capped ~1 MB practical on some devices, and large Bundles cause TransactionTooLarge-style save failures on configuration change).\n\n#### The traps\n- Handles survive *recreation*, not necessarily *the ViewModel being cleared* — don't stash giant objects in it.\n- `SavedStateHandle` in a Fragment's ViewModel needs the Fragment's registry; keys must not collide across providers.",
       "code": [
@@ -353,10 +457,19 @@
         "Assuming plain ViewModels survive process death — they do not; only the saved bundle does."
       ],
       "refs": [
-        { "title": "Saving UI states", "url": "https://developer.android.com/topic/libraries/architecture/saving-states", "checked": "2026-08-13" },
-        { "title": "SavedStateHandle in ViewModels", "url": "https://developer.android.com/topic/libraries/architecture/viewmodel-savedstate", "checked": "2026-08-13" }
+        {
+          "title": "Saving UI states",
+          "url": "https://developer.android.com/topic/libraries/architecture/saving-states",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "SavedStateHandle in ViewModels",
+          "url": "https://developer.android.com/topic/libraries/architecture/viewmodel-savedstate",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

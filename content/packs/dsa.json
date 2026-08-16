@@ -15,6 +15,11 @@
         "hashmap"
       ],
       "q": "Two Sum — find indices of two numbers adding to a target",
+      "shortAnswer": [
+        "Find the indices of two numbers in an `IntArray` that add up to a target — exactly one solution exists.",
+        "Walk the array once, storing value to index in a `HashMap`; look up the complement `target - x` before inserting the current element.",
+        "Check the complement before inserting `x` so an element never pairs with itself. Time O(n), space O(n) versus O(n²) brute force."
+      ],
       "prompt": "Given an `IntArray` and a target, return the indices of the two numbers that add up to the target. Exactly one solution exists and you may not use the same element twice.\n\nThis is almost always the warm-up. The interviewer is checking that you go from brute force to the hash-map insight quickly, and that you state complexity without being asked.",
       "hints": [
         "Brute force is two nested loops, O(n²). What information are you recomputing?",
@@ -35,6 +40,7 @@
         "Three Sum — how does the approach generalize, and why does sorting help there?"
       ],
       "starter": "fun twoSum(nums: IntArray, target: Int): IntArray {\n    // your solution\n}",
+      "sampleCall": "twoSum(intArrayOf(2, 7, 11, 15), 9).contentToString()",
       "addedIn": "2026.08.1",
       "refs": [
         {
@@ -48,7 +54,7 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0002",
@@ -62,6 +68,11 @@
         "window"
       ],
       "q": "Longest substring without repeating characters",
+      "shortAnswer": [
+        "Return the length of the longest contiguous substring that contains no repeated characters.",
+        "Slide a window with left and right pointers, recording each character's last-seen index; on a duplicate, jump `left` past the previous occurrence.",
+        "The `prev >= left` guard keeps `left` moving forward only. Time O(n), space O(min(n, alphabet)) — each index is visited once."
+      ],
       "prompt": "Given a string, return the length of the longest substring with no repeated characters.\n\nThe canonical sliding-window problem. If you can derive the window-shrink invariant out loud, you'll pass most window questions.",
       "hints": [
         "A substring is a contiguous range — that suggests a window with two pointers rather than generating substrings.",
@@ -82,6 +93,7 @@
         "Why is `if (prev >= left)` necessary? What breaks without it?"
       ],
       "starter": "fun lengthOfLongestSubstring(s: String): Int {\n    // your solution\n}",
+      "sampleCall": "lengthOfLongestSubstring(\"abcabcbb\")",
       "addedIn": "2026.08.1",
       "refs": [
         {
@@ -95,7 +107,7 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0003",
@@ -110,6 +122,11 @@
         "android"
       ],
       "q": "Design an LRU cache with O(1) get and put",
+      "shortAnswer": [
+        "Design a cache with O(1) `get` and `put` that evicts the least recently used entry when capacity is exceeded.",
+        "Combine a `HashMap` keyed to list nodes with a doubly-linked list: touched nodes move to the front; the tail holds the LRU entry to evict.",
+        "Store the node in the map, not the value, so move-to-front is O(1). `LinkedHashMap` with `accessOrder = true` plus `removeEldestEntry` gives the same."
+      ],
       "prompt": "Implement an LRU (least-recently-used) cache supporting `get(key)` and `put(key, value)` in O(1) average time, evicting the least recently used entry when capacity is exceeded.\n\n**Why this one matters for Android:** it is exactly what `LruCache` and every image loader's memory cache does. Expect the follow-up \"now make it thread-safe\" or \"now add a disk tier\".",
       "hints": [
         "You need two things at once: O(1) key lookup, and O(1) reordering of recency. One data structure gives you each.",
@@ -136,6 +153,7 @@
         "How would you implement LFU instead, and why is it harder to keep O(1)?"
       ],
       "starter": "class LRUCache<K, V>(private val capacity: Int) {\n    fun get(key: K): V? {\n        TODO()\n    }\n    fun put(key: K, value: V) {\n        TODO()\n    }\n}",
+      "sampleCall": "run {\n    val cache = LRUCache<Int, Int>(2)\n    cache.put(1, 1); cache.put(2, 2)\n    cache.get(1)                // touch key 1, so key 2 becomes LRU\n    cache.put(3, 3)             // evicts key 2\n    \"${cache.get(1)?.toString() ?: \"null\"} / ${cache.get(2)?.toString() ?: \"null\"} / ${cache.get(3)?.toString() ?: \"null\"}\"\n}",
       "addedIn": "2026.08.1",
       "refs": [
         {
@@ -149,7 +167,7 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0004",
@@ -164,6 +182,11 @@
         "coroutines"
       ],
       "q": "Implement debounced search-as-you-type that cancels stale requests",
+      "shortAnswer": [
+        "Build a search pipeline that waits for typing to settle, drops duplicate queries, and never lets a stale response overwrite a newer result.",
+        "Chain `debounce`, `map` to trim, `distinctUntilChanged`, then `flatMapLatest`, which cancels the in-flight request; `catch` goes inside the inner flow.",
+        "The grade is operator choice: `flatMapLatest` makes out-of-order responses impossible, and catching inside the inner flow keeps one failure from killing the session."
+      ],
       "prompt": "Build the data path for a search screen: the user types, and you must issue a network search — but only after typing settles, never for the same query twice in a row, and a slower earlier request must never overwrite a newer result.\n\nThis is the single most common \"write some Android code\" exercise in a modern loop, because it tests coroutines, Flow operator choice, and race-condition awareness in one small problem.",
       "hints": [
         "Which operator waits for a pause in emissions? Which one drops consecutive duplicates?",
@@ -198,7 +221,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "run {\n    val calls = mutableListOf<String>()\n    val repo = object : SearchRepository {\n        override fun search(q: String): List<*> { calls += q; return emptyList<Any>() }\n    }\n    val vm = SearchViewModel(repo)\n    listOf(\"k\", \"ko\", \"kot\").forEach { vm.onQueryChange(it) }\n    Thread.sleep(600)\n    \"repo saw only the settled query: $calls\"\n}"
     },
     {
       "id": "ds-0005",
@@ -213,6 +237,11 @@
         "queue"
       ],
       "q": "Binary tree level-order traversal",
+      "shortAnswer": [
+        "Return a binary tree's node values level by level, as a list of lists.",
+        "BFS with a queue, but snapshot `queue.size` before expanding children — that count is exactly the number of nodes in the current level.",
+        "The gotcha is level boundaries: a plain BFS loses them, the size snapshot restores them. Time O(n), space O(w) for the widest level."
+      ],
       "prompt": "Return the node values level by level, as a list of lists.\n\nThe base case for every \"process a tree in layers\" question — right-side view, zigzag order, level averages, and minimum depth are all one small edit away.",
       "hints": [
         "Depth-first recursion visits nodes in the wrong order for this. What structure processes nodes in the order they were discovered?",
@@ -234,6 +263,7 @@
         "Could you do level order with DFS? (Yes — pass depth down and index into the result list.)"
       ],
       "starter": "class TreeNode(val v: Int, val left: TreeNode? = null, val right: TreeNode? = null)\n\nfun levelOrder(root: TreeNode?): List<List<Int>> {\n    // your solution\n}",
+      "sampleCall": "levelOrder(TreeNode(3, TreeNode(9), TreeNode(20, TreeNode(15), TreeNode(7))))",
       "addedIn": "2026.08.1",
       "refs": [
         {
@@ -247,7 +277,7 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0006",
@@ -261,6 +291,11 @@
         "array"
       ],
       "q": "House Robber — max sum with no two adjacent elements",
+      "shortAnswer": [
+        "Choose a subset of non-negative integers with maximum sum, with no two chosen elements adjacent.",
+        "DP recurrence `dp[i] = max(dp[i-1], dp[i-2] + nums[i])`, then compress to two rolling variables — only two cells back are ever read.",
+        "The space compression is the point: the table is unnecessary, so it's O(n) time and O(1) space. Write the table first, compress second."
+      ],
       "prompt": "Given an array of non-negative integers, choose a subset with maximum sum such that no two chosen elements are adjacent.\n\nThe cleanest introduction to DP state design. If you can articulate the recurrence and then compress the space, you've demonstrated the whole DP toolkit in three minutes.",
       "hints": [
         "At each index you have exactly two choices. What are they, and what does each imply about the previous index?",
@@ -286,6 +321,7 @@
         "Reconstruct which houses were chosen, not just the total. What extra bookkeeping is needed?"
       ],
       "starter": "fun rob(nums: IntArray): Int {\n    // your solution\n}",
+      "sampleCall": "rob(intArrayOf(2, 7, 9, 3, 1))",
       "addedIn": "2026.08.1",
       "refs": [
         {
@@ -299,7 +335,7 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17"
     }
   ]
 }

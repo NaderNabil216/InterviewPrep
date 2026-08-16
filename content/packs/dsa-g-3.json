@@ -15,6 +15,11 @@
         "design"
       ],
       "q": "Find Median from a Data Stream — the two-heaps pattern",
+      "shortAnswer": [
+        "Design a class over a stream of numbers with O(log n) `addNum` and O(1) `findMedian`.",
+        "Two heaps: a max-heap for the smaller half, a min-heap for the larger. Push into the left, move its max to the right, then rebalance.",
+        "Keep every left element at most every right element, with sizes within one; the median is one heap top or their average."
+      ],
       "prompt": "Design a class that supports `addNum(num: Int)` and `findMedian(): Double` on a stream of numbers, with each operation O(log n) or better.\n\nThe two-heaps trick is a classic level-4 pattern: a max-heap holding the smaller half and a min-heap holding the larger half. The median is the top of one heap (odd) or the average of both tops (even). Balance invariant: the sizes may differ by at most one, and every element in the left heap ≤ every element in the right heap.",
       "hints": [
         "The median splits the data into two halves. If you could keep the smaller half and larger half each in a structure giving their boundary elements...",
@@ -42,7 +47,9 @@
           "url": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val mf = MedianFinder()\n    listOf(1, 2, 3).forEach { mf.addNum(it) }\n    mf.findMedian()\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0035",
@@ -56,6 +63,11 @@
         "heap"
       ],
       "q": "Merge K Sorted Linked Lists",
+      "shortAnswer": [
+        "Merge `k` sorted linked lists into one sorted list and return its head.",
+        "Seed a min-heap with all `k` heads, pop the smallest, append it, and push its `next` back in.",
+        "Handle null heads at seeding time and use a dummy head for the output. O(n log k) time, O(k) space — better than append-and-sort."
+      ],
       "prompt": "Given a `List<ListNode?>` of k sorted singly-linked lists, merge them into one sorted list and return its head.\n\nThe naive \"append all then sort\" is O(n log n). The interview answer is either a priority queue over the k heads (O(n log k)) or pairwise/divide-and-conquer merging. You should be able to do the heap version fluently and name the divide-and-conquer one.",
       "hints": [
         "At any moment the next smallest element is one of the k current heads. Which data structure returns the minimum of k candidates?",
@@ -83,7 +95,9 @@
           "url": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    fun ln(vararg vals: Int): ListNode? {\n        val dummy = ListNode(0)\n        var t = dummy\n        for (v in vals) { val n = ListNode(v); t.next = n; t = n }\n        return dummy.next\n    }\n    val merged = mergeKLists(arrayOf(ln(1, 4, 5), ln(1, 3, 4), ln(2, 6)))\n    buildList { var n = merged; while (n != null) { add(n.value); n = n.next } }.toString()\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0036",
@@ -97,6 +111,11 @@
         "hashmap"
       ],
       "q": "Copy List with Random Pointer",
+      "shortAnswer": [
+        "Deep-copy a linked list whose nodes also carry a `random` pointer to any node or null.",
+        "Two passes: first build a `HashMap` from each original node to its copy, then wire `next` and `random` through the map.",
+        "You can't wire `random` in one pass — its target may not exist yet. The map is O(n) space; interleaving copies gets O(1)."
+      ],
       "prompt": "A linked list node has `value`, `next`, and a `random` pointer that may point to any node in the list or null. Deep-copy the list: every copied node's `next` and `random` must point to copied nodes.\n\nThis is the classic \"hash map first, wire pointers second\" problem. Two passes: build a value copy of every node keyed by identity, then wire `next` and `random` through the map. The O(1)-space interleaving trick is the level-4 extra.",
       "hints": [
         "You can't wire `random` on the first pass because its target may not exist yet. What do you create first?",
@@ -124,7 +143,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val a = Node(7); val b = Node(13); val c = Node(11)\n    a.next = b; b.next = c\n    b.random = a; c.random = c\n    val copy = copyRandomList(a)!!\n    buildList { var n: Node? = copy; while (n != null) { add(n.value); n = n.next } }.toString() + \" / b.random=\" + copy.next!!.random!!.value\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0037",
@@ -138,6 +159,11 @@
         "bst"
       ],
       "q": "Validate a Binary Search Tree",
+      "shortAnswer": [
+        "Return whether a binary tree is a valid BST, with strict ordering at every node.",
+        "Thread an allowed `(lo, hi)` range down the recursion: tighten the high bound for left children and the low bound for right children.",
+        "The trap is checking only immediate children; ancestors constrain deeper nodes too. `Long` sentinels dodge `Int` edge-value bugs."
+      ],
       "prompt": "Given the root of a binary tree, return whether it is a valid BST: for every node, all values in its left subtree are strictly less, all values in its right subtree are strictly greater.\n\nThe classic trap is checking only immediate children. A node 15 with a right child 14 in a left subtree of a 20 violates the BST even though 14 < 15 and 14 < 20. The correct approach threads a (min, max) allowed range down the recursion.",
       "hints": [
         "Checking `left < node < right` at each node is *not* enough — what global constraint is missing?",
@@ -170,7 +196,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val good = TreeNode(2, TreeNode(1), TreeNode(3))\n    val bad = TreeNode(5, TreeNode(1), TreeNode(4, TreeNode(3), TreeNode(6)))\n    listOf(isValidBST(good), isValidBST(bad)).toString()\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0038",
@@ -184,6 +212,11 @@
         "lca"
       ],
       "q": "Lowest Common Ancestor of a Binary Tree",
+      "shortAnswer": [
+        "Return the deepest node that has both `p` and `q` as descendants, where a node is its own descendant.",
+        "Recurse and return what was found: a node equal to `p` or `q` returns itself; a node finding both targets is the LCA.",
+        "This assumes both nodes are present; otherwise you need a two-pass count. Otherwise, one O(n) pass with O(height) recursion."
+      ],
       "prompt": "Given a binary tree and two node references `p` and `q` (both guaranteed present), return their lowest common ancestor: the deepest node that has both as descendants (itself included).\n\nClassic recursive divide: each node asks \"does my left or right subtree contain a target?\" A node is the LCA exactly when one target is in each side, or it *is* a target and the other is somewhere below it.",
       "hints": [
         "Define the recursion by what it *returns*, not what it mutates: return the found target, or the LCA if one side found each.",
@@ -211,7 +244,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val n4 = TreeNode(4)\n    val n5 = TreeNode(5, TreeNode(6), TreeNode(2, TreeNode(7), n4))\n    val root = TreeNode(3, n5, TreeNode(1, TreeNode(0), TreeNode(8)))\n    lowestCommonAncestor(root, n5, n4)!!.value\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0039",
@@ -224,6 +259,11 @@
         "tree"
       ],
       "q": "Diameter of a Binary Tree",
+      "shortAnswer": [
+        "Return the diameter of a binary tree — the longest path between any two nodes, in edges.",
+        "The diameter through a node is `leftHeight + rightHeight`; compute height recursively and update a captured best on the way up.",
+        "The pattern is height with a side effect — a single O(n) pass beats recomputing heights. Space is O(height) recursion."
+      ],
       "prompt": "Given a binary tree, return its diameter: the length of the longest path between any two nodes (in edges).\n\nThe classic \"height with a side effect\" pattern: the diameter through a node is `leftHeight + rightHeight`, and the global answer is the max over all nodes. You compute height recursively and update the max on the way up.",
       "hints": [
         "The longest path passes through some node and goes down into both its subtrees. How long is the path through a given node?",
@@ -251,7 +291,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val tree = TreeNode(1, TreeNode(2, TreeNode(4), TreeNode(5)), TreeNode(3))\n    diameterOfBinaryTree(tree)\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0040",
@@ -265,6 +307,11 @@
         "serialization"
       ],
       "q": "Serialize and Deserialize a Binary Tree",
+      "shortAnswer": [
+        "Encode a binary tree to a string and rebuild it, using any unambiguous format.",
+        "Pre-order with explicit null markers writes the tree in one pass, and deserializing consumes tokens in the same recursive order.",
+        "The encoding must be unambiguous — in-order alone isn't. Both directions are O(n); level-order also works and is what caches tend to use."
+      ],
       "prompt": "Design `serialize(root): String` and `deserialize(data): TreeNode?` for a binary tree. Any unambiguous format is acceptable; standard is pre-order with null markers (`\"1,2,null,null,3,4,null,null,5,null,null\"`).\n\nThe interview value is the encoding discipline: pre-order plus null markers makes the string uniquely reconstructible, and the deserializer consumes the token stream in the same order. This is the file-format design question of tree interviews.",
       "hints": [
         "In-order alone is ambiguous for a tree — you need something that fixes the structure. What does pre-order + explicit nulls give you?",
@@ -292,7 +339,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val tree = TreeNode(1, TreeNode(2), TreeNode(3, null, TreeNode(4)))\n    val enc = serialize(tree)\n    \"$enc == ${serialize(deserialize(enc))}\"\n}",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

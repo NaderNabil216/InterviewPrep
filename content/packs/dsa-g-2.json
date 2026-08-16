@@ -15,6 +15,11 @@
         "sorting"
       ],
       "q": "Sort Characters by Frequency",
+      "shortAnswer": [
+        "Sort a string's characters by how often they appear, descending; ties may be broken in any order.",
+        "Count characters with `groupingBy`, sort the entries by count descending, then repeat each character by its count.",
+        "State the tie-break and complexity out loud: O(n log n) for the sort variant, O(n) with buckets since the alphabet is fixed."
+      ],
       "prompt": "Given a string, sort its characters by how often they appear (descending). Ties can be broken in any order. Example: `\"tree\"` → `\"eert\"` or `\"eetr\"`.\n\nThe move interviewers want to hear: build a frequency map, then sort by count. In Kotlin the whole thing is a one-liner — but you still need to say the complexity and the count tie-break rule out loud.",
       "hints": [
         "You need counts first. What's the one pass over the string that gives them?",
@@ -47,7 +52,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/grouping-by.html",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "frequencySort(\"tree\")",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0028",
@@ -61,6 +68,11 @@
         "array"
       ],
       "q": "Insert Interval into a sorted, non-overlapping list",
+      "shortAnswer": [
+        "Insert a new interval into a sorted, non-overlapping list, merging overlaps and keeping the result sorted.",
+        "Walk once through three regions: copy intervals ending before the new start, merge everything overlapping into one interval, then copy the rest.",
+        "The sorted input is the gift — it makes this O(n), whereas append-sort-merge is O(n log n)."
+      ],
       "prompt": "Given a sorted list of non-overlapping intervals `[[a,b]]` and a new interval, insert it and merge any overlaps, returning the result still sorted and non-overlapping.\n\nThe three-region insight is the whole problem: intervals ending before the new one, intervals that overlap it, intervals starting after it. Walk the list once and classify.",
       "hints": [
         "Since the list is sorted and non-overlapping, split the work into three phases: before, during overlap, after.",
@@ -88,7 +100,9 @@
           "url": "https://kotlinlang.org/docs/collections-overview.html",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "insertInterval(listOf(intArrayOf(1,3), intArrayOf(6,9)), intArrayOf(2,5)).map { it.toList() }.toString()",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0029",
@@ -103,6 +117,11 @@
         "sweep"
       ],
       "q": "Minimum Number of Meeting Rooms required",
+      "shortAnswer": [
+        "Return the minimum number of conference rooms so that no two meetings overlap.",
+        "Sort by start, then keep a min-heap of busy rooms' end times, reusing the earliest-ending room when it frees before the next meeting.",
+        "The gotcha is `peek() <= start`: a meeting ending exactly when another starts can share. Heap size at the end is peak concurrency."
+      ],
       "prompt": "Given `intervals: List<IntArray>` of `[start, end)` meeting times, return the minimum number of conference rooms required so that no two meetings overlap.\n\nTwo classic routes exist and you should know both: a min-heap keyed on end times (the \"assign the earliest-freeing room\" greedy), and a sweep line counting concurrent meetings. The heap version is the one most interviewers want to watch you build.",
       "hints": [
         "Sort by start time first. Which meeting could possibly reuse a room? The one that ends earliest among busy rooms.",
@@ -130,7 +149,9 @@
           "url": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "minMeetingRooms(arrayOf(intArrayOf(0,30), intArrayOf(5,10), intArrayOf(15,20)))",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0030",
@@ -144,6 +165,11 @@
         "array"
       ],
       "q": "Largest Rectangle in a Histogram",
+      "shortAnswer": [
+        "Find the largest rectangle that fits inside a histogram where each bar has width 1.",
+        "Keep a monotonic increasing stack of indices; a shorter bar pops entries, computing `height * (i - left - 1)` for each.",
+        "The sentinel zero flushes the stack, and boundaries come from the new top and current index. Each index pushes and pops once — O(n)."
+      ],
       "prompt": "Given `heights: IntArray` where each bar has width 1, return the area of the largest rectangle that can be drawn within the histogram.\n\nThis is the hard monotonic-stack problem. The insight that makes it tractable: for each bar as the *height* of a rectangle, the rectangle can extend left and right until a shorter bar blocks it. A monotonic stack finds those boundaries in O(n) total.",
       "hints": [
         "For each bar, its rectangle extends to the previous shorter bar on the left and the next shorter bar on the right. Naively that's O(n²).",
@@ -171,7 +197,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "largestRectangleArea(intArrayOf(2, 1, 5, 6, 2, 3))",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0031",
@@ -186,6 +214,11 @@
         "window"
       ],
       "q": "Sliding Window Maximum — the monotonic deque",
+      "shortAnswer": [
+        "Return the maximum of every sliding window of size `k` over an array.",
+        "Keep a monotonic decreasing deque of indices; pop smaller values from the back and expired indices from the front, leaving the max on top.",
+        "Smaller back elements can never be a future max, so discarding them is safe. O(n) beats the tempting O(n log k) heap."
+      ],
       "prompt": "Given an array and a window size `k`, return an array of the maximum in each sliding window.\n\nA max-heap is the tempting O(n log k) answer, but the classic solution is a **monotonic deque** that stays decreasing by value, giving O(n). This is the pattern behind \"nearest greater\" problems and it reuses the fixed-window slide from ds-0022.",
       "hints": [
         "The window slides; a heap can't cheaply remove elements that exit the left side. What structure supports both ends?",
@@ -213,7 +246,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "maxSlidingWindow(intArrayOf(1, 3, -1, -3, 5, 3, 6, 7), 3).contentToString()",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0032",
@@ -227,6 +262,11 @@
         "parsing"
       ],
       "q": "Evaluate Reverse Polish Notation",
+      "shortAnswer": [
+        "Evaluate a reverse Polish notation expression using `+`, `-`, `*`, and `/`, with division truncating toward zero.",
+        "Push numbers onto a stack; on an operator, pop `b` then `a`, compute `a op b`, and push the result back.",
+        "The gotcha is operand order — `-` and `/` must pop `b` first, or you invert the operation. `Int` division already truncates toward zero."
+      ],
       "prompt": "Given a `List<String>` in reverse Polish (postfix) notation with operands and the operators `+ - * /`, evaluate it to an integer (truncating division toward zero).\n\nThis is the standard stack-parsing warm-up: numbers push, operators pop two, compute, push. What looks mechanical here is the real skill behind building calculator interpreters.",
       "hints": [
         "Numbers and operators arrive in postfix order — operands first. What data structure naturally holds 'not yet used' numbers?",
@@ -254,7 +294,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "evalRPN(listOf(\"10\", \"6\", \"9\", \"3\", \"+\", \"-11\", \"*\", \"/\", \"*\", \"17\", \"+\", \"5\", \"+\"))",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0033",
@@ -268,6 +310,11 @@
         "array"
       ],
       "q": "K Closest Points to Origin",
+      "shortAnswer": [
+        "Return the `k` points closest to the origin by Euclidean distance, in any order.",
+        "Keep a max-heap of size `k` keyed by squared distance, evicting the farthest when the heap exceeds `k`.",
+        "The comparator gotcha: compare full squared distances and add a coordinate tie-break so equal distances can't throw. O(n log k) versus O(n log n) sort."
+      ],
       "prompt": "Given `points: List<IntArray>` and an integer `k`, return the `k` points closest to the origin `(0,0)` (Euclidean distance; order among them doesn't matter).\n\nTwo good answers: sort all points by distance (O(n log n)) or keep a size-k max-heap (O(n log k)). The interviewer wants to see you pick the heap for large inputs and justify it. In Kotlin, `PriorityQueue` with a comparator — and a tie-break on coordinates so it's total.",
       "hints": [
         "We only need the k smallest — do we need to sort everything?",
@@ -295,7 +342,9 @@
           "url": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "kClosest(arrayOf(intArrayOf(3,3), intArrayOf(-2,4)), 1).map { it.toList() }.toString()",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

@@ -16,9 +16,9 @@
       ],
       "q": "How is a Kotlin Multiplatform module organized into source sets, and what does the default hierarchy template create for you?",
       "shortAnswer": [
-        "A KMP module is a tree of source sets: commonMain holds code usable by every target, each platform has its own leaf set, and intermediate sets such as appleMain or iosMain group targets that share code.",
-        "The default hierarchy template — on by default in modern Kotlin — reads the targets you declare and automatically creates those intermediate source sets, so iosMain exists even though you never wrote it.",
-        "The placement rule is to keep code as low in the tree as possible: platform-agnostic logic in commonMain, Apple-shared code in appleMain, iOS-only in iosMain, and truly target-specific bits at the leaf."
+        "KMP source sets form a tree: `commonMain` for code usable everywhere, a leaf set per platform, and intermediate sets like `appleMain` grouping platforms.",
+        "The default hierarchy template reads your declared targets and creates the intermediate sets — `iosMain` exists even though you never wrote it.",
+        "Place code as low in the tree as possible: platform-agnostic logic in `commonMain`, Apple-shared code in `appleMain`, iOS-only in `iosMain`, target-specific bits at the leaf."
       ],
       "answer": "Kotlin Multiplatform models code as a hierarchy of source sets, not a flat common-versus-platform split. `commonMain` is the root every target can use; `commonTest` is its test twin. At the bottom sit the actual target sets — `androidMain`, `iosArm64`, `iosSimulatorArm64`, `iosX64` — one per platform the module compiles for. Between them, intermediate sets such as `appleMain` (all Apple targets) and `iosMain` (all iOS targets) exist so code shared by a group of targets has an obvious home.\n\n#### The default hierarchy template\nThe template creates those intermediate sets for you. Instead of hand-writing `iosMain.dependsOn(commonMain)` for every group, the template derives the graph from the `targets` block: declare `iosArm64` and `iosSimulatorArm64` and you get `iosMain` for free, with correct `dependsOn` edges. Empty source sets are skipped, so a module with no `linuxMain` code just omits it.\n\n#### Where code goes\nThe rule of thumb is placement as low as possible. `commonMain` holds the real shared logic; `appleMain` holds Apple-only helpers such as `platform.Foundation` interop; `iosMain` holds iOS-only code; leaf sets hold simulator-versus-device quirks. `expect`/`actual` declarations live in `commonMain` with `actual` implementations in the platform sets, and the compiler checks every declared target provides its actual. The hierarchy is what makes one module genuinely multi-platform without a single `#ifdef`.",
       "code": [
@@ -49,7 +49,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0025",
@@ -64,9 +65,9 @@
       ],
       "q": "Walk me through the Gradle build configuration for a KMP module targeting Android and iOS.",
       "shortAnswer": [
-        "Apply the kotlin(\"multiplatform\") plugin (or the built-in Kotlin under AGP 9), then declare targets in the kotlin{} block: androidTarget() for Android and iosArm64, iosSimulatorArm64, iosX64 for the iOS family.",
-        "Dependencies go per source set — commonMain for shared libraries, androidMain and iosMain for platform ones — and repositories need mavenCentral() plus google() for AndroidX artifacts.",
-        "iOS is packaged as a framework binary (baseName and isStatic configured per target) and linked into the Xcode project, either via Gradle's embedAndSign task or the CocoaPods plugin."
+        "Apply `kotlin(\"multiplatform\")` (or AGP 9's built-in Kotlin), then declare targets: `androidTarget()` plus `iosArm64`, `iosSimulatorArm64`, `iosX64`.",
+        "Dependencies go per source set — `commonMain` for shared libraries, `androidMain`/`iosMain` for platform ones — and repositories need `mavenCentral()` plus `google()` for AndroidX.",
+        "iOS is packaged as a framework (set `baseName` and `isStatic` per target) and linked into Xcode via Gradle's `embedAndSign` task or the CocoaPods plugin."
       ],
       "answer": "The module applies `kotlin(\"multiplatform\")` — with AGP 9 the Kotlin support is built into the Android plugin instead — and describes its targets in the `kotlin {}` block. `androidTarget()` adds the Android target; `iosX64`, `iosArm64`, and `iosSimulatorArm64` add the iOS family, whose frameworks the Xcode build consumes. Dependencies are declared per source set: `commonMain` holds multiplatform libraries such as Ktor and kotlinx.serialization, `androidMain` holds Android-only artifacts, `iosMain` holds Apple-only ones. Repositories need `mavenCentral()` for Kotlin libraries and `google()` for AndroidX and AGP.\n\n#### The iOS framework\nThe output for each native target is a framework: `binaries.framework { baseName = \"Shared\"; isStatic = true }`. `isStatic = true` is the common default because a static framework is self-contained and simpler to embed. Gradle's `linkDebugFrameworkIosSimulatorArm64` (etc.) compiles it, and the `embedAndSignAppleFrameworkForXcode` task installs it into the Xcode build via a run-script phase. The `kotlin(\"native.cocoapods\")` plugin is the alternative: it publishes the framework to a Podfile so Xcode pulls it in as a pod.\n\n#### What the build enforces\nSource sets come pre-wired by the default hierarchy template, `expect`/`actual` forces every target to provide platform implementations, and the configuration-cache/cross-compilation story keeps the module buildable from a single host. The checks interviewers expect: repos, JVM toolchain for the Android target, and the linker/bundle setup for iOS.",
       "code": [
@@ -97,7 +98,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0026",
@@ -112,9 +114,9 @@
       ],
       "q": "How do you consume platform SDKs and C/Objective-C libraries from Kotlin/Native, and where does the Objective-C interop hit its limits?",
       "shortAnswer": [
-        "Apple's system frameworks arrive directly through platform.* packages usable from appleMain; third-party C and Objective-C libraries are bound with the cinterop tool, which reads a .def file and generates Kotlin bindings into a dedicated source set.",
-        "Objective-C classes map to Kotlin classes and protocols to interfaces, but the bridge is lossy: Kotlin generics surface as NSObject, and Kotlin default argument values have no ObjC equivalent.",
-        "Suspend functions become completion-handler callbacks, Kotlin exceptions cross as NSError/NSException, and only the ObjC class's public API is visible — so the boundary needs deliberate design."
+        "Apple frameworks are `platform.*` packages usable from `appleMain`; other C/Objective-C libraries go through cinterop — a `.def` file that generates Kotlin bindings.",
+        "Objective-C classes map to Kotlin classes, protocols to interfaces — but the bridge is lossy: generics surface as `NSObject`, and defaults have no ObjC equivalent.",
+        "Suspend functions become completion-handler callbacks, Kotlin exceptions cross as `NSError`/`NSException`, and only the ObjC public API is visible — so the boundary needs deliberate design."
       ],
       "answer": "Kotlin/Native talks to native code two ways. Apple system frameworks are exposed as `platform.*` packages — `platform.Foundation`, `platform.UIKit`, `platform.Security` — usable directly from `appleMain`. Everything else, a C library or a static Objective-C SDK, goes through cinterop. You write a `.def` file that names headers and linker options, register it in the target's `cinterops` block, and the compiler generates Kotlin bindings into a source set the target then depends on; native symbols become ordinary Kotlin functions and classes.\n\n#### What maps, and what leaks\nObjective-C classes map to Kotlin classes and ObjC protocols to Kotlin interfaces, which sounds clean until the lossy parts. Kotlin generics have no ObjC counterpart: a `List<T>` or a generic class surfaces as `NSObject` and you cast on the other side. Default arguments are a Kotlin feature the ObjC signature cannot express, so Swift callers see full-arity methods. Suspend functions become completion-handler callbacks, and `Flow` has no bridge type at all — it must be collected manually. A Kotlin exception crossing into ObjC becomes an `NSException`/NSError, and callbacks resume on the calling thread rather than the main queue.\n\n#### The design rule\nThe ObjC boundary is the sharpest edge of KMP. Keep it thin: return sealed results instead of throwing, avoid generics and defaults at the seam, and accept that Swift callers live with whatever the bridge exposes.",
       "code": [
@@ -145,7 +147,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0027",
@@ -160,9 +163,9 @@
       ],
       "q": "The new Kotlin/Native memory model has landed and freezing is gone — what actually changed?",
       "shortAnswer": [
-        "Kotlin/Native now ships a modern garbage-collected memory manager: any object can be shared between any thread, and the old freeze()/immutable-only sharing world is gone.",
-        "Migration is mostly deletion — remove freeze() calls and @SharedImmutable/@ThreadLocal annotations, and code that needed atomic wrappers for every shared value becomes ordinary classes guarded by a Mutex.",
-        "What remains is ordinary concurrency hygiene: genuinely shared mutable state still needs synchronization, and the atomic APIs such as AtomicInt still exist for lock-free cases."
+        "Kotlin/Native now ships a modern garbage-collected memory manager: any thread can share any object, and the old `freeze()`/immutable-only world is gone.",
+        "Migration is mostly deletion: remove `freeze()` calls and `@SharedImmutable`/`@ThreadLocal` annotations, and state that needed atomic wrappers becomes ordinary classes guarded by a `Mutex`.",
+        "What remains is ordinary concurrency hygiene: shared mutable state still needs synchronization, and atomics like `AtomicInt` still exist for lock-free cases."
       ],
       "answer": "Until Kotlin 1.7.20, Kotlin/Native used a model where objects had to be frozen before crossing threads: `freeze()` recursively marked an object graph immutable, and shared state across threads required `@ThreadLocal`, `@SharedImmutable`, or `AtomicReference`. It made sharing impossible to get wrong but painful to get right — coroutine code that worked on the JVM frequently broke on Native.\n\n#### The new model\nThe replacement (default since 1.7.20, and the only model in current releases) is a GC that supports objects shared freely across threads, matching JVM semantics. The consequences are sweeping: `freeze()` and the legacy annotations are deprecated or gone, the `native-mt` variants of kotlinx.coroutines no longer exist because the mainline artifact works everywhere, and a `MutableStateFlow` can be written on one thread and collected on another without ceremony.\n\n#### What you still do\nShared mutable state is now guarded the same way it is on the JVM: `Mutex` for critical sections, the atomic APIs for lock-free counters. The GC removed the immutability-for-free safety net, so a data race on Native is a real race rather than a compile error.\n\n#### Migration\nThe migration path is deletion: strip `freeze()`, drop `@SharedImmutable`, replace frozen singletons with ordinary objects, and rerun the same commonTest suite. The interviewer's probe is usually 'what happens to my freeze-based code' — the answer is it simply works once the freeze calls are removed.",
       "code": [
@@ -193,7 +196,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0028",
@@ -208,9 +212,9 @@
       ],
       "q": "How does concurrency work in Kotlin/Native, and what is Dispatchers.Main backed by on iOS?",
       "shortAnswer": [
-        "Concurrency in Native is the JVM model: threads share objects freely, and kotlinx.coroutines provides the same Dispatchers.Default, Dispatchers.IO, and Dispatchers.Main everywhere.",
-        "On iOS Dispatchers.Main is backed by the main run loop — the Kotlin main dispatcher schedules onto the main queue, so code on it runs on the thread UIKit expects for UI work.",
-        "The practical rules: keep UI on Dispatchers.Main, push heavy work to background dispatchers, and never block the main run loop — a blocked main queue freezes the whole UI."
+        "Concurrency in Native is the JVM model: threads share objects freely, and kotlinx.coroutines gives the same `Dispatchers.Default`, `Dispatchers.IO`, and `Dispatchers.Main` everywhere.",
+        "On iOS, `Dispatchers.Main` is backed by the main run loop, so it runs on the thread UIKit expects for UI work.",
+        "Keep UI on `Dispatchers.Main`, push heavy work to background dispatchers, and never block the main run loop — that freezes the whole UI."
       ],
       "answer": "With the modern memory model, Kotlin/Native concurrency looks like the JVM: any thread can touch any object, so coroutines, Flows, and shared collections behave the same on Android and iOS. kotlinx.coroutines ships one artifact for all targets, and `Dispatchers.Default` (CPU pool), `Dispatchers.IO`, and `Dispatchers.Unconfined` exist per platform.\n\n#### What Dispatchers.Main is on iOS\nThe iOS-specific detail is `Dispatchers.Main`. The coroutines library detects Darwin and installs a main dispatcher that schedules onto the main dispatch queue — under the hood it dispatches to the main run loop, exactly where UIKit and AppKit expect UI mutations. That means `withContext(Dispatchers.Main) { render(state) }` from a background coroutine hops to the UI thread correctly, the same contract as Android's main Looper.\n\n#### The traps\nThe first trap: never block the main queue. Because the run loop drives both UI and events, a long task on `Dispatchers.Main` freezes the app, not just one screen. The second: nothing prevents a background thread from touching UIKit directly — the dispatch only happens if you ask for it, so UI updates must be explicitly main-dispatched. The third: a Kotlin suspend function called from Swift resumes on a background thread unless the bridge or SKIE returns you to the main queue, so the dispatcher contract has to be explicit at the platform boundary.",
       "code": [
@@ -241,7 +245,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0029",
@@ -256,9 +261,9 @@
       ],
       "q": "How do suspend functions and Flow appear in Swift, and what do SKIE and the Swift-export work improve?",
       "shortAnswer": [
-        "Through the default Objective-C bridge, a suspend function surfaces as a completion-handler method and a Flow as a type you must collect with a callback — callable, but not idiomatic Swift.",
-        "SKIE is an open-source Kotlin compiler plugin that rewrites the exported API: suspend functions become async/await functions and Flows become AsyncSequence, with @Throws support for error handling.",
-        "JetBrains is also building a native Swift export path that emits real Swift from Kotlin instead of going through Objective-C — experimental today, it is the direction the interop is heading."
+        "Through the default Objective-C bridge, a suspend function becomes a completion-handler method and a Flow a collect-by-callback type — callable, but not idiomatic Swift.",
+        "SKIE is an open-source Kotlin compiler plugin that rewrites the exported API: suspend functions become `async`/`await`, Flows become `AsyncSequence`, and `@Throws` maps to error handling.",
+        "JetBrains is also building native Swift export that emits real Swift from Kotlin instead of Objective-C — experimental today, but clearly the direction."
       ],
       "answer": "The Objective-C bridge, not Swift, is what the Kotlin/Native compiler emits. A Kotlin `suspend fun` becomes a method taking a completion handler: `fetchUser(id:completion:)`. It works, but Swift callers write callback nesting and lose `async`/`await`. A `Flow` maps to a type with a `collect(callback:)` method — every value arrives in a callback, with no cancellation-friendly native streaming type.\n\n#### SKIE\nSKIE is the pragmatic fix: a compiler plugin that rewrites the generated API so suspend functions surface as `async throws` Swift functions, Flows surface as `AsyncSequence` (so Swift code does `for await value in flow`), and Kotlin functions annotated `@Throws` map to Swift `throws`. Teams shipping shared Kotlin logic into SwiftUI typically add SKIE rather than hand-writing wrapper code.\n\n#### The Swift-export trajectory\nJetBrains is working on a native Swift export: an experimental compiler feature that emits real Swift — `async`/`await`, optionals, named arguments — instead of translating through Objective-C, removing the lossy layer. It is not the default, so the stable answer remains the ObjC bridge, sharpened by SKIE.\n\nThe interview point: understand the completion-handler baseline, know SKIE as the current ergonomics layer, and mention the native Swift export as the direction.",
       "code": [
@@ -289,7 +294,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0030",
@@ -304,9 +310,9 @@
       ],
       "q": "Room, DataStore, ViewModel, Paging, Lifecycle — which are KMP-ready, and what do you buy by using them in shared code?",
       "shortAnswer": [
-        "All five ship multiplatform artifacts: Room (database with Flow and suspend DAOs), DataStore (preferences storage), ViewModel and Lifecycle (state holders and lifecycle), and Paging (paged lists) work from commonMain.",
-        "What you buy is a single, tested data layer: the same typed queries, preferences, and viewmodel state compile for Android and iOS and are verified once in commonTest.",
-        "They remove the worst KMP trap — reimplementing the same logic twice — while leaving the UI native, since these libraries stay below the UI boundary."
+        "All five ship multiplatform artifacts: Room (database with Flow and suspend DAOs), DataStore (preferences), ViewModel and Lifecycle, and Paging — all usable from `commonMain`.",
+        "You buy a single, tested data layer: the same typed queries, preferences, and viewmodel state compile for both platforms and are verified once in `commonTest`.",
+        "They remove the worst KMP trap — writing the same logic twice — while the UI stays native, below the UI boundary."
       ],
       "answer": "Google's multiplatform investment means a KMP app can carry the Jetpack data layer into commonMain instead of rebuilding it per platform. Room is KMP-ready: `@Entity`, `@Dao`, and `@Database` compile for Android, iOS, and desktop, with suspend and Flow queries, migrations, and a per-platform SQLite driver behind an `expect`/`actual` seam. DataStore provides its preferences API in common code for typed key-value storage. ViewModel and Lifecycle bring the state-holder pattern to commonMain — a ViewModel survives its configuration, `viewModelScope` works, and lifecycle awareness is a real abstraction rather than an Android-only habit. Paging offers multiplatform `PagingSource`/`PagingData` so paginated lists flow from a shared repository.\n\n#### What it buys\nArchitectural single-sourcing: the repository, DAO, and viewmodel layers are written once, unit-tested once in `commonTest`, and shared by a Compose UI on Android and a SwiftUI UI on iOS. You avoid the classic KMP failure mode of duplicating the domain layer per platform.\n\n#### The honest limits\nThese are below-the-UI libraries — the UI stays native. Platform-specific concerns such as secure storage, notifications, and biometrics remain `expect`/`actual` or platform-layer work. The framing to give an interviewer: Room, DataStore, ViewModel, Lifecycle, and Paging are the KMP-ready core, and a shared data layer is the greenfield default.",
       "code": [
@@ -337,7 +343,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0031",
@@ -352,9 +359,9 @@
       ],
       "q": "Why is Ktor plus kotlinx.serialization the default shared networking stack in KMP, and how do you wire it?",
       "shortAnswer": [
-        "Ktor client is multiplatform by design: one HttpClient API over per-platform engines — OkHttp on Android, Darwin on iOS — so networking code lives once in commonMain.",
-        "The ContentNegotiation plugin ties it to kotlinx.serialization: mark DTOs @Serializable, register a Json format, and typed body() and setBody() calls handle encode and decode automatically.",
-        "Because the stack is pure Kotlin and suspend-based, you test it in commonTest against a MockEngine — canned responses verify DTO parsing and request shape without a device."
+        "Ktor client is multiplatform: one `HttpClient` API over per-platform engines — OkHttp on Android, Darwin on iOS — so networking lives once in `commonMain`.",
+        "The `ContentNegotiation` plugin ties it to kotlinx.serialization: mark DTOs `@Serializable`, register a `Json` format, and typed `body()`/`setBody()` calls encode and decode automatically.",
+        "The stack is pure Kotlin and suspend-based, so `commonTest` runs against a `MockEngine` — canned responses verify DTO parsing and request shape."
       ],
       "answer": "Ktor and kotlinx.serialization are the pairing that makes shared networking real. Ktor client is multiplatform at the engine level: commonMain writes to the `HttpClient` API, and each platform supplies a transport engine — OkHttp on Android, Darwin's NSURLSession on iOS, CIO/curl on the JVM — selected via `expect`/`actual` or auto-detection. The request DSL, plugins, and suspend model are identical everywhere.\n\n#### The serialization seam\n`ContentNegotiation` is the plugin that couples Ktor to kotlinx.serialization. You register `Json { ignoreUnknownKeys = true }`, mark DTOs `@Serializable`, and then `client.get(url).body<Profile>()` decodes while `client.post { setBody(dto) }` encodes, with `@SerialName` controlling field names and defaults handling missing keys. Because serialization is compile-time codegen rather than reflection, the same DTOs run on Native.\n\n#### The ecosystem and the tests\nThe plugins around the stack keep it honest: `Logging`, `HttpTimeout`, and `Auth` for token injection. For tests, `MockEngine` serves canned responses, so you assert on parsed results, DTOs, and request paths from `commonTest` — no device, no server.\n\nThe comparison interviewers want: Retrofit is Android-only, so a KMP app that wants one networking implementation picks Ktor; and kotlinx.serialization is the serializer that works on every Kotlin target, unlike reflection-based Gson or Moshi. The result is one repository, one DTO set, and one test suite for both platforms.",
       "code": [
@@ -385,7 +392,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0032",
@@ -400,9 +408,9 @@
       ],
       "q": "For a KMP app, would you pick SQLDelight or Room, and what drives the decision?",
       "shortAnswer": [
-        "SQLDelight is SQL-first and multiplatform-native: you write .sq files, get generated typed queries, and add a driver per platform — Android, iOS, JVM, native — with a battle-tested iOS story.",
-        "Room is the Jetpack option, KMP-ready since 2.7: annotations, Flow and suspend DAOs, migrations, and compile-time query checking, but its multiplatform support is younger than SQLDelight's.",
-        "Choose SQLDelight for one shared SQL schema with the most hardened multiplatform path; choose Room when you are Android-first and value the Jetpack integration, Paging, and the skills your team already has."
+        "SQLDelight is SQL-first: `.sq` files in, generated typed queries out, with a driver per platform (Android, iOS, JVM, native) and a battle-tested iOS story.",
+        "Room is the Jetpack option, KMP-ready since 2.7: annotations, Flow and suspend DAOs, migrations — but its multiplatform path is younger than SQLDelight's.",
+        "Choose SQLDelight for one shared SQL schema and the most hardened multiplatform path; choose Room when you're Android-first and value Jetpack integration and Paging."
       ],
       "answer": "Both give you typed, compile-time-checked SQL in shared code; the difference is heritage and fit. SQLDelight is SQL-first: you author `.sq` files with real SQL, and the Gradle plugin generates Kotlin data classes and query APIs. Drivers are per platform — `AndroidSqliteDriver` on Android, native SQLite via `NativeSqliteDriver` on iOS, plus JVM and JS — so the same schema and queries run everywhere. It was the de-facto KMP database before Room went multiplatform, so its iOS story is battle-tested.\n\nRoom is the Jetpack option, KMP-ready since 2.7.0: `@Entity`/`@Dao` annotations, suspend and Flow queries, relations, auto-migrations, and schema export — the API Android teams already know, now compiling for iOS with a per-platform SQLite driver at an `expect`/`actual` seam.\n\n#### The decision\nPick SQLDelight when you want one SQL schema with the most mature multiplatform path and don't want a Jetpack dependency. Pick Room when your team is Android-shaped, values Room's migrations tooling and Paging integration, and accepts a younger KMP surface. Both beat hand-rolled driver code.\n\nThe probe interviewers run: you know both libraries, name the per-platform driver seam, and acknowledge Room KMP's relative maturity rather than assuming it is equivalent everywhere.",
       "code": [
@@ -433,7 +441,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0033",
@@ -448,9 +457,9 @@
       ],
       "q": "How do you do dependency injection in a KMP module, and where do platform-specific implementations come from?",
       "shortAnswer": [
-        "DI in KMP mirrors Android: Koin (pure-Kotlin runtime), kotlin-inject (KSP codegen, compile-time), or manual/factory DI all work from commonMain, and the choice is runtime flexibility versus compile-time guarantees.",
-        "commonMain declares interfaces; each platform source set provides the real implementation — a Keystore-backed store on Android, a Keychain-backed one on iOS — wired at the platform's composition root.",
-        "Tests inject fakes into the same graph from commonTest, and platform types like Context or UIApplication never leak into shared code because they are created in the platform layer."
+        "DI in KMP mirrors Android: Koin, kotlin-inject, or manual/factory DI all work from `commonMain` — runtime flexibility versus compile-time guarantees.",
+        "`commonMain` declares interfaces; each platform source set provides the real implementation — Keystore-backed on Android, Keychain-backed on iOS — wired at the platform's composition root.",
+        "Tests inject fakes from `commonTest`; platform types like `Context` or `UIApplication` never reach shared code — they're created in the platform layer."
       ],
       "answer": "KMP did not invent a new DI story; it reuses the JVM's, and the constraint is that the graph must build for every target. Koin is pure Kotlin with a module DSL and runtime lookup — the lowest-friction choice, no codegen, works identically everywhere. kotlin-inject uses KSP to generate the graph at compile time: constructor injection, `@Inject` and `@Provides`, no reflection, at the cost of a KSP plugin and generated-code debugging. Manual DI — a small container or factory per platform — is always viable and often right for small modules. The choice trades runtime flexibility against compile-time type-safety, exactly like on Android.\n\n#### The platform seam\nThe part that differs is where platform implementations enter. commonMain declares interfaces — `Store`, `Clock`, `Analytics` — and each platform source set provides a concrete one. Two idioms: an `expect`/`actual` factory (`expect fun platformStore(): Store`) or a per-platform DI module registered at startup. Either way the Android `Context` or iOS `UIApplication` is created in the platform composition root and handed to the graph, never referenced from commonMain.\n\n#### The interview shape\nSpeak to the seam, not the library: interfaces in common code, implementations per platform, fakes in commonTest, and a composition root per platform. The DI framework is a detail; the platform boundary is the design.",
       "code": [
@@ -481,7 +490,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

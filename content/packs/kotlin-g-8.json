@@ -9,11 +9,15 @@
       "topic": "Collections",
       "level": 4,
       "type": "qa",
-      "tags": ["sequence", "lazy", "single-pass"],
+      "tags": [
+        "sequence",
+        "lazy",
+        "single-pass"
+      ],
       "q": "Sequences: when do they stop being lazy, and when are they the wrong tool?",
       "shortAnswer": [
-        "Stateful intermediate operations — `sorted`, `distinct`, `chunked` — buffer the whole sequence, destroying both the memory win and early termination.",
-        "A sequence from `sequence {}`/`generateSequence` is single-pass — a second iteration throws `IllegalStateException` — while `asSequence()` over a List is re-iterable.",
+        "Stateful intermediate operations — `sorted`, `distinct`, `chunked` — buffer the whole sequence. That kills the memory win and early termination.",
+        "A sequence from `sequence {}` or `generateSequence` is single-pass: a second iteration throws `IllegalStateException`. `asSequence()` over a `List` is re-iterable.",
         "For a few hundred elements, per-element lambda indirection makes sequences measurably slower than eager operators."
       ],
       "answer": "A `Sequence` is lazy only through **stateless** operations. The operators that must see the whole input — `sorted`, `sortedWith`, `distinct`, `distinctBy`, `groupBy`, `chunked`, `windowed` (stateful by nature) — **materialize the entire sequence** into memory before the next stage runs. Two costs follow: the memory win evaporates, and **early termination dies** — `seq.sorted().take(3)` still processes the whole input because sorting needs everything.\n\n#### Single-pass vs re-iterable\nThis is the trap. A sequence built from `sequence {}` (the `suspend SequenceScope<T>.() -> Unit` builder) or `generateSequence { }` with state is **single-pass**: each element is produced once by the underlying state machine. Iterate it a second time and you get `IllegalStateException: This sequence can be consumed only once`. `constrainOnce()` makes that contract explicit — and permanent. By contrast, `list.asSequence()` over a `List` is fully **re-iterable**, because the source is a materialized list.\n\n#### The overhead\n`sequence {}` compiles to a restricted-suspension **coroutine state machine** — a real per-element dispatch cost. Combined with per-element lambda indirection, a `Sequence` of a few hundred elements is typically *slower* than the eager chain over the same list. The win zone is: big data, expensive per-element work, early termination (`first`, `any`, `take`), or deep pipelines where you'd otherwise allocate many intermediates.\n\n#### Rule of thumb\nUse sequences when the input is large or the chain is deep and benefits from fusion; use eager operators for small collections and simple transforms. Never use a stateful operator on a sequence and still expect laziness.",
@@ -34,9 +38,14 @@
         "Iterating a `sequence {}`-built sequence twice and expecting the same values."
       ],
       "refs": [
-        { "title": "Kotlin docs — Sequences", "url": "https://kotlinlang.org/docs/sequences.html", "checked": "2026-08-13" }
+        {
+          "title": "Kotlin docs — Sequences",
+          "url": "https://kotlinlang.org/docs/sequences.html",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0050",
@@ -44,12 +53,16 @@
       "topic": "Equality & ordering",
       "level": 1,
       "type": "qa",
-      "tags": ["equality", "referential", "contentEquals"],
+      "tags": [
+        "equality",
+        "referential",
+        "contentEquals"
+      ],
       "q": "`==`, `===` and `equals` in Kotlin — what does each actually do?",
       "shortAnswer": [
-        "`==` compiles to a null-safe `equals` — `a?.equals(b) ?: (b === null)` — so it is structural even on nullable receivers.",
+        "`==` compiles to a null-safe `equals`: `a?.equals(b) ?: (b === null)`. So it's structural even on nullable receivers.",
         "`===` is reference identity, and is not meaningful for primitives or value classes.",
-        "Arrays inherit identity `equals`, so you need `contentEquals`/`contentDeepEquals` — which is why a data class with an `Array` property misbehaves."
+        "Arrays inherit identity `equals`, so you need `contentEquals`/`contentDeepEquals`. That's why a data class with an `Array` property misbehaves."
       ],
       "answer": "`==` in Kotlin is **not** reference equality. The compiler rewrites `a == b` into `a?.equals(b) ?: (b === null)` — a **null-safe structural comparison**. Two important consequences:\n\n1. It works on **nullable** operands: `a == null` is a real null check, and `null == null` is true (no NPE).\n2. It dispatches to the receiver's `equals`. For `String`, that's content comparison. For a `data class`, it's the generated structural comparison.\n\n#### `===` — referential identity\n`a === b` asks 'is this the same object instance?'. It ignores `equals` entirely. Notes:\n- On **primitives**, `===` degenerates to value comparison (there is no object identity for `int`), so it's not meaningful there.\n- On **value classes**, `===` compares the underlying value — again no identity.\n- The standard use is object-instance checks, e.g. `if (this === other)`.\n\n#### Arrays break structural equality\n`Array<Int>` inherits `Object.equals` — **identity**. `arrayOf(1,2) == arrayOf(1,2)` is `false`. The fixes are `contentEquals()` (one-dimensional) and `contentDeepEquals()` (nested). This is exactly why a **`data class` with an `Array` property misbehaves**: the generated `equals` uses `==` on each property, so two instances with equal *contents* compare unequal. Same for `IntArray` etc. The data class compares the arrays by identity.\n\n#### The practical rule\n`==` for structural value equality, `===` for deliberate instance identity, and `contentEquals`/`contentDeepEquals` for arrays — including inside `data class`es.",
       "code": [
@@ -69,9 +82,14 @@
         "Forgetting arrays compare by identity, breaking data-class equality."
       ],
       "refs": [
-        { "title": "Kotlin docs — Equality", "url": "https://kotlinlang.org/docs/equality.html", "checked": "2026-08-13" }
+        {
+          "title": "Kotlin docs — Equality",
+          "url": "https://kotlinlang.org/docs/equality.html",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0051",
@@ -79,12 +97,16 @@
       "topic": "Equality & ordering",
       "level": 2,
       "type": "qa",
-      "tags": ["hashCode", "equals", "HashSet"],
+      "tags": [
+        "hashCode",
+        "equals",
+        "HashSet"
+      ],
       "q": "What is the equals/hashCode contract, and how does a data class break it?",
       "shortAnswer": [
-        "Equal objects must have equal hashCodes, and a key's hashCode must not change while it is in a hash container — mutate a property used in hashCode after inserting into a HashSet and `contains` returns false for a physically-present element.",
+        "Equal objects must have equal hashCodes, and a key's hashCode must not change while it sits in a hash container. If it does, `HashSet.contains` returns false for a still-present element.",
         "A generated `equals` compares `javaClass` — symmetric, but a subclass never equals its parent.",
-        "Body-declared properties are excluded from `equals`, and an `Array` property must be hand-rolled with `contentEquals`/`contentHashCode`."
+        "Body-declared properties are excluded from `equals`. An `Array` property needs a hand-rolled `equals` using `contentEquals`/`contentHashCode`."
       ],
       "answer": "The contract:\n1. **Reflexive, symmetric, transitive** — `a.equals(a)`, `a.equals(b) ⇔ b.equals(a)`, and transitivity.\n2. **Consistent** — repeated calls give the same result while the compared values are unchanged.\n3. **Equal objects must have equal hashCodes.**\n4. **A key's hashCode must not change while it's in a hash container.**\n\nThe killer subtlety is #4. If you put an object in a `HashSet`, then mutate a property used by `hashCode`, the object's bucket changes but its slot doesn't. `set.contains(it)` computes the *new* hash, searches the *new* bucket, finds nothing — and returns `false` for an element that is **still physically in the set**. The set silently leaks the entry.\n\n#### Where data classes break it\n- **`javaClass` comparison**: generated `equals` compares `other is User` (i.e. same `javaClass`). That's symmetric and safe — but it means a **subclass never equals its parent**: `data class Base(val x: Int)` and `class Sub(x: Int) : Base(x)` — `Base(1) == Sub(1)` is `false` in both directions. Safe, but surprising.\n- **Body-declared properties are excluded**: only **constructor parameters** participate in `equals`/`hashCode`/`toString`/`copy`. A property declared in the class body is ignored — the comparison happens on the constructor args only.\n- **`Array` properties**: generated code uses `==`/`hashCode`, so arrays compare by identity. Hand-roll `equals` with `contentEquals` and `hashCode` with `contentHashCode`.",
       "code": [
@@ -104,9 +126,14 @@
         "Assuming body properties participate in a data class's equals."
       ],
       "refs": [
-        { "title": "Kotlin docs — Data classes (equals/hashCode)", "url": "https://kotlinlang.org/docs/data-classes.html", "checked": "2026-08-13" }
+        {
+          "title": "Kotlin docs — Data classes (equals/hashCode)",
+          "url": "https://kotlinlang.org/docs/data-classes.html",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0052",
@@ -114,12 +141,16 @@
       "topic": "Equality & ordering",
       "level": 3,
       "type": "qa",
-      "tags": ["Comparable", "Comparator", "TreeSet"],
+      "tags": [
+        "Comparable",
+        "Comparator",
+        "TreeSet"
+      ],
       "q": "The `Comparable`/`Comparator` contracts — what goes wrong in sorted collections?",
       "shortAnswer": [
-        "`TreeSet`/`TreeMap`/`sortedSetOf` consult `compareTo` ONLY, so two items comparing 0 are treated as duplicates even when `equals` disagrees — `BigDecimal 1.0` vs `1.00`.",
-        "`a.x - b.x` overflows — use `compareValues`/`compareBy`; `Double.NaN` sorts greater than everything and `NaN == NaN` is false.",
-        "`sortedBy` copies and is stable (TimSort) while `sortBy` mutates in place, and the selector is invoked O(n log n) times — precompute expensive keys."
+        "`TreeSet`, `TreeMap`, and `sortedSetOf` use `compareTo` only. Two items that compare to 0 are treated as duplicates even when `equals` disagrees — `BigDecimal 1.0` vs `1.00`.",
+        "`a.x - b.x` can overflow — use `compareValues` or `compareBy`. `Double.NaN` sorts greater than everything, and `NaN == NaN` is false.",
+        "`sortedBy` copies and is stable (TimSort); `sortBy` mutates in place. The selector runs O(n log n) times — precompute expensive keys."
       ],
       "answer": "A sorted collection's **ordering and equality are the same thing**: `TreeSet` and `TreeMap` use only `compareTo`/`Comparator` — they never call `equals`. Two elements that compare to 0 are treated as **duplicates**, even if `equals` says they're different. The canonical case: `BigDecimal(\"1.0\")` and `BigDecimal(\"1.00\")` compare equal but `equals` differs — a `TreeSet<BigDecimal>` holds only one of them, while a `HashSet` holds both. So a `Comparable` that disagrees with `equals` breaks collections silently.\n\n#### The subtraction overflow\n`a.x - b.x` overflows for `Int`/`Long` near the extremes (e.g. `Int.MAX_VALUE - (-1)` wraps to negative, sorting wrongly). Use `compareValues(a, b)`, `compareBy { }`, or `Int.compareTo`. The same applies to returning `x - y` from a Comparator.\n\n#### `Double.NaN`\nUnder `compareTo`, `NaN` sorts **greater than every other value** and is not equal to itself — so a sorted set containing `NaN` behaves oddly (`contains(NaN)` can be false). If the domain needs `NaN` handled, use `nullsLast`/explicit ordering.\n\n#### Building and stability\n- `sortedBy`/`sortedWith` **copy** (returns new list) and are **stable** (TimSort keeps equal elements in input order).\n- `sortBy`/`sortWith` **mutate** in place; `MutableList.sort` stability is TimSort too.\n- The **selector runs O(n log n) times** — `list.sortedBy { expensive(it) }` recomputes `expensive` on every comparison. Precompute: `list.map { it to expensive(it) }.sortedBy { it.second }`.",
       "code": [
@@ -139,9 +170,14 @@
         "Forgetting sorted collections treat compareTo==0 as duplicate regardless of equals."
       ],
       "refs": [
-        { "title": "Kotlin docs — Sorting", "url": "https://kotlinlang.org/docs/collection-ordering.html", "checked": "2026-08-13" }
+        {
+          "title": "Kotlin docs — Sorting",
+          "url": "https://kotlinlang.org/docs/collection-ordering.html",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0053",
@@ -149,11 +185,15 @@
       "topic": "Error handling",
       "level": 2,
       "type": "qa",
-      "tags": ["checked-exceptions", "Throws", "Swift"],
+      "tags": [
+        "checked-exceptions",
+        "Throws",
+        "Swift"
+      ],
       "q": "Kotlin has no checked exceptions — what does that mean for Java and Swift callers, and what is `@Throws` for?",
       "shortAnswer": [
-        "Nothing forces a catch, and a Kotlin function that throws IOException is invisible to a Java caller's compile-time check unless `@Throws(IOException::class)` writes the `throws` clause into the bytecode.",
-        "On Kotlin/Native, `@Throws` turns an exception into an `NSError**` out-parameter for Swift — an unlisted exception terminates the app instead.",
+        "Nothing forces a catch. A Kotlin function that throws `IOException` is invisible to Java's compile-time check, unless `@Throws(IOException::class)` writes a `throws` clause into the bytecode.",
+        "On Kotlin/Native, `@Throws` turns an exception into an `NSError**` out-parameter for Swift. An unlisted exception terminates the app instead.",
         "Overriding a Java method never inherits its checked-exception obligation."
       ],
       "answer": "Kotlin deliberately has **no checked exceptions**: no `throws` in the signature, no compiler obligation to catch. That is ergonomic inside Kotlin — but the JVM boundary and the Native/Swift boundary interpret it differently.\n\n#### For Java callers\nJava's compiler checks `throws` clauses at compile time. A Kotlin function that throws `IOException` produces bytecode with **no `throws` clause**, so a Java caller compiles without any obligation — the failure surfaces at runtime as an uncaught exception instead of a compile-time demand. `@Throws(IOException::class)` on the Kotlin function writes the `throws` clause into the bytecode, restoring Java's contract: Java callers must handle or declare `IOException`. It is purely a **Java-facing annotation** — Kotlin callers see nothing.\n\n#### For Swift callers (Kotlin/Native)\nOn Kotlin/Native, exported functions use `NSError**` interop: `@Throws(X::class)` on an exported function generates a Swift method that throws, with the error delivered via the out-parameter. The catch: **only the listed exceptions** become Swift errors. An exception type not in `@Throws` **terminates the app** (it escapes the error channel). So on Native, `@Throws` isn't a nicety — leaving an exception off the list turns a recoverable failure into a crash.\n\n#### Overriding Java methods\nA Kotlin override of a Java method **never inherits** the checked-exception obligation — Kotlin's no-checked-exceptions model wins, and no `@Throws` is implied. If your override can throw, add `@Throws` explicitly for Java callers.",
@@ -174,10 +214,19 @@
         "Forgetting an exception type on Kotlin/Native `@Throws` crashes the app."
       ],
       "refs": [
-        { "title": "Kotlin docs — Exceptions", "url": "https://kotlinlang.org/docs/exceptions.html", "checked": "2026-08-13" },
-        { "title": "Kotlin/Native — ObjC/Swift interop (exceptions)", "url": "https://kotlinlang.org/docs/native-objc-interop.html", "checked": "2026-08-13" }
+        {
+          "title": "Kotlin docs — Exceptions",
+          "url": "https://kotlinlang.org/docs/exceptions.html",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Kotlin/Native — ObjC/Swift interop (exceptions)",
+          "url": "https://kotlinlang.org/docs/native-objc-interop.html",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

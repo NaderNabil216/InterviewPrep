@@ -16,9 +16,9 @@
       ],
       "q": "How does a `companion object` differ from Java `static`?",
       "shortAnswer": [
-        "A companion object is a real nested class with an `INSTANCE` field, so Java sees `Foo.Companion.bar()` unless you add `@JvmStatic`.",
-        "Only `const val` and `@JvmField` members are truly static in the bytecode; everything else lives on the nested instance.",
-        "Java has no equivalent for companions implementing interfaces, being named, or being extended with extension functions."
+        "A companion object is a real nested class with an `INSTANCE` field. Java sees `Foo.Companion.bar()`, unless you add `@JvmStatic`.",
+        "Only `const val` and `@JvmField` members are truly static in bytecode. Everything else lives on the nested instance.",
+        "Java has no equivalent for companions that implement interfaces, have a name, or get extended with extension functions."
       ],
       "answer": "A `companion object` is **not** `static`. It compiles to a real nested class called `Companion`, plus a static `Companion INSTANCE` field on the outer class. From Java, `Foo.bar()` does not compile; you must write `Foo.Companion.bar()`. The only members that land directly on the outer class as static are `const val` (a compile-time constant inlined everywhere) and members annotated `@JvmField`.\n\n#### What Java has no equivalent for\n- **Companions can implement interfaces.** `class Parser { companion object : JsonParser { override fun parse(s: String): Node = ... } }` gives you a typed singleton your dependency-injection can look up. Java `static` has no object identity, so it cannot implement anything.\n- **Companions are named.** `companion object Factory` is callable as `Foo.Factory.create()`, and `@JvmStatic` members can live alongside a named companion.\n- **Companions are extensible.** `fun Foo.Companion.fromJson(json: String): Foo` adds a member-like factory from outside the class — the reason libraries offer `from(context)` style APIs.\n- **Lazy initialization** is still object semantics: the companion initializes on first access to its members.\n\n#### The mismatch costs\nAndroid `@JvmStatic` matters for `@JvmOverloads` access and for Java callers who expect static factories. The rule of thumb: write the Kotlin-friendly API first, then add `@JvmStatic`/`@JvmField` only on the seam your Java consumers touch.",
       "code": [
@@ -44,7 +44,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0020",
@@ -59,9 +60,9 @@
       ],
       "q": "Where are sealed subtypes allowed to live, and what does sealing buy you across a module boundary?",
       "shortAnswer": [
-        "Sealed subtypes must live in the same module and package as the sealed class, and the JVM records the full set via a `permits` clause.",
-        "Inside your module, a `when` over the sealed hierarchy is exhaustive — adding a subtype is a compile error you must handle everywhere.",
-        "For a library consumer, adding a subtype silently breaks their `else` branch at runtime, so a public sealed hierarchy is an API contract you cannot extend casually."
+        "Sealed subtypes must live in the same module as the sealed class. The JVM records the full set via a `permits` clause.",
+        "Inside your module, a `when` over a sealed hierarchy is exhaustive. Adding a subtype becomes a compile error at every site that must handle it.",
+        "For a library consumer, a new subtype silently falls into their `else` branch at runtime. So a public sealed hierarchy is an API contract you can't extend casually."
       ],
       "answer": "Sealed subtypes must be in the **same module** (and, before Kotlin 1.5, the same package; since 1.5 the package restriction is gone but the module restriction stays). On the JVM the sealed class gets a `permits` clause in its class file, so the set of subtypes is recorded even outside the Kotlin compiler.\n\n#### The exhaustive `when`\nThe point of sealing is compiler-checked exhaustiveness. A `when` with no `else` over a sealed subject must cover every subtype. The consequence cuts both ways:\n\n- **Your module:** adding a subtype is a compile error in every exhaustive `when` that doesn't handle it — the compiler makes you confront each site.\n- **A library consumer:** they compile against your sealed class and write exhaustive `when`s too. When you add a subtype, their code still compiles **if they wrote `else`** — and the new subtype then falls into `else` silently, a runtime behaviour change they never agreed to. The next release's `when` semantics shift under them.\n\nSo a public sealed hierarchy is effectively an **API contract**: each new subtype is a breaking change for exhaustive consumers, exactly like adding an abstract method to an interface.\n\n#### Serialization\nWith kotlinx.serialization, `@Serializable` sealed hierarchies need every subtype annotated `@Serializable` and registered in the polymorphic serializer; reflection-free decoding depends on the sealed `permits` list being mirrored by the serializer configuration — a mismatch surfaces at runtime, not compile time.",
       "code": [
@@ -87,7 +88,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0021",
@@ -102,9 +104,9 @@
       ],
       "q": "You expose a `data class` from a library module. What breaks for consumers when you change it?",
       "shortAnswer": [
-        "`copy()` and `componentN()` are part of the ABI, so adding a constructor parameter — even with a default — changes `copy`'s signature and breaks binary compatibility.",
-        "Reordering same-typed properties silently swaps meaning at every destructuring site, since `component1()` follows position, not name.",
-        "Until `@ConsistentCopyVisibility`, a private constructor still leaked a public `copy()`, so a plain class with explicit members is often the safer public surface."
+        "`copy()` and `componentN()` are part of the ABI. Adding a constructor parameter, even with a default, changes `copy`'s signature and breaks binary compatibility.",
+        "Reordering same-typed properties silently swaps meaning at every destructuring site, because `component1()` follows position, not name.",
+        "Before `@ConsistentCopyVisibility`, a private constructor still leaked a public `copy()`. So a plain class with explicit members is often the safer public surface."
       ],
       "answer": "A `data class` is a compile-time convenience whose generated members become part of your published ABI the moment you ship it. Three changes bite consumers:\n\n#### 1. Adding a parameter breaks `copy()` binary compatibility\n`copy()` mirrors the constructor's parameter list. Adding a constructor parameter — even with a default — changes `copy`'s signature from `copy(a, b)` to `copy(a, b, c)`. A consumer compiled against the old signature gets `NoSuchMethodError` at runtime. The same applies to `component3()` appearing out of thin air.\n\n#### 2. Reordering properties silently corrupts destructuring\n`val (a, b) = x` calls `component1()`, `component2()` positionally. Swap two same-typed properties in a new release and every `val (a, b)` call site keeps compiling — but now binds the wrong values. No warning, no error; a silent semantic flip across the whole consumer codebase.\n\n#### 3. Visibility leaks\nPre-Kotlin 1.9, a `private constructor` still generated a **public `copy()`** — callers could copy an instance they could never construct. `@ConsistentCopyVisibility`/`@ExposedCopyVisibility` fixed the codegen. Public API demands you audit the visibility of every generated member.\n\n#### The recommendation\nFor a public library surface, prefer a **plain class with explicit `copy`/`componentN`**. Keep `data class` for internal DTOs whose shape is versioned in lockstep with your code. If you must ship a data class, treat its constructor as frozen.",
       "code": [
@@ -135,7 +137,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0022",
@@ -150,9 +153,9 @@
       ],
       "q": "Domain IDs: `typealias UserId = String`, `value class UserId`, or `data class UserId`? Argue all three.",
       "shortAnswer": [
-        "A typealias gives zero enforcement — any `String` still compiles where `UserId` is expected, and nothing is distinct at runtime.",
-        "A value class is allocation-free until it boxes — nullable, generic argument, in a collection, or as an interface — and it mangles JVM method names.",
-        "A data class is the only one with real instance identity and cheap destructuring, but it allocates per ID and adds equals/hashCode costs."
+        "A typealias gives zero enforcement. Any `String` still compiles where `UserId` is expected, and nothing is distinct at runtime.",
+        "A value class is allocation-free until it boxes: nullable, generic argument, in a collection, or as an interface. It also mangles JVM method names.",
+        "A data class is the only one with real instance identity and cheap destructuring. But it allocates per ID and adds `equals`/`hashCode` costs."
       ],
       "answer": "#### `typealias UserId = String`\nZero cost, zero safety. The alias vanishes at compile time, so `accept(UserId)` is still `accept(String)` and any String passes. You get documentation value only — it cannot reject an `Address` passed by mistake, add members, or add constraints. Choose it only when you never intend runtime distinction.\n\n#### `value class UserId(val value: String)`\nThe middle ground: a distinct **type** at compile time, and at runtime a boxed `String` with no wrapper object **as long as it isn't boxed**. Boxing happens when the value class is nullable, used as a generic argument, stored in a collection, or implements an interface — then you pay the allocation. Value classes also mangle method names on the JVM (`UserId-<init>`), breaking Java callers and some reflection/DI.\n\n#### `data class UserId(val value: String)`\nThe heavyweight: a real instance with identity, generated `equals`/`hashCode`/`toString`/`copy`/`component1`, and destructuring. Costs an allocation on every construction plus hash computation. Right when the ID is more than a string (an aggregate with a type tag) or you need `copy`.\n\n#### The integration tax, all three ways\nRoom/Retrofit/Moshi need a `TypeConverter` or `@Serializable` adapter for the two type-wrapping choices; Parcelize needs custom work for value classes; Java callers see mangled names. The pragmatic rule: value class for a genuinely distinct scalar ID with serialization glue; data class only when the ID carries structure.",
       "code": [
@@ -183,7 +186,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0023",
@@ -198,9 +202,9 @@
       ],
       "q": "How does an `enum class` compile, and what does `entries` fix that `values()` did not?",
       "shortAnswer": [
-        "`values()` clones the backing array on every call — a fresh allocation in hot loops — while `entries` returns a cached immutable `EnumEntries` list.",
-        "A `when` over an enum compiles to a `tableswitch` via a synthetic `$WhenMappings` class, giving O(1) dispatch.",
-        "Enum constants with bodies each generate an anonymous subclass, and persisting `ordinal` breaks if anyone reorders constants."
+        "`values()` clones the backing array on every call, a fresh allocation in hot loops. `entries` returns a cached, immutable `EnumEntries` list.",
+        "A `when` over an enum compiles to a `tableswitch` through a synthetic `$WhenMappings` class. Dispatch is O(1).",
+        "Enum constants with bodies each generate an anonymous subclass. And persisting `ordinal` breaks if anyone reorders constants."
       ],
       "answer": "An `enum class` compiles to a real Java enum: a final class extending `Enum`, with one `static` field per constant, a private constructor, and a static `values()`/`valueOf()`. The Kotlin compiler adds a `$WhenMappings` synthetic class holding an `IntArray`, so `when (e)` over an enum compiles to a `tableswitch` indexed by `e.ordinal` — O(1) dispatch instead of an if/else chain.\n\n#### `values()` vs `entries`\n`values()` **clones the backing array on every call**. Each invocation allocates a fresh `Color[]` — invisible in one call, real in a hot loop like a mapper over a list. Since Kotlin 1.9, `entries` returns a cached, immutable `EnumEntries` (an unmodifiable `List`). Prefer it everywhere; it is the reason most codebases now lint against `values()`.\n\n#### Constants with bodies\n`enum class Op { PLUS { fun apply(a: Int, b: Int) = a + b } }` — each body-bearing constant compiles to an **anonymous subclass** of the enum. Dozens of such constants inflate your dex/class count, and each subclass carries the enum's constructor machinery.\n\n#### The persistence trap\n`ordinal` is a position-based index. Persist `Status.ACTIVE.ordinal` to a database or wire it to a server, then reorder constants (or insert one in the middle) and every stored value silently maps to a different status. Persist the **name** (`enum.name`) and migrate with a mapper; `when` over names stays a string compare but is explicit.",
       "code": [
@@ -226,7 +230,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

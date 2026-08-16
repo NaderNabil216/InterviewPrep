@@ -16,9 +16,9 @@
       ],
       "q": "What is process death, and how is it different from a configuration change?",
       "shortAnswer": [
-        "Configuration change = your Activity is destroyed and recreated **inside a live process**; ViewModels survive, static state survives.",
-        "Process death = the OS kills your whole process while backgrounded; everything in memory is gone, but the system restores your task's Activity stack with the saved `Bundle`.",
-        "The killer detail: after process death the user returns to the *same screen* they left, so any screen that can't rebuild itself from `SavedStateHandle` shows a broken or empty state."
+        "A configuration change destroys and recreates your `Activity`, but the process stays alive. `ViewModel` instances survive.",
+        "Process death means the OS kills your whole process. Everything in memory is gone, but the system rebuilds your task stack and hands the saved `Bundle` to the new `Activity`.",
+        "The key detail: after process death the user returns to the same screen they left. Any screen that can't rebuild itself from `SavedStateHandle` shows an empty or broken state."
       ],
       "answer": "#### Two very different events\n**Configuration change** (rotation, dark mode, language, window resize, keyboard): the Activity is destroyed and recreated, but the process lives. `ViewModel` instances survive via `ViewModelStore` retained across the recreation. This is the easy case.\n\n**Process death**: the user backgrounds your app, the OS needs memory, and your process is killed (Low Memory Killer, ordered by `oom_adj` score — cached background processes die first). Later the user taps your icon or returns via recents. Android **restores the task stack** and recreates the top Activity, handing back the `Bundle` from `onSaveInstanceState`. Everything else — ViewModels, singletons, in-memory caches, static fields, DI-scoped objects — is fresh.\n\n#### Why it's an interview favourite\nIt's the most common source of production bugs that never reproduce on a developer's device. Testing it is trivial and most candidates have never done it: `adb shell am kill com.example.app` — kill while backgrounded. Or Developer Options → \"Don't keep activities\" for the configuration-change path.\n\n#### Doing it right\n- Put the **identifiers** in `SavedStateHandle`: the item id, the query string, the selected tab. Not the payload.\n- Rebuild the payload from the repository on restore — which works because your repo reads from a database or cache.\n- `rememberSaveable` covers Compose-local UI state.\n- Everything goes through the saved-instance-state `Bundle`, delivered over a Binder transaction, so keep it small (see `TransactionTooLargeException`).\n\n#### Standing advice\nA screen should be reconstructible from: its navigation arguments + `SavedStateHandle` + the data layer. If it can't be, it will break after process death.",
       "code": [
@@ -50,7 +50,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0002",
@@ -65,9 +65,9 @@
       ],
       "q": "What causes an ANR, and how do you debug one you can't reproduce?",
       "shortAnswer": [
-        "An ANR fires when the main thread fails to service a dispatched event in time: ~5 s for input, ~10-20 s for a broadcast, ~200 s for a `Service` start, plus `ForegroundServiceDidNotStartInTime`.",
-        "The immediate cause is always 'the main thread was busy or blocked' — disk/network on main, a deadlock, a lock held by a slow background thread, or a binder call to a wedged process.",
-        "Debug from the ANR trace in Play Console / `/data/anr/traces.txt`: read the **main thread's** stack, then look for what it's waiting on."
+        "An ANR fires when the main thread takes too long on a dispatched event: about 5 s for input, 10-60 s for a broadcast, 20-200 s for a `Service` start, plus `ForegroundServiceDidNotStartInTime`.",
+        "The cause is always the same: the main thread was busy or blocked — disk or network on main, a deadlock, a lock held by a slow background thread, or a binder call to a wedged process.",
+        "Debug from the ANR trace in Play Console or `/data/anr/traces.txt`: read the **main thread's** stack first, then look for what it is waiting on."
       ],
       "answer": "#### The mechanism\nThe main thread runs a `Looper` pulling `Message`s off a `MessageQueue`. If a dispatched input, lifecycle, or broadcast event isn't processed in time, the system raises an ANR — so ask not 'why the ANR' but 'what occupied the main thread'.\n\n#### The timeouts worth knowing\n- Input dispatch: ~5 s\n- Broadcast receiver: 10 s (foreground) / 60 s (background)\n- Service start: 20 s (foreground) / 200 s\n- `ForegroundServiceDidNotStartInTimeException`: `startForegroundService` without `startForeground` within ~10 s\n\n#### Common real causes\n1. Disk I/O on main — SharedPreferences `commit()`, JSON parsing, `SQLite`. **StrictMode** catches these in debug.\n2. Network on main (throws in modern Android, but a blocking future doesn't).\n3. **Lock contention** — main waits on a monitor held by a background thread; the stack shows a `lock`, so find the holder.\n4. Slow `Binder` IPC into a blocked `ContentProvider` or system service.\n5. Heavy work in `BroadcastReceiver.onReceive` (it runs on main by default).\n\n#### Debugging a trace you can't reproduce\nThe ANR trace dumps every thread. Read in this order:\n1. Find `\"main\"` and read the top frames — the smoking gun.\n2. On `Object.wait` / `held by thread N`, inspect that thread.\n3. Play Console's Android vitals groups ANRs by signature with device/OS distribution.\n\n#### Prevention\n- `StrictMode` `penaltyLog()`/`penaltyDeath()` in debug.\n- Perfetto / Macrobenchmark to catch stalls early.\n- Never hold a lock across a suspend point or an IPC call.",
       "code": [
@@ -99,7 +99,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.11"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0003",
@@ -114,9 +114,9 @@
       ],
       "q": "How do you choose between WorkManager, coroutines, foreground services, and AlarmManager?",
       "shortAnswer": [
-        "Deferrable + must survive process death/reboot → **WorkManager**. Immediate + tied to a visible screen → **coroutine in `viewModelScope`**.",
-        "User-visible, must run now, continues when the app is backgrounded → **foreground service with a declared type**.",
-        "Must fire at a wall-clock time (alarm clock, calendar reminder) → **AlarmManager** with exact-alarm permission; nothing else gives you exact timing."
+        "Deferrable work that must survive process death or reboot → **WorkManager**. Immediate work tied to a visible screen → a **coroutine in `viewModelScope`**.",
+        "Work the user sees, that must run now and keep going when the app is backgrounded → **foreground service with a declared type**.",
+        "Work that must fire at a specific wall-clock time (alarm clock, calendar reminder) → **AlarmManager** with exact-alarm permission; nothing else gives exact timing."
       ],
       "answer": "#### The decision table\n\n| Need | Use |\n|---|---|\n| Only while the screen is open | `viewModelScope.launch` |\n| Deferrable, guaranteed, survives reboot | `WorkManager` |\n| Must run now, user aware (playback, navigation) | Foreground service, typed |\n| Exact wall-clock time | `AlarmManager` (`setExactAndAllowWhileIdle` + `SCHEDULE_EXACT_ALARM`) |\n| Server-initiated | FCM (high-priority for time-critical, temporary Doze exemption) |\n\n#### WorkManager specifics interviewers ask about\n- **Constraints**: network type, charging, battery-not-low, storage-not-low, device idle.\n- **Unique work**: `enqueueUniqueWork(name, ExistingWorkPolicy.KEEP/REPLACE/APPEND)` avoids duplicate sync jobs.\n- **Backoff**: `BackoffPolicy.EXPONENTIAL`, minimum 10 s, on `Result.retry()`.\n- **Chaining**: `beginWith(a).then(b, c).then(d)`; failure cancels the rest.\n- **Expedited work**: `setExpedited(OutOfQuotaPolicy…)` for short important work, subject to quota.\n- **Periodic work minimum interval is 15 minutes**, not exact.\n- Backed by JobScheduler; state lives in its own Room database, hence survives reboot.\n\n#### Background restrictions to name\n- **Doze / App Standby buckets** (active, working set, frequent, rare, restricted) throttle jobs and alarms.\n- **Background start restrictions**: you can't start a service from the background; `startForegroundService` must call `startForeground` within ~10 s.\n- **Foreground service types are mandatory** (Android 14+): declare `android:foregroundServiceType` and hold the matching permission, or Play rejects it.\n- **Android 17** blocks background local network access by default (`ACCESS_LOCAL_NETWORK`) and tightens background audio, gated on `targetSdk`.\n\n#### The common design question\n\"Sync reliably\" → unique periodic work (network constraint, exponential backoff) plus an expedited one-off on user action; keep it idempotent.",
       "code": [
@@ -153,7 +153,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.11"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0004",
@@ -169,9 +169,9 @@
       ],
       "q": "What are the Android behavior changes and Play policy deadlines you must know in 2026?",
       "shortAnswer": [
-        "**Play: targetSdk 36 (Android 16) is required for new apps and updates from 31 Aug 2026**, with an extension window to 1 Nov 2026; existing apps must target at least API 35 to stay listed.",
-        "**16 KB page size support** is required for updates from 1 Feb 2027 (already required since Nov 2025 for apps targeting Android 15+).",
-        "Android 17 (in beta) blocks **local network access** by default behind a new `ACCESS_LOCAL_NETWORK` permission and tightens background audio."
+        "From **31 Aug 2026**, new apps and updates must target **API 36 (Android 16)**, with an extension window to 1 Nov 2026. Existing apps need at least API 35 to stay listed.",
+        "**16 KB page size** support is required for updates from **1 Feb 2027**. It has been required since Nov 2025 for apps targeting Android 15+.",
+        "Android 17 (in beta) blocks **local network access** by default behind a new `ACCESS_LOCAL_NETWORK` permission, and tightens background audio."
       ],
       "answer": "#### Play policy dates\n- **31 Aug 2026** — new apps and updates must target **API 36**; existing apps must target API 35 or higher to stay discoverable, with an extension window to **1 Nov 2026**.\n- **1 Feb 2027** — updates that don't support **16 KB memory page sizes** can no longer be released. Anything shipping native code (`.so` files, NDK, or a dependency bundling them) must be rebuilt with 16 KB-aligned ELF segments; breakage usually comes from transitive native deps.\n\n#### Android 17 (beta)\n- **Local network access blocked by default** for apps targeting 17 — requires new `ACCESS_LOCAL_NETWORK`; prefer privacy-preserving pickers over scanning the LAN.\n- **Background audio restrictions** — the audio framework enforces while-in-use rules for foreground services, with alarm-audio exemptions, gated on `targetSdk`.\n\n#### Recent changes still commonly asked\n- **Android 16**: broad edge-to-edge enforcement; apps targeting 36 can't opt out of the deprecated insets APIs — handle `WindowInsets`.\n- **Android 14**: `foregroundServiceType` mandatory; implicit intents to internal components restricted; `PendingIntent` mutability must be explicit.\n- **Android 13**: `POST_NOTIFICATIONS` runtime permission; granular media permissions.\n\n#### Photo picker & partial media access\nPrefer the **Photo Picker** to broad media permissions. Android 14+ supports *partial* media access (\"Select photos\") — handle the user granting three photos, not the library.\n\n#### How to answer well\nDon't recite a changelog. Frame it as: the deadline affecting my app, the audit (SDK Upgrade Assistant, then compatibility-framework toggles), and the rollout plan.",
       "code": [
@@ -208,7 +208,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.11"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0005",
@@ -223,9 +223,9 @@
       ],
       "q": "What is Binder, and why does `TransactionTooLargeException` happen?",
       "shortAnswer": [
-        "Binder is Android's IPC mechanism — a kernel driver plus a per-process pool of threads; almost every framework call (starting an Activity, saving instance state, querying a ContentProvider) crosses it.",
-        "Each process has a **1 MB Binder transaction buffer shared by all in-flight transactions**, so the practical safe limit for any single payload is far below 1 MB.",
-        "`TransactionTooLargeException` most often shows up on `onSaveInstanceState` with a big Bundle, or on passing large data through an `Intent`."
+        "Binder is Android's way of talking between processes: a kernel driver plus a pool of threads per process. Almost every framework call — starting an `Activity`, saving state, querying a `ContentProvider` — crosses it.",
+        "Each process has a **~1 MB Binder transaction buffer shared by all in-flight transactions**. So one 800 KB payload can fail because other calls are using the buffer.",
+        "`TransactionTooLargeException` most often hits on `onSaveInstanceState` with a big `Bundle`, or when a large payload travels through an `Intent`."
       ],
       "answer": "#### The model\nBinder gives you synchronous, capability-based RPC between processes. Your app talks to `system_server` over it constantly. Key properties:\n- Each process has a **Binder thread pool** (default 16 threads). Incoming calls are served on those threads, *not* main — why `AIDL` callbacks arrive on a binder thread and you must hop to main.\n- The transaction buffer is **~1 MB per process, shared across all concurrent transactions**, so a single 800 KB payload can fail because other transactions are in flight.\n- Data is marshalled through `Parcel`. `Parcelable` is Binder-native and faster than `Serializable`, which uses reflection.\n\n#### Where TransactionTooLarge actually bites\n1. `onSaveInstanceState` with a large Bundle — the classic. It often crashes *later*, at recreation, making it hard to attribute.\n2. An `Intent` extra carrying a list of model objects between Activities.\n3. Returning a big `Cursor` window from a ContentProvider.\n4. `setResult` with a large payload.\n\n#### The fix, always the same\nPass an **identifier**, not the payload. Store the data in a repository/database/cache keyed by that id and let the receiving screen re-read it — the same discipline that makes your app process-death-safe.\n\n#### Related things worth naming\n- `ContentProvider` is Binder-based, the standard cross-app data path; `Cursor` uses shared memory (`CursorWindow`) to dodge the transaction limit.\n- `Messenger` wraps Binder for simple messaging; AIDL for full interfaces.\n- `linkToDeath` notifies you when a remote process dies.",
       "code": [
@@ -257,7 +257,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.11"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0006",
@@ -272,9 +272,9 @@
       ],
       "q": "What are the classic Android memory leaks, and how do you find them?",
       "shortAnswer": [
-        "A leak is any long-lived object holding a reference to a short-lived one — nearly always something outliving an `Activity`/`Fragment` view.",
-        "The usual suspects: static/singleton holding a `Context`, a non-static inner class or lambda capturing `this`, an unregistered listener, a Handler with a delayed message, and a Fragment using `this` instead of `viewLifecycleOwner`.",
-        "Find them with LeakCanary in debug, then confirm with a heap dump in Android Studio's Memory Profiler and look at the shortest path to GC root."
+        "A leak is a long-lived object holding a reference to a short-lived one. On Android it is nearly always something outliving an `Activity` or `Fragment` view.",
+        "The usual suspects: a static or singleton holding a `Context`, an inner class or lambda capturing `this`, an unregistered listener, a `Handler` with a delayed message, and a Fragment observing with `this` instead of `viewLifecycleOwner`.",
+        "Find them with LeakCanary in debug builds, then confirm with a heap dump in Android Studio's Memory Profiler. Look at the shortest path to a GC root."
       ],
       "answer": "#### The mechanics\nART's garbage collector frees anything unreachable from a GC root. A leak is an unwanted reference chain keeping an object reachable; on Android it's almost always an `Activity`, dragging in the whole view hierarchy and its bitmaps.\n\n#### The classic list\n1. **Static / singleton holding a Context** — pass `applicationContext` when the object outlives a screen.\n2. **Inner classes and lambdas** — a non-static inner class holds an implicit reference to its outer instance; a lambda passed to a long-lived registry captures the same way.\n3. **Unregistered listeners** — `BroadcastReceiver`, location, `LiveData.observeForever`, SDK callbacks. Unregister in `onStop`; in Compose use `DisposableEffect`.\n4. **Handler with delayed messages** — a delayed `Message` holds its target `Handler`, which holds the Activity. `removeCallbacksAndMessages(null)` in teardown.\n5. **Fragment view lifecycle** — using `this` instead of `viewLifecycleOwner` means the observer outlives the view (the Fragment survives on the back stack without its view). Null out `ViewBinding` in `onDestroyView`.\n\n#### Finding them\n- **LeakCanary** in debug builds: watches destroyed Activities/Fragments, forces a GC, dumps the heap, and prints the shortest path to a GC root. Zero setup.\n- **Memory Profiler**: take a heap dump, filter by your Activity, check the instance count (0 or 1), inspect \"References\".\n- **StrictMode** `detectActivityLeaks()` / `detectLeakedClosableObjects()`.\n\n#### In the interview\nDescribe the reference chain, not just the symptom — singleton → Activity → view tree → decoded bitmaps: one leaked screen can cost MB and eventually OOM.",
       "code": [
@@ -306,7 +306,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.11"
+      "updatedIn": "2026.08.17"
     }
   ]
 }

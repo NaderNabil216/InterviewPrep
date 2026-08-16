@@ -17,11 +17,14 @@
         "offline"
       ],
       "q": "Design offline media downloads and playback (Spotify/Netflix style)",
+      "shortAnswer": [
+        "Offline media downloads and playback: the user pins an album or show, it downloads reliably in the background, respects storage limits, and licences expire.",
+        "Persist a download state machine in Room; resume via range requests to a `.part` file with atomic rename, a `dataSync` foreground service, and app-specific storage.",
+        "The deep probes are resumable downloads, storage budgeting that never evicts pins, and licence lifecycle — offline expiry, proactive renewal, and signed-URL expiry mid-download."
+      ],
       "prompt": "Design the client for downloading and playing media offline: the user marks an album or a show for download, it downloads reliably in the background, plays without a network, respects storage limits, and enforces licence expiry.\n\nScope to the client. Assume the backend provides signed URLs and a licence server.\n\n**45 minutes, out loud.** The deep probes here are almost always **resumable downloads**, **storage budgeting**, and **licence/DRM expiry** — budget time for all three.",
-      "framework": "Standard framework. This scenario rewards being concrete about bytes, storage, and failure during a long-running background operation.",
+      "framework": "Run the two-phase framework. This scenario rewards being concrete about bytes, storage, and failure during a long-running background operation.",
       "requirements": [
-        "Clarify: audio or video, quality tiers, DRM required, max offline duration",
-        "State non-functional targets (download success rate, storage ceiling)",
         "Client architecture including a download manager",
         "Download state machine: queued → downloading → paused → done → failed → expired",
         "Resumable/chunked download with HTTP range requests",
@@ -61,7 +64,7 @@
       ],
       "addedIn": "2026.08.3",
       "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Architecture diagram\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"90.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Downloads UI</text><text x=\"90.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">progress</text><rect x=\"20\" y=\"130\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"90.0\" y=\"161.0\" text-anchor=\"middle\" class=\"dg-label\">DownloadRepository</text><rect x=\"230\" y=\"20\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"305.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Room</text><text x=\"305.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">state + licences</text><rect x=\"230\" y=\"130\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"305.0\" y=\"154.0\" text-anchor=\"middle\" class=\"dg-label\">DownloadService</text><text x=\"305.0\" y=\"169.0\" text-anchor=\"middle\" class=\"dg-sub\">foreground, typed</text><rect x=\"230\" y=\"240\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"305.0\" y=\"264.0\" text-anchor=\"middle\" class=\"dg-label\">Player</text><text x=\"305.0\" y=\"279.0\" text-anchor=\"middle\" class=\"dg-sub\">local-first</text><rect x=\"450\" y=\"130\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"515.0\" y=\"154.0\" text-anchor=\"middle\" class=\"dg-label\">File storage</text><text x=\"515.0\" y=\"169.0\" text-anchor=\"middle\" class=\"dg-sub\">.part → atomic</text><rect x=\"630\" y=\"130\" width=\"70\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"665.0\" y=\"161.0\" text-anchor=\"middle\" class=\"dg-label\">CDN</text><rect x=\"450\" y=\"240\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"515.0\" y=\"271.0\" text-anchor=\"middle\" class=\"dg-label\">Licence server</text><line x1=\"90\" y1=\"130\" x2=\"90\" y2=\"80\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"90.0\" y=\"100.0\" text-anchor=\"middle\" class=\"dg-edge-label\">state</text><line x1=\"160\" y1=\"145\" x2=\"228\" y2=\"60\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"194.0\" y=\"97.5\" text-anchor=\"middle\" class=\"dg-edge-label\">observe</text><line x1=\"160\" y1=\"157\" x2=\"228\" y2=\"157\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"157\" x2=\"448\" y2=\"157\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"414.0\" y=\"152.0\" text-anchor=\"middle\" class=\"dg-edge-label\">range req</text><line x1=\"580\" y1=\"157\" x2=\"628\" y2=\"157\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"267\" x2=\"448\" y2=\"267\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"414.0\" y=\"262.0\" text-anchor=\"middle\" class=\"dg-edge-label\">renew</text><line x1=\"305\" y1=\"240\" x2=\"305\" y2=\"190\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"305.0\" y=\"210.0\" text-anchor=\"middle\" class=\"dg-edge-label\">reads file</text></svg>",
-      "updatedIn": "2026.08.15",
+      "updatedIn": "2026.08.17",
       "refs": [
         {
           "title": "Downloading media with Media3",
@@ -78,6 +81,12 @@
           "url": "https://developer.android.com/about/versions/14/changes/fgs-types-required",
           "checked": "2026-08-13"
         }
+      ],
+      "clarifyingQuestions": [
+        "Is this audio or video, and which quality tiers must be supported?",
+        "Is DRM required, and which licence system are we integrating with?",
+        "What is the maximum offline duration a user should be able to pre-load?",
+        "What are the non-functional targets — download success rate and storage ceiling?"
       ]
     },
     {
@@ -94,10 +103,14 @@
         "library-design"
       ],
       "q": "Design an analytics / event-logging SDK",
+      "shortAnswer": [
+        "An analytics SDK is a library-design question: events must never be lost, `log()` never blocks the caller, and battery, startup, and host stability is unhurt.",
+        "Design the public API first — small, non-blocking — then in-memory ring, durable Room buffer, flush triggers, WorkManager upload, and batch ids for dedupe.",
+        "Interviewers push on durable buffering with a bounded drop policy, startup cost off the critical path, crash isolation as a guest, and retry idempotency."
+      ],
       "prompt": "Design a client SDK that other teams embed to log events: it must never lose events, never block the caller, never meaningfully affect battery or the host app's startup time, and never crash the host app.\n\nScope to the client library. Assume a batch-ingest HTTP endpoint exists.\n\n**45 minutes.** This one is really a **library design** question wearing an analytics costume — the interviewer is testing API design, resource discipline, and how you think about being a guest in someone else's process.",
-      "framework": "Standard framework, but weight sections 2 (architecture), 5 (performance/battery), and 6 (reliability) heavily. Add an explicit **public API design** section — that's unique to SDK questions and candidates routinely skip it.",
+      "framework": "Run the two-phase framework, but in Phase 2 weight architecture, performance/battery, and reliability heavily. Add an explicit **public API design** part — that's unique to SDK questions and candidates routinely skip it.",
       "requirements": [
-        "Clarify: event volume, latency requirements, PII policy, host app constraints",
         "Design the public API surface and justify its shape",
         "Guarantee the logging call never blocks the caller",
         "Durable buffering that survives process death",
@@ -139,7 +152,7 @@
       ],
       "addedIn": "2026.08.3",
       "diagram": "<svg viewBox=\"0 0 760 210\" role=\"img\" aria-label=\"Architecture diagram\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"70\" width=\"120\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"80.0\" y=\"94.0\" text-anchor=\"middle\" class=\"dg-label\">log()</text><text x=\"80.0\" y=\"109.0\" text-anchor=\"middle\" class=\"dg-sub\">non-blocking</text><rect x=\"170\" y=\"70\" width=\"120\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"230.0\" y=\"94.0\" text-anchor=\"middle\" class=\"dg-label\">ring buffer</text><text x=\"230.0\" y=\"109.0\" text-anchor=\"middle\" class=\"dg-sub\">in-memory</text><rect x=\"320\" y=\"70\" width=\"120\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"380.0\" y=\"94.0\" text-anchor=\"middle\" class=\"dg-label\">writer</text><text x=\"380.0\" y=\"109.0\" text-anchor=\"middle\" class=\"dg-sub\">coroutine</text><rect x=\"470\" y=\"70\" width=\"120\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"530.0\" y=\"94.0\" text-anchor=\"middle\" class=\"dg-label\">Room</text><text x=\"530.0\" y=\"109.0\" text-anchor=\"middle\" class=\"dg-sub\">durable</text><rect x=\"620\" y=\"70\" width=\"120\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"680.0\" y=\"94.0\" text-anchor=\"middle\" class=\"dg-label\">WorkManager</text><text x=\"680.0\" y=\"109.0\" text-anchor=\"middle\" class=\"dg-sub\">batched upload</text><line x1=\"140\" y1=\"97\" x2=\"168\" y2=\"97\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"290\" y1=\"97\" x2=\"318\" y2=\"97\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"440\" y1=\"97\" x2=\"468\" y2=\"97\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"454.0\" y=\"92.0\" text-anchor=\"middle\" class=\"dg-edge-label\">batched</text><line x1=\"590\" y1=\"97\" x2=\"618\" y2=\"97\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"604.0\" y=\"92.0\" text-anchor=\"middle\" class=\"dg-edge-label\">flush</text><text x=\"20\" y=\"176\" class=\"dg-sub\">Flush triggers: N events · T seconds · app backgrounded · explicit flush() · high-priority event</text><text x=\"20\" y=\"194\" class=\"dg-sub\">Delete only after confirmed 2xx · batch id = idempotency key · bounded backlog, drop-oldest + counter</text></svg>",
-      "updatedIn": "2026.08.15",
+      "updatedIn": "2026.08.17",
       "refs": [
         {
           "title": "Persistent work with WorkManager",
@@ -151,6 +164,11 @@
           "url": "https://developer.android.com/topic/architecture",
           "checked": "2026-08-09"
         }
+      ],
+      "clarifyingQuestions": [
+        "What event volume and latency requirements does the host app have?",
+        "What is the PII policy — what may the SDK collect and store?",
+        "What constraints does the host app impose — API level, background execution, size budget?"
       ]
     }
   ]

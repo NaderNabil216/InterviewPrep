@@ -9,12 +9,17 @@
       "topic": "Components & navigation",
       "level": 2,
       "type": "qa",
-      "tags": ["activity", "launch-mode", "task", "intent"],
+      "tags": [
+        "activity",
+        "launch-mode",
+        "task",
+        "intent"
+      ],
       "q": "Explain launch modes and task affinity. When does each actually matter?",
       "shortAnswer": [
-        "`standard` — a new instance every time. `singleTop` — reuse if it's already **at the top**, delivering `onNewIntent`. `singleTask` — one instance per task; relaunching clears everything above it. `singleInstance` — alone in its own task.",
-        "`singleTop` is the one you use routinely (notifications, deep links, search). `singleTask`/`singleInstance` are rare and usually a smell in a single-activity app.",
-        "Intent flags (`FLAG_ACTIVITY_CLEAR_TOP`, `NEW_TASK`, `CLEAR_TASK`) can override the manifest per-launch, which is how you build 'log out and reset the stack'."
+        "`standard` makes a new instance every time. `singleTop` reuses the instance if it is already **at the top** and delivers `onNewIntent`. `singleTask` keeps one instance per task and clears everything above it. `singleInstance` sits alone in its own task.",
+        "`singleTop` is the one you use routinely — notifications, deep links, search. `singleTask` and `singleInstance` are rare, and usually a smell in a single-activity app.",
+        "Intent flags like `FLAG_ACTIVITY_CLEAR_TOP`, `NEW_TASK`, and `CLEAR_TASK` override the manifest per launch. That is how you build 'log out and reset the stack'."
       ],
       "answer": "#### The four modes\n| Mode | Behaviour |\n|---|---|\n| `standard` | New instance in the calling task, always |\n| `singleTop` | Top of stack? reuse and call `onNewIntent`; else new instance |\n| `singleTask` | At most one instance, root of its task; relaunching **clears activities above it**, calls `onNewIntent` |\n| `singleInstance` | Like `singleTask`; nothing else may join its task |\n\n#### When they matter\n- **`singleTop`** — the routine choice: three notifications shouldn't stack three copies of a screen. On reuse, handle the payload in `onNewIntent` and call `setIntent(newIntent)`, or `getIntent()` stays stale.\n- **`singleTask`** — a genuine single entry point (kiosk apps). It *destroys* everything above it, losing state.\n- **`singleInstance`** — picture-in-picture players. Rare.\n\n#### Task affinity\nActivities share an affinity (your package name) by default; `taskAffinity` moves one into a different task (a separate Recents entry), interacting with `FLAG_ACTIVITY_NEW_TASK` and `allowTaskReparenting`. Change it only for a concrete reason — a known source of back-stack confusion.\n\n#### Flags, per launch\nFlags are set per call, so they're often the better tool:\n- `FLAG_ACTIVITY_CLEAR_TOP` — pop everything above the target.\n- `FLAG_ACTIVITY_NEW_TASK` — start in a new task (required from a non-Activity context).\n- `FLAG_ACTIVITY_CLEAR_TASK` + `NEW_TASK` — the standard \"log out, wipe the stack, go to login\".\n- `FLAG_ACTIVITY_SINGLE_TOP` — `singleTop` for this launch only.\n\n#### In a single-activity app\nIn a Compose single-activity app, this collapses to `singleTop` plus `onNewIntent` for deep links.",
       "code": [
@@ -34,10 +39,14 @@
         "Forgetting `setIntent()`, then debugging why a second notification opens the first notification's content."
       ],
       "refs": [
-        { "title": "Tasks and the back stack", "url": "https://developer.android.com/guide/components/activities/tasks-and-back-stack", "checked": "2026-08-07" }
+        {
+          "title": "Tasks and the back stack",
+          "url": "https://developer.android.com/guide/components/activities/tasks-and-back-stack",
+          "checked": "2026-08-07"
+        }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.11"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0008",
@@ -45,12 +54,16 @@
       "topic": "Permissions",
       "level": 2,
       "type": "qa",
-      "tags": ["permissions", "privacy", "photo-picker"],
+      "tags": [
+        "permissions",
+        "privacy",
+        "photo-picker"
+      ],
       "q": "Walk through the runtime permission flow and the modern media-access story.",
       "shortAnswer": [
-        "Request at the point of need with a rationale, use `ActivityResultContracts.RequestPermission`, and handle three outcomes: granted, denied, and permanently denied (send them to Settings).",
-        "For media, the modern answer is usually **don't request a permission at all** — use the **Photo Picker**, which needs none and gives the user control.",
-        "Android 14+ supports **partial** media access ('Select photos'), so your UI must handle 'the user granted me three images', not just granted/denied."
+        "Request at the point of need, use `ActivityResultContracts.RequestPermission`, and explain why first if denied once. Handle three outcomes: granted, denied, and permanently denied (send them to Settings).",
+        "For media, the modern answer is usually **no permission at all** — use the **Photo Picker**, which needs none and gives the user control.",
+        "Android 14+ supports **partial** media access ('Select photos'), so your UI must handle 'the user granted three images', not just granted or denied."
       ],
       "answer": "#### The flow\n1. **Check** — `ContextCompat.checkSelfPermission`.\n2. **Rationale** — `shouldShowRequestPermissionRationale` is true after a prior denial. Explain *before* asking again.\n3. **Request** — the Activity Result API (`registerForActivityResult`); the old `onRequestPermissionsResult` is deprecated.\n4. **Permanent denial** — denied *and* rationale now false = \"don't ask again\". Stop prompting; deep-link to settings and degrade gracefully.\n\n#### Rules that trip people up\n- Permissions can be **revoked while backgrounded**; re-check before use, never cache a grant.\n- **Auto-reset**: inactive apps get unused permissions revoked.\n- Requesting an undeclared permission fails silently.\n- Never request everything at app start — grant rates tank and review flags it.\n\n#### Media, the modern way\n- **Photo Picker** (`ActivityResultContracts.PickVisualMedia`) — system UI, **no permission required**, backported via Play services. Default for \"let the user pick an image\".\n- Library-wide access: `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` / `READ_MEDIA_AUDIO` (Android 13+ replaced `READ_EXTERNAL_STORAGE`).\n- Android 14+ adds `READ_MEDIA_VISUAL_USER_SELECTED` — **partial access**: the user picks specific items only; treat partial grants as a first-class state and let users add more.\n- App-specific files need no permission.\n\n#### Other permissions worth naming\n- `POST_NOTIFICATIONS` — runtime since Android 13; request it *in context*, not at launch.\n- Location: coarse vs fine; background location has a separate, heavily-reviewed flow.\n- Exact alarms: `SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM`, restricted and Play-reviewed.\n\n#### Android 17\nLocal network access is blocked by default for apps targeting 17, behind the new `ACCESS_LOCAL_NETWORK` permission — prefer privacy-preserving pickers over scanning.",
       "code": [
@@ -70,11 +83,19 @@
         "Requesting a batch of permissions on first launch. Grant rates collapse and it's a policy risk."
       ],
       "refs": [
-        { "title": "Request runtime permissions", "url": "https://developer.android.com/training/permissions/requesting", "checked": "2026-08-07" },
-        { "title": "Photo picker", "url": "https://developer.android.com/training/data-storage/shared/photopicker", "checked": "2026-08-07" }
+        {
+          "title": "Request runtime permissions",
+          "url": "https://developer.android.com/training/permissions/requesting",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Photo picker",
+          "url": "https://developer.android.com/training/data-storage/shared/photopicker",
+          "checked": "2026-08-07"
+        }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.11"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0009",
@@ -82,12 +103,16 @@
       "topic": "Deep links",
       "level": 3,
       "type": "qa",
-      "tags": ["deep-links", "app-links", "security"],
+      "tags": [
+        "deep-links",
+        "app-links",
+        "security"
+      ],
       "q": "How do deep links and App Links work, and how do you stop another app hijacking yours?",
       "shortAnswer": [
-        "A **deep link** is any intent filter on a scheme — but multiple apps can claim it, so the user gets a disambiguation dialog and any app can register for your scheme.",
-        "An **Android App Link** is an `https` deep link **verified** by a `assetlinks.json` file hosted on your domain. Verified links open your app directly, and no other app can claim them.",
-        "Always verify (`android:autoVerify=\"true\"`), and always treat deep-link parameters as untrusted input."
+        "A **deep link** is any intent filter on a scheme like `myapp://`. Any app can register the same scheme, so the user may see a chooser dialog, and it is not secure for anything sensitive.",
+        "An **Android App Link** is an `https` deep link **verified** by an `assetlinks.json` file on your domain. Verified links open your app directly, and no other app can claim them.",
+        "Always verify with `android:autoVerify=\"true\"`, and always treat deep-link parameters as untrusted input."
       ],
       "answer": "#### Deep link vs App Link\n- **Custom scheme** (`myapp://item/42`): trivial to set up, and **any** app can declare the same filter. There's no ownership — unsuitable for anything sensitive.\n- **App Link** (`https://example.com/item/42` with `android:autoVerify=\"true\"`): at install time Android fetches `https://example.com/.well-known/assetlinks.json` and checks it lists your package name and signing-certificate fingerprint. On a match, it opens your app **with no chooser dialog**; no other app can intercept it.\n\n#### assetlinks.json\nThe `assetlinks.json` lists your `package_name` and `sha256_cert_fingerprints`; it must be served over HTTPS, with no redirects, as `application/json`. With **Play App Signing**, use Play's signing fingerprint, not your upload key — the most common silent failure. Debug with `adb shell pm get-app-links` and `pm verify-app-links`.\n\n#### Security — treat the payload as hostile\nA deep link is an attacker-controllable entry point:\n- **Validate and sanitize every parameter.** `myapp://open?url=…` feeding a WebView is a classic open-redirect / XSS vector.\n- **Never perform a privileged action from a link** — no `myapp://delete-account`, no auth-token via URL.\n- Re-check auth state on arrival; a link can land the user where they shouldn't be.\n- No secrets in link parameters — they end up in logs, browser history, and referrers.\n- Keep the receiving component's `exported` surface minimal.\n\n#### Process death interaction\nA deep link often *starts* your process — the target screen must be reconstructible from the link parameters alone, as with surviving process death.",
       "code": [
@@ -107,11 +132,19 @@
         "Publishing `assetlinks.json` with the upload-key fingerprint instead of the Play signing key, then wondering why links open the browser."
       ],
       "refs": [
-        { "title": "Verify Android App Links", "url": "https://developer.android.com/training/app-links/verify-android-applinks", "checked": "2026-08-07" },
-        { "title": "App links overview", "url": "https://developer.android.com/training/app-links", "checked": "2026-08-07" }
+        {
+          "title": "Verify Android App Links",
+          "url": "https://developer.android.com/training/app-links/verify-android-applinks",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "App links overview",
+          "url": "https://developer.android.com/training/app-links",
+          "checked": "2026-08-07"
+        }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.11"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0010",
@@ -119,12 +152,17 @@
       "topic": "Lifecycle",
       "level": 1,
       "type": "qa",
-      "tags": ["lifecycle", "activity", "fragment", "basics"],
+      "tags": [
+        "lifecycle",
+        "activity",
+        "fragment",
+        "basics"
+      ],
       "q": "Walk through the Activity and Fragment lifecycles. What belongs in each callback?",
       "shortAnswer": [
-        "Activity: `onCreate` → `onStart` → `onResume` → (running) → `onPause` → `onStop` → `onDestroy`. Visible between `onStart`/`onStop`; interactive between `onResume`/`onPause`.",
-        "Pair acquisition and release symmetrically: register in `onStart`, unregister in `onStop`; start camera/sensors in `onResume`, stop in `onPause`.",
-        "Fragments add a **separate view lifecycle** — the Fragment can outlive its View on the back stack, which is why you use `viewLifecycleOwner` for anything view-related."
+        "Activity: `onCreate` → `onStart` → `onResume` → (running) → `onPause` → `onStop` → `onDestroy`. The screen is visible between `onStart` and `onStop`, and interactive between `onResume` and `onPause`.",
+        "Pair acquisition and release symmetrically: register in `onStart`, unregister in `onStop`; start the camera or sensors in `onResume`, stop them in `onPause`.",
+        "Fragments add a **separate view lifecycle**: the Fragment can outlive its View on the back stack. That is why you use `viewLifecycleOwner` for anything view-related."
       ],
       "answer": "#### Activity\n| Callback | Meaning | Put here |\n|---|---|---|\n| `onCreate` | Created once per instance | Inflate/`setContent`, wire ViewModels, restore state |\n| `onStart` | Becoming visible | Register lifecycle-scoped observers, broadcast receivers |\n| `onResume` | Interactive, in foreground | Start camera, sensors, animations, exclusive resources |\n| `onPause` | Losing focus (may still be visible) | Release exclusive resources; keep it **fast** — the next activity waits |\n| `onStop` | No longer visible | Unregister receivers, stop heavy updates, persist data |\n| `onDestroy` | Finishing or config change | Final cleanup; check `isChangingConfigurations` |\n\n`onSaveInstanceState` runs before the activity becomes killable (after `onPause`, around `onStop`) — **not** a lifecycle event, but restoring after unexpected death.\n\n#### Multi-window changes things\nSince split-screen, an activity can be **visible but not focused**, so `onPause` no longer means \"hidden\". Stopping rendering there freezes your app in split-screen — use `onStop` for \"actually hidden\".\n\n#### Fragment: two lifecycles\nFragment instance: `onAttach` → `onCreate` → … → `onDestroy` → `onDetach`.\nFragment **view**: `onCreateView` → `onViewCreated` → `onDestroyView`.\n\nOn the back stack, the **view is destroyed but the instance survives**. Observing with `this` outlives the view — returning gives a second observer and a leaked reference. Hence:\n- `viewLifecycleOwner` for anything touching views,\n- null out `ViewBinding` in `onDestroyView`.\n\n#### The modern framing\nIn a Compose single-activity app, most of this collapses: `DisposableEffect` handles enter/leave composition, `collectAsStateWithLifecycle` lifecycle-aware collection. Interviewers still ask — process behaviour hasn't changed.",
       "code": [
@@ -144,11 +182,19 @@
         "Using `this` instead of `viewLifecycleOwner` in a Fragment — duplicate observers and a leaked view."
       ],
       "refs": [
-        { "title": "The activity lifecycle", "url": "https://developer.android.com/guide/components/activities/activity-lifecycle", "checked": "2026-08-07" },
-        { "title": "Fragment lifecycle", "url": "https://developer.android.com/guide/fragments/lifecycle", "checked": "2026-08-07" }
+        {
+          "title": "The activity lifecycle",
+          "url": "https://developer.android.com/guide/components/activities/activity-lifecycle",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Fragment lifecycle",
+          "url": "https://developer.android.com/guide/fragments/lifecycle",
+          "checked": "2026-08-07"
+        }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.11"
+      "updatedIn": "2026.08.17"
     }
   ]
 }

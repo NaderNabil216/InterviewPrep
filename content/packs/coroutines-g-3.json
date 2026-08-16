@@ -17,8 +17,8 @@
       "q": "Compare `launch`, `async`, `withContext`, `coroutineScope`, `runBlocking` and `produce`: what each returns, which ones suspend, and how each surfaces an exception.",
       "shortAnswer": [
         "`launch` returns a `Job` and is fire-and-forget; its exception goes straight to the parent.",
-        "`async` returns a `Deferred`; its exception is parked until `await()`.",
-        "`withContext`/`coroutineScope` suspend, return a value and rethrow to the caller; `runBlocking` blocks a thread; `produce` returns a hot `ReceiveChannel`."
+        "`async` returns a `Deferred`, and its exception waits there until `await()` is called.",
+        "`withContext` and `coroutineScope` suspend, return a value, and rethrow to the caller. `runBlocking` blocks a thread; `produce` returns a hot `ReceiveChannel`."
       ],
       "answer": "Reconstruct the table from first principles.\n\n- **`launch`** — starts a coroutine, returns a `Job`, does not suspend. Fire-and-forget; an exception propagates immediately to the parent (and crashes if unhandled).\n- **`async`** — returns a `Deferred<T>` (a `Job` + a value slot), does not suspend. The exception sits in the `Deferred` until `await()` throws it; never awaited, never thrown.\n- **`withContext`** — *suspends*, switches context for the block, returns `T`, and rethrows the block's exception to its caller. Use it for a single context switch.\n- **`coroutineScope`** — suspends, runs children as its own, returns the block's `T` and rethrows the first child failure after cancelling siblings. The structured-concurrency builder.\n- **`runBlocking`** — not a suspend function: it blocks the calling thread and runs an event loop on it until the block finishes.\n- **`produce`** — returns a hot `ReceiveChannel`; the producer coroutine sends into the channel, an exception closes it.\n\nPlus the four `CoroutineStart` modes (`DEFAULT`, `LAZY`, `ATOMIC`, `UNDISPATCHED`), and the rule: a single value from a single call means `withContext`, never `async { }.await()`.",
       "code": [
@@ -44,7 +44,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0030",
@@ -60,7 +61,7 @@
       "q": "Why is `runBlocking` banned in production Android code, and where is it legitimately correct?",
       "shortAnswer": [
         "It blocks the calling thread and runs an event loop on it until the block finishes — on Main that is a guaranteed ANR.",
-        "Called from the main thread it can deadlock on `withContext(Dispatchers.Main)`.",
+        "Called from the main thread, it can deadlock on `withContext(Dispatchers.Main)`.",
         "Legitimate: `fun main()`, JUnit tests, and framework entry points that must return synchronously."
       ],
       "answer": "`runBlocking` is the bridge from blocking world to coroutine world: it blocks the calling thread and runs an event loop *on that thread* until the block completes. On Android's main thread that is a guaranteed ANR the moment the block does anything slower than a tick.\n\n#### The killer detail\n`runBlocking { withContext(Dispatchers.Main) { } }` invoked *from* the main thread deadlocks. The event loop of `runBlocking` is running on the main thread, and the inner block needs the main looper to dispatch — but the looper is blocked inside `runBlocking` and can never service the post. Both sides wait forever. Any `Main` dispatch inside a main-thread `runBlocking` hangs the app.\n\n#### Where it is correct\n- `fun main()` — the JVM entry point has no looper and blocking is expected.\n- Plain JUnit tests and `kotlinx.coroutines.test` `runTest` wrappers.\n- Framework entry points that must return synchronously — a `ContentProvider.onCreate`, a legacy `Worker`, an AIDL callback — where the platform offers no suspend surface.\n\nEverywhere else, `runBlocking` means the calling code should have been a suspend function with a real scope. If the caller cannot suspend, you are at one of the legitimate seams.",
@@ -87,7 +88,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0031",
@@ -102,9 +104,9 @@
       ],
       "q": "What does `withContext(Dispatchers.IO)` actually do, and what does it cost?",
       "shortAnswer": [
-        "It suspends, creates a child coroutine with the merged context, dispatches, runs, then dispatches back — up to two hand-offs per call.",
-        "It is strictly sequential, never a concurrency tool.",
-        "A `Job` you pass in is replaced by the new coroutine's own Job."
+        "It suspends the caller, runs the block in a child coroutine with the merged context, then dispatches back — up to two thread hand-offs per call.",
+        "It is strictly sequential. It is never a way to get concurrency.",
+        "A `Job` you pass in is discarded — the new coroutine uses its own."
       ],
       "answer": "`withContext(newContext) { ... }` suspends the caller, launches a child coroutine whose context is the merged result (the caller's context with the new dispatcher's element winning), runs the block, and then dispatches back to the caller's context to return the value. That is potentially **two thread hand-offs** per call — onto the IO pool, then back to the original dispatcher.\n\n#### The cost in loops\nThe per-call price (a child coroutine allocation, up to two dispatches, a state-machine frame) is why calling `withContext(IO)` *inside* a loop per item is a measurable regression versus hoisting it around the loop: one hand-off pair instead of N.\n\n#### Three semantics to nail\n1. **Strictly sequential** — it switches context and runs one block; it never runs things concurrently. Use it where the shape is 'go do this, come back with the value'.\n2. **Cancelled with its caller** — the child coroutine is a child; cancelling the caller cancels the block.\n3. **The `Job` is replaced** — the context you pass is merged, but the child coroutine always installs its *own* `Job`. `withContext(Dispatchers.IO + Job())` does not detach anything from the parent; the Job you passed is simply overwritten.",
       "code": [
@@ -130,7 +132,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0032",
@@ -145,9 +148,9 @@
       ],
       "q": "You need at most 4 concurrent uploads. `Dispatchers.IO.limitedParallelism(4)`, a `Semaphore(4)`, or `flatMapMerge(concurrency = 4)`?",
       "shortAnswer": [
-        "`limitedParallelism` caps how many tasks are *dispatched simultaneously*, not how many run concurrently — a suspended upload releases its slot.",
+        "`limitedParallelism` caps how many tasks are **dispatched at once**, not how many run concurrently — a suspended upload releases its slot.",
         "`Semaphore(4)` or `flatMapMerge(4)` actually bound logical concurrency.",
-        "IO's 64-thread elasticity and the shared IO/Default pool explain why."
+        "That is why: IO grows elastically to 64 threads, and `Default` shares the same pool."
       ],
       "answer": "`limitedParallelism(4)` creates a *view* over the shared `CoroutineScheduler` that allows at most 4 tasks to be dispatched onto threads at once. That bounds active threads, not logical concurrency: an upload that suspends while awaiting a socket has no task running on a thread, so its slot is free and a fifth upload starts. If 'at most 4 concurrent' means four in-flight logical operations, `limitedParallelism` does not give it to you.\n\n#### What actually bounds concurrency\n- `Semaphore(4)` — each upload acquires before starting; a suspended upload still holds its permit, so you truly cap in-flight work.\n- `flatMapMerge(concurrency = 4)` — caps how many inner flows run at once; the natural tool for a flow of URLs.\n\n#### The pool model worth explaining\n`Dispatchers.IO` is a view over the shared `CoroutineScheduler` with a CPU-permit layer plus an elastic 64-thread limit (`kotlinx.coroutines.io.parallelism`) for blocking calls. `Default` shares the same underlying pool. A blocking call inside `Default` starves the pool, which is why blocking goes through `IO`. For a genuine single-thread confinement you can use `limitedParallelism(1)` — that one *does* bound execution because only one task can run at a time. And `Executor.asCoroutineDispatcher()` — which you must `close()` — is the escape hatch when you need a real custom pool.",
       "code": [
@@ -173,7 +176,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0033",
@@ -188,7 +192,7 @@
       ],
       "q": "`Mutex` vs `synchronized` in suspending code.",
       "shortAnswer": [
-        "`synchronized` takes a JVM monitor bound to a *thread*; the compiler refuses a suspension point inside it.",
+        "`synchronized` takes a JVM monitor bound to a **thread**, and the compiler refuses a suspension point inside it.",
         "`Mutex.withLock` is suspending, cancellation-aware and FIFO-fair — but explicitly not reentrant.",
         "A nested `withLock` on the same mutex deadlocks permanently."
       ],
@@ -216,7 +220,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0034",
@@ -231,7 +236,7 @@
       ],
       "q": "Three coroutines increment a shared counter and you get the wrong number. Rank the fixes.",
       "shortAnswer": [
-        "Don't share: confine the state to one coroutine or a `limitedParallelism(1)` dispatcher.",
+        "Don't share: keep the state in one coroutine, or use a `limitedParallelism(1)` dispatcher.",
         "Then immutable state behind `MutableStateFlow.update {}`, then atomics, and only then `Mutex`.",
         "`update {}` is a CAS loop — its lambda can run more than once and must be side-effect-free."
       ],
@@ -259,7 +264,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0035",
@@ -274,9 +280,9 @@
       ],
       "q": "What is a Flow, and what happens the moment you call `collect`?",
       "shortAnswer": [
-        "A Flow is essentially a suspend function that can return many values.",
+        "A Flow is basically a suspend function that can return many values.",
         "`collect` runs the builder block in the collector's own coroutine, and each `emit` is a direct suspending call into the collector's lambda.",
-        "Nothing runs until a terminal operator is invoked, and every new collector re-runs the whole chain."
+        "Nothing runs until a terminal operator is called, and every new collector re-runs the whole chain."
       ],
       "answer": "Think of a Flow as a suspend function that can return many values. The builder block is a `suspend` lambda that calls `emit(value)`; `collect { }` is the terminal operator that runs that block in the *collector's own coroutine*, and each `emit` is a plain suspending call straight into the collector's lambda. There is no queue, no buffer, no extra thread by default — the producer and consumer are the same coroutine, alternating.\n\n#### Cold and lazy\nA Flow is **cold**: constructing it does nothing, and intermediate operators (`map`, `filter`, `onEach`…) are lazy — they just wrap the downstream collector. The work happens only when a terminal operator (`collect`, `first`, `toList`, `launchIn`) is invoked. That is why `flowOf(1,2,3).map { }` alone never prints anything.\n\n#### Re-runs per collector\nBecause the block runs for each collector, two `collect` calls run the chain twice — which is the correct behaviour for cold streams (each subscription is a fresh execution) and the reason flows are cheap to recompose with.",
       "code": [
@@ -302,7 +308,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0036",
@@ -317,9 +324,9 @@
       ],
       "q": "Tour the Flow operators you use daily, and name the two that people misuse.",
       "shortAnswer": [
-        "`map`/`filter`, `transform` for 0..n emissions, `onEach`, `onStart`, `scan` for accumulation.",
-        "Terminals: `first`, `single`, `toList`, `fold`, and `launchIn` as sugar for a collect launch.",
-        "Misused: `onCompletion` — which runs on failure but cannot swallow the exception — and `first()` — which cancels upstream after one value."
+        "Daily set: `map`/`filter`, `transform` for zero-to-many emissions, `onEach`, `onStart`, and `scan` for accumulation.",
+        "Terminals: `first`, `single`, `toList`, `fold`, and `launchIn` as a shortcut for `launch { collect() }`.",
+        "Misused: `onCompletion`, which runs on failure but cannot swallow the exception, and `first()`, which cancels upstream after one value."
       ],
       "answer": "**The daily set.** `map` and `filter` are the workhorses. `transform` is the escape hatch — zero to many emissions per input, when `map`'s one-to-one shape is not enough. `onEach` runs a side effect per emission (logging, analytics) without changing the value. `onStart` emits a `Loading` state before the first real value. `scan`/`runningFold` carry an accumulator, `scan(0) { acc, x -> acc + x }`.\n\n**Terminals.** `first()`, `single()`, `toList()`, `fold()`, and `launchIn(scope)` as sugar for `scope.launch { collect() }`.\n\n**The two misused.**\n1. `onCompletion` — the callback runs on normal completion *and* on failure, receiving the cause (including a `CancellationException`). People use it as a catch; it cannot swallow the exception, which still propagates past it. It is for cleanup and final-state signals, not error recovery.\n2. `first()` — it cancels the upstream the moment one value arrives. Correct for a one-shot read ('give me the current value'), silently wrong when the developer meant to observe a stream and grabbed one emission instead.",
       "code": [
@@ -345,7 +352,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0037",
@@ -360,9 +368,9 @@
       ],
       "q": "`flow { withContext(Dispatchers.IO) { emit(x) } }` crashes at runtime. Why, and what is the rule?",
       "shortAnswer": [
-        "'Flow invariant is violated: emission from another coroutine context' — `emit` must run in the same coroutine that called `collect`.",
-        "The collector's context and Job must govern emissions, or cancellation breaks.",
-        "Fix with `flowOn(Dispatchers.IO)`, which moves everything upstream of the operator into an extra coroutine and channel."
+        "It throws 'Flow invariant is violated' at runtime — `emit` must run in the same coroutine that called `collect`.",
+        "The collector's context and `Job` must govern emissions, or cancellation breaks.",
+        "Fix it with `flowOn(Dispatchers.IO)`, which moves everything upstream of the operator into an extra coroutine and channel."
       ],
       "answer": "The runtime error is the flow invariant: an emission must come from the same coroutine that called the terminal operator. When you wrap an `emit` in `withContext`, the emission happens inside a different coroutine — a child of the collection coroutine — so the value no longer arrives in the collector's context and the machinery that wires cancellation and backpressure between collector and emitter cannot work.\n\n#### The fix: `flowOn`\n`flowOn(Dispatchers.IO)` changes the context of everything **upstream of that operator only**. It inserts an extra coroutine and a channel: upstream runs on IO, sends values through the channel, and the downstream (the collector) stays on its original dispatcher. That is the correct way to move producer work off the collector's thread.\n\n#### Details worth naming\n- A second `flowOn` lower in the chain does not 'undo' the first; each `flowOn` changes the context of the segment above it.\n- `channelFlow` exists for the case where you genuinely need concurrent emitters — its `send` is thread-safe.\n- `flowOn` changes *upstream context*, never the collector's own context.",
       "code": [
@@ -388,7 +396,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0038",
@@ -403,9 +412,9 @@
       ],
       "q": "Exception transparency: what can `catch` catch, and what escapes it?",
       "shortAnswer": [
-        "`catch` sees only exceptions thrown *upstream of itself* — a crash in the `collect { }` lambda flies straight past it.",
-        "Move the body into an `onEach { }` above the `catch` if you want it covered.",
-        "Wrapping your own `emit` in try/catch violates transparency because it can capture the downstream's exception."
+        "`catch` only sees exceptions thrown **upstream of itself** — a crash in the `collect { }` lambda passes straight by it.",
+        "To cover that code, move it into an `onEach { }` placed above the `catch`.",
+        "Wrapping your own `emit` in try/catch breaks transparency, because it can catch the downstream's exception."
       ],
       "answer": "Flow operators are transparent about exceptions: an operator sees only what happens *upstream of it*. `catch` is no exception. It handles exceptions thrown by the flow chain before it, but an exception thrown inside the `collect { }` lambda — your own rendering or handling code — happens downstream of `catch` and propagates straight past it to the caller.\n\n#### The practical consequence\nTo have `catch` cover the work you normally write in `collect`, move it into `onEach { }` placed *above* the `catch`, and put a bare `collect()` at the end. `onEach` is upstream of `catch`; the collector body is not.\n\n#### Why you must not wrap your own emit\nWrapping your own `emit` call in `try/catch` violates transparency: the exception `emit` might throw is often the *downstream's* — the collector cancelled, or the next operator failed. Catching it turns a downstream failure into a silent upstream recovery. So inside a `flow {}` builder, let `emit` throw.\n\n#### Built on the same machinery\n`catch` may emit a fallback value (e.g. `emit(Empty)`), and `retry`/`retryWhen` are implemented over exactly this transparency rule — they re-collect upstream, so their retry lambda sees upstream failures only.",
       "code": [
@@ -431,7 +440,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

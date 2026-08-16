@@ -16,6 +16,11 @@
         "policy"
       ],
       "q": "Android 13 → 17 behavior deltas",
+      "shortAnswer": [
+        "Per-release list of behavior changes from Android 13 through 17, plus what each forces you to do.",
+        "Highlights: `POST_NOTIFICATIONS`, mandatory `foregroundServiceType`, edge-to-edge, and `ACCESS_LOCAL_NETWORK`.",
+        "Reach for it to quote target-API dates or to plan an audit with the SDK Upgrade Assistant."
+      ],
       "answer": "What changed per release, and what it forces you to do. Verified 2026-08-07.\n\n#### Android 13 (API 33)\n- **`POST_NOTIFICATIONS` runtime permission.** Notifications are opt-in. Request it in context, not on first launch.\n- **Granular media permissions** — `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` / `READ_MEDIA_AUDIO` replace `READ_EXTERNAL_STORAGE`.\n- Themed app icons; per-app language preferences.\n- Nearby Wi-Fi devices permission split out of location.\n\n#### Android 14 (API 34)\n- **`foregroundServiceType` is mandatory** — declare it and hold the matching permission, or you crash on start. Play reviews the declared type.\n- **Implicit intents to internal components blocked** — an intent aimed at your own non-exported component must be explicit.\n- **Partial media access** — `READ_MEDIA_VISUAL_USER_SELECTED`. The user can grant access to *specific* photos, so 'granted' is no longer binary.\n- Runtime-registered receivers must declare `RECEIVER_EXPORTED` / `RECEIVER_NOT_EXPORTED`.\n- Non-dismissable notifications can be dismissed by the user.\n\n#### Android 15 (API 35)\n- **Edge-to-edge by default** for apps targeting 35. Handle `WindowInsets` properly or your content sits under the system bars.\n- Foreground service restrictions tightened further; `dataSync` and `mediaProcessing` get timeouts.\n- Predictive back is on by default for apps that opted in.\n- 16 KB page size support becomes relevant for apps targeting 15+.\n\n#### Android 16 (API 36) — current stable\n- **Edge-to-edge enforcement broadens**; the opt-out APIs are deprecated for apps targeting 36.\n- Adaptive/large-screen behaviour changes: apps are expected to handle resizing rather than lock orientation.\n- Predictive back further standardized.\n\n#### Android 17 — released\n- **Local network access blocked by default** for apps targeting 17. New `ACCESS_LOCAL_NETWORK` permission; guidance is to prefer privacy-preserving pickers over scanning the LAN.\n- **Background audio restrictions** — the audio framework enforces while-in-use rules for foreground services, with alarm-audio exemptions, gated on `targetSdk`.\n\n#### Play policy dates — memorize these two\n| Date | Requirement |\n|---|---|\n| **2026-08-31** | New apps and updates must target **API 36**. Existing listings must target ≥ API 35. Extension available to **2026-11-01**. |\n| **2027-02-01** | Updates without **16 KB page size** support can no longer be released. |\n\n#### How to audit your app\n1. Android Studio → **SDK Upgrade Assistant** — lists the behavior changes that affect your code per API level.\n2. Use the **compatibility framework** toggles (Developer Options → App Compatibility Changes) to enable individual `targetSdk`-gated changes *before* bumping `targetSdk`.\n3. For 16 KB: check for bundled `.so` files (including transitive dependencies) and verify ELF alignment.",
       "refs": [
         {
@@ -45,7 +50,7 @@
         }
       ],
       "addedIn": "2026.08.6",
-      "updatedIn": "2026.08.7"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cs-0005",
@@ -60,6 +65,11 @@
         "quickref"
       ],
       "q": "Gradle, AGP & R8 flags quick reference",
+      "shortAnswer": [
+        "Flag-by-flag reference for `gradle.properties`, configuration cache, `--scan`, and diagnosing slow builds.",
+        "Covers AGP 9, KSP versus kapt, R8 full mode with keep rules, and App Bundle splits.",
+        "Reach for it for build-speed questions, release hygiene, or version-catalog and `implementation` versus `api`."
+      ],
       "answer": "The flags worth knowing by heart, and what each actually buys. Verified 2026-08-07.\n\n#### gradle.properties — build speed\n- `org.gradle.parallel=true` — build independent modules concurrently\n- `org.gradle.caching=true` — reuse task outputs across builds\n- `org.gradle.configuration-cache=true` — skip the configuration phase entirely\n- `org.gradle.jvmargs=-Xmx4g -XX:+UseParallelGC`\n- `android.nonTransitiveRClass=true` — a resource change doesn't recompile the world\n- `kotlin.incremental=true`\nThe configuration cache is usually the single biggest win on a large project. It requires build logic that doesn't read mutable state at execution time.\n\n#### Diagnosing\n- `./gradlew assembleDebug --profile --scan` — where time actually goes\n- `./gradlew :app:dependencies` — resolve a version conflict\n- `./gradlew --stop` — kill stale daemons\nRead the build scan before optimizing anything. The bottleneck is rarely where you assume.\n\n#### AGP 9.x (current: 9.3.0, Jul 2026)\n- **Kotlin is applied by the Android plugin itself** — remove `org.jetbrains.kotlin.android` from module scripts.\n- AGP 9.0 (Jan 2026) was the breaking migration; use the **AGP Upgrade Assistant** in Android Studio.\n- KMP projects with Android targets needed a specific migration for AGP 9.\n\n#### KSP vs kapt\n`plugins { alias(libs.plugins.ksp) }` and `dependencies { ksp(libs.room.compiler) }` — not `kapt`.\nkapt generates Java stubs for every Kotlin file — very expensive. KSP reads Kotlin directly, typically ~2x faster. One remaining kapt processor holds the whole module back, so finishing the migration matters more than it looks.\n\n#### Release build — R8\n`release { isMinifyEnabled = true; isShrinkResources = true; proguardFiles(getDefaultProguardFile(\"proguard-android-optimize.txt\"), \"proguard-rules.pro\") }`\nR8 does shrinking, optimization, obfuscation, and desugaring in one pass. **Full mode** is more aggressive and can break reflection — always test the minified release build, and archive `mapping.txt` per release or your crash reports are unreadable.\n\nCommon keep rules:\n- `-keepclassmembers,allowobfuscation class * { @com.google.gson.annotations.SerializedName <fields>; }`\n- `-keepclasseswithmembernames class * { native <methods>; }`\n\n#### App Bundle splits\n`bundle { language { enableSplit = true }; density { enableSplit = true }; abi { enableSplit = true } }`\nUsually the largest single size saving — users download only what their device needs.\n\n#### Version catalog — `gradle/libs.versions.toml`\n- `[versions] kotlin = \"2.4.10\"`, `agp = \"9.3.0\"`, `composeBom = \"2026.06.01\"`\n- `[libraries] compose-bom = { group = \"androidx.compose\", name = \"compose-bom\", version.ref = \"composeBom\" }`\n- `[plugins] android-application = { id = \"com.android.application\", version.ref = \"agp\" }`\n\n#### Dependency hygiene\nPrefer `implementation` over `api` — `api` leaks onto consumers' compile classpath and widens the recompilation blast radius. Use `api` only when a type genuinely appears in your module's public signatures.\n\n#### Useful checks\n- `./gradlew lint` — Android lint\n- `./gradlew detekt ktlintCheck` — static analysis / formatting\n- `./gradlew :app:bundleRelease` — produce the AAB",
       "refs": [
         {
@@ -84,7 +94,7 @@
         }
       ],
       "addedIn": "2026.08.6",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     }
   ]
 }

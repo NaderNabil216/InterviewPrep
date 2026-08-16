@@ -16,9 +16,9 @@
       ],
       "q": "`is`, `as`, `as?` — how do type checks and casts work, and what is a smart cast?",
       "shortAnswer": [
-        "`is` checks the runtime type and is the safe path — after a successful check the compiler smart-casts so you stop repeating casts.",
-        "`as` is the unchecked cast: it throws ClassCastException at runtime, while `as?` returns null on failure so you can fall back with `?:`.",
-        "`as` on a generic type like `List<String>` only warns, because erasure defers the failure to the first element you read."
+        "`is` checks the runtime type, and it's the safe path. After a successful check the compiler smart-casts, so you don't repeat casts.",
+        "`as` is the forced cast: it throws `ClassCastException` at runtime. `as?` returns null instead, so you can fall back with `?:`.",
+        "Casting to a generic type like `List<String>` only warns, because erasure moves the failure to the first element you read."
       ],
       "answer": "Three operators, three failure profiles.\n\n#### `is` and smart casts\nThe check: `if (x is String)`. On success the compiler inserts the cast for you — inside the block `x.length` compiles with no explicit cast. Smart casts are the reason idiomatic Kotlin is littered with `is` and almost never with `as`. A smart cast survives `&&` and `!` conditions and the `when` branch that matches an `is`.\n\n#### `as` and `as?`\n`as` is the forced cast. It throws `ClassCastException` immediately if the runtime type does not match. `as?` is the safe variant: it returns `null` instead of throwing, so the idiom is `x as? String ?: fallback`. You write `as?` when the value may legitimately not be the target type and you have a graceful fallback; you write `as` when you are asserting an invariant that should hold.\n\n#### The erasure catch\n`as List<String>` on an unknown object does **not** verify the element type — generics are erased. The cast succeeds and the failure fires on the first element access, where a `String` expectation meets a stored `Int`. Prefer `is` where it compiles, prefer `as?` where the type may differ, and treat unchecked casts as a design smell rather than a tool.",
       "code": [
@@ -44,7 +44,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0015",
@@ -59,9 +60,9 @@
       ],
       "q": "When does the compiler refuse to smart-cast, and how do you work around it?",
       "shortAnswer": [
-        "Smart casts require the compiler to prove the value cannot change between the check and the use — it refuses when the target is not provably stable.",
+        "Smart casts need the compiler to prove the value can't change between the check and the use. It refuses when the value isn't provably stable.",
         "A `var` property, an `open val`, a `val` with a custom getter, a property from another module, and a delegated property all block it.",
-        "The fix is a local `val` copy, `?.let`, or a contract that tells the compiler the value survives."
+        "The fix is a local `val` copy, `?.let`, or a contract that tells the compiler the value stays valid."
       ],
       "answer": "Smart casting is gated on one thing: **provable stability**. Between the `is` check and the use, the compiler must prove the value is still what was checked.\n\n#### What refuses\n- a `var` **property** — another thread (or a lambda capture) can mutate it between check and use; quote the real diagnostic: *smart cast to 'X' is impossible because 'p' is a mutable property that could have been changed by this time*.\n- an `open val` — a subclass could override the getter.\n- a `val` with a custom getter — the getter could return a different instance on each read.\n- a property from **another module** — the compiler cannot see the module's internals.\n- a delegated property — `getValue` runs on every access.\n- a `var` captured and mutated by a lambda.\n\nA **local** `val` (initialized once, never reassigned) always smart-casts, because it is provably stable — that is why locals behave and properties misbehave.\n\n#### Workarounds\n1. Copy into a local `val`: `val p = property` then use `p`.\n2. `property?.let { it.use() }` — the lambda parameter is a fresh stable value.\n3. A `contract` on your own function that declares `returns() implies (x != null)` or `callsInPlace`, letting the compiler smart-cast across the call.\n\nThe lesson interviewers want: you can't out-argue the compiler — the rule is stability, and the fix is to give it a stable reference.",
       "code": [
@@ -92,7 +93,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0016",
@@ -107,9 +109,9 @@
       ],
       "q": "Which null checks does the Kotlin compiler actually emit, and where is there none?",
       "shortAnswer": [
-        "The compiler emits `Intrinsics.checkNotNullParameter` on parameters of public/protected functions and `checkNotNullExpressionValue` on platform-type results.",
-        "`!!` becomes a `checkNotNull` that throws `NullPointerException`, and an uninitialized `lateinit` throws `UninitializedPropertyAccessException`.",
-        "There is no check for a generic `T` whose upper bound is `Any?`, and `-Xno-param-assertions` strips the parameter checks entirely."
+        "The compiler emits `Intrinsics.checkNotNullParameter` on parameters of public and protected functions, and `checkNotNullExpressionValue` on platform-type results.",
+        "`!!` becomes a `checkNotNull` that throws `NullPointerException`. Reading an uninitialized `lateinit` throws `UninitializedPropertyAccessException`.",
+        "There's no check for a generic `T` with upper bound `Any?`. And `-Xno-param-assertions` strips the parameter checks entirely."
       ],
       "answer": "Kotlin's null-safety is a compile-time type system, but the boundary with Java needs generated runtime checks — and they are not everywhere you might assume.\n\n#### What the compiler emits\n- **`Intrinsics.checkNotNullParameter(parameter, \"name\")`** at the top of public and protected functions for each non-null parameter. `internal` is public bytecode, so it is covered too; private and `@JvmSynthetic` members are not.\n- **`checkNotNullExpressionValue(value, \"message\")`** when a platform-type expression is assigned to a declared non-null Kotlin type.\n- **`checkNotNull`** for `!!` — throws `NullPointerException` (it is `java.util.Objects.requireNonNull` on newer targets).\n- **`throwUninitializedPropertyAccessException`** for reading a `lateinit var` before assignment.\n- A null check on the receiver of `?.`-chained calls as needed.\n\n#### Where there is none\n- A generic `T` with an implicit upper bound of `Any?` gets **no** parameter check — the compiler cannot constrain `T`. So `fun <T> f(x: T)` may silently receive null from a Java caller.\n- `-Xno-param-assertions` and `-Xno-call-assertions` strip the parameter and call checks (used by framework code to shave method size); then a declared non-null Kotlin property genuinely can hold null when populated by Gson or reflection.\n- Calls from Kotlin to Kotlin need no checks — the type system is the guarantee.\n\nThe punchline: a declared non-null type is a *claim*, and on JVM boundaries the only enforcement is those intrinsics — which are compiler-optional.",
       "code": [
@@ -140,7 +142,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0017",
@@ -155,9 +158,9 @@
       ],
       "q": "A Java dependency has no nullability annotations. How do you stop platform types leaking through your codebase?",
       "shortAnswer": [
-        "A platform type `String!` gets no compiler check at all, so the NPE surfaces far from the boundary — the fix starts by declaring explicit types at the seam.",
-        "Write a thin Kotlin facade at the Java boundary that declares `String?` or `String` explicitly, so the rest of the code sees real types.",
-        "JSpecify `@NullMarked`/`@Nullable` (with `-Xjsr305=strict`) turns unannotated Java into annotated types, and generics need the same treatment — `List<String!>!`."
+        "A platform type `String!` gets no compiler check at all, so the NPE shows up far from the boundary. The fix starts with explicit types at the seam.",
+        "Write a thin Kotlin facade at the Java boundary. It declares `String?` or `String` explicitly, so the rest of the code sees real types.",
+        "JSpecify's `@NullMarked`/`@Nullable` with `-Xjsr305=strict` turns unannotated Java into annotated types. Generics need the same treatment — `List<String!>!`."
       ],
       "answer": "A platform type appears when Kotlin calls Java and the nullability is unknown — written `String!` in diagnostics, not writable in source. It is an escape hatch: you can assign it to `String`, you can assign it to `String?`, and the compiler applies **no** check either way. The NPE lands at whatever first dereferences it, usually far from the boundary.\n\n#### Fix 1 — the seam\nWrite a thin Kotlin facade that wraps the Java API and declares explicit types: `fun user(): User?` when the Java method may return null, `fun load(): User` when it never does. Everything above the facade is fully typed, and null is translated into your domain's notion of absent.\n\n#### Fix 2 — annotate the Java side\nJSpecify annotations (`@NullMarked`, `@Nullable`, `@NonNull`) are understood natively by Kotlin. With `-Xjsr305=strict`, Kotlin treats them as authoritative and stops producing platform types — a `@NullMarked` package makes the defaults explicit. Legacy JSR-305 annotations work too, with a warning unless you opt into strictness.\n\n#### Fix 3 — generics leak too\n`List<String!>!` is a list whose elements and nullability are both unknown. Declare the full type at the seam (`List<String?>`) or the leak continues into every `for (x in list)`. Annotating generic parameters (`List<@Nullable String>`) fixes it at the source.\n\nThe test the interviewer applies: can a null from the Java library reach your UI layer while the compiler claims everything is non-null? If yes, your seam is missing.",
       "code": [
@@ -188,7 +191,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0018",
@@ -203,9 +207,9 @@
       ],
       "q": "What does an `object` declaration compile to, and when is a singleton the wrong answer?",
       "shortAnswer": [
-        "An `object` compiles to a class with a static `INSTANCE` field initialized in `<clinit>`, so JVM class-loading gives you thread-safe lazy init.",
-        "The singleton is created on whatever thread first touches the class — never before that, and always on that thread.",
-        "A `data object` adds a stable `toString`/`equals`/`hashCode` that plain `object` lacks, which is why sealed UI states use it."
+        "An `object` compiles to a class with a static `INSTANCE` field, set in `<clinit>`. JVM class-loading then gives you thread-safe lazy init.",
+        "The singleton is created on the first thread that touches the class. Never before that, and always on that thread.",
+        "A `data object` adds a stable `toString`, `equals`, and `hashCode` that plain `object` lacks. That's why sealed UI states use it."
       ],
       "answer": "`object Foo { ... }` compiles to a normal class plus a `public static final Foo INSTANCE` field, assigned inside the class's static initializer (`<clinit>`). Because the JVM guarantees `<clinit>` runs exactly once, on whichever thread first touches the class, you get thread-safe lazy initialization for free — no `synchronized` needed, and no eager cost unless the class is actually referenced.\n\n#### The cost model\n- Creation is **lazy** — nothing happens until the first reference.\n- Creation happens **on the referencing thread** — the classic trap: an `object` holding `Context` may be born on a background thread.\n- The singleton is a process-global — it outlives configuration changes but **not** process death, and it is hostile to testing: no constructor to fake, no way to reset state between tests.\n\n#### `data object` vs `object`\n`object` inherits the default `toString` (`Foo@1a2b3c`) and identity `equals`/`hashCode`. `data object Loading` generates a stable `toString` (`Loading`), and `equals`/`hashCode` that match — so two references compare equal even across a serialization boundary. That is why sealed UI-state hierarchies declare `data object` for parameterless variants: log lines and test assertions get readable names.\n\n#### When the singleton is wrong\n- Holding injectable dependencies — prefer DI-managed singletons so tests can replace them.\n- Holding `Context` or lifecycle objects.\n- State you need to reset or parallelize.\n\nWhen it is right: stateless utility bundles, type markers, and parameterless sealed variants.",
       "code": [
@@ -231,7 +235,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

@@ -16,9 +16,9 @@
       ],
       "q": "Explain `buffer`, `conflate` and `collectLatest` at the channel level, and what operator fusion does to them.",
       "shortAnswer": [
-        "`buffer(capacity, onBufferOverflow)` inserts a channel plus a second coroutine so producer and collector run concurrently.",
-        "`conflate()` is exactly `buffer(CONFLATED)`; `collectLatest` cancels and restarts the collector body on each new value.",
-        "Adjacent `flowOn`/`buffer`/`conflate` operators are fused into one channel with combined capacity."
+        "`buffer(capacity, onBufferOverflow)` inserts a channel plus a second coroutine, so producer and collector run concurrently.",
+        "`conflate()` is exactly `buffer(CONFLATED)`. `collectLatest` cancels and restarts the collector body on each new value.",
+        "Adjacent `flowOn`, `buffer`, and `conflate` operators fuse into one channel with combined capacity."
       ],
       "answer": "**`buffer(n)`** inserts a `Channel` and a second coroutine between the producer and the collector. The producer runs in its own coroutine and sends into the channel; the collector receives. That decoupling lets the producer run ahead by up to `n` values — the collector no longer forces the producer to wait for each emission to be handled. `onBufferOverflow` chooses what happens when the buffer fills (SUSPEND, DROP_OLDEST, DROP_LATEST).\n\n**`conflate()`** is literally `buffer(Channel.CONFLATED)` — capacity one, keeping only the newest value. Slow collectors see the latest state, not every intermediate.\n\n**`collectLatest`** is a different mechanism: it buffers *nothing*. Each new value cancels the running collector body and restarts it on the new value. The producer keeps running flat out, and a slow collector body may never complete once — the restart cancels it before it finishes.\n\n**Fusion.** Adjacent `flowOn`, `buffer` and `conflate` operators are *fused*: they collapse into a single channel whose capacity is the combined configuration. So `.conflate().buffer(10)` is one channel, not two — a fact that changes how you reason about the pipeline's memory.",
       "code": [
@@ -44,7 +44,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0040",
@@ -60,7 +61,7 @@
       "q": "Build search-as-you-type and defend the position of every operator.",
       "shortAnswer": [
         "`query.debounce(300).filter { it.length >= 2 }.distinctUntilChanged().flatMapLatest { repo.search(it) }.catch { emit(Empty) }`.",
-        "`debounce` fires the network call only after typing pauses; `distinctUntilChanged` kills delete-then-retype duplicates.",
+        "`debounce` fires the network call only after typing pauses; `distinctUntilChanged` removes delete-then-retype duplicates.",
         "`flatMapLatest` cancels the in-flight request when a newer query arrives."
       ],
       "answer": "The canonical pipeline — `query.debounce(300).filter { it.length >= 2 }.distinctUntilChanged().flatMapLatest { repo.search(it) }.catch { emit(Empty) }` — defend each position:\n\n- **`debounce(300)`** — wait until typing pauses before the network call. It belongs *before* the network operator so a single burst of keystrokes yields one request.\n- **`filter { length >= 2 }`** — skip degenerate queries before paying for a call.\n- **`distinctUntilChanged()`** — a delete-then-retype (e.g. \"ab\" → \"a\" → \"ab\") re-emits \"ab\"; this operator suppresses the repeated value so you do not re-fetch.\n- **`flatMapLatest`** — when a newer query arrives, the in-flight `search` coroutine is cancelled and only the latest result reaches the UI. That is what prevents out-of-order responses.\n\nTraps to name: `debounce` also delays the *first* keystroke; a user typing continuously never triggers debounce at all — use `sample` for periodic updates; `distinctUntilChanged` compares with `equals`, so a wrapper data class can defeat it; and `debounce`/`sample` still require `@OptIn(FlowPreview::class)`.",
@@ -88,7 +89,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0041",
@@ -103,9 +104,9 @@
       ],
       "q": "`combine` vs `zip` vs `merge` — which one builds a UiState from three sources?",
       "shortAnswer": [
-        "`combine` re-emits on any source change but only starts once every source has emitted at least once.",
-        "`zip` is lock-step pairing that completes with the shortest source; `merge` interleaves same-typed flows with no correlation.",
-        "For UI state prefer one combined `UiState` flow over five stacked combines."
+        "`combine` re-emits when any source changes, but only starts once every source has emitted at least once.",
+        "`zip` pairs values in lock-step and completes with the shortest source. `merge` interleaves same-typed flows with no correlation.",
+        "For UI state, prefer one combined `UiState` flow over five stacked `combine`s."
       ],
       "answer": "**`combine`** is the UiState builder: it keeps the latest value of each source and re-emits whenever any source emits — but only after *every* source has emitted at least once. That last clause is the trap: a cold flow that never emits (a filtered Room query returning nothing) means your combined screen never renders. `StateFlow`s always have a value, which is why they combine safely; a filtered cold flow may not.\n\n**`zip`** pairs values positionally: the 1st with the 1st, the 2nd with the 2nd, and **completes with the shortest source**. That is correct for pairing two sequences of equal length and wrong for UI state, where sources are independent streams.\n\n**`merge`** interleaves same-typed flows with no correlation — events from two channels, both of type `Event` — it cannot build a state, only a union.\n\n#### The warning worth giving\nFive stacked `combine`s re-emit cascades and drive recomposition storms. Prefer one `data class UiState` combined from the raw sources once, and use `distinctUntilChanged` to stop equal states from re-emitting.",
       "code": [
@@ -131,7 +132,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0042",
@@ -146,9 +148,9 @@
       ],
       "q": "Add retry with exponential backoff to a network Flow.",
       "shortAnswer": [
-        "`retryWhen { cause, attempt -> if (cause is IOException && attempt < 3) { delay(base * (1 shl attempt) + jitter); true } else false }`.",
-        "`retry` re-collects the entire upstream, which is fine for a cold flow and meaningless for a hot one.",
-        "Jitter matters because synchronised clients thundering-herd the backend on recovery."
+        "`retryWhen { cause, attempt -> ... }`: retry only transient errors, at most three tries, with `delay(base * (1 shl attempt) + jitter)` between attempts.",
+        "`retry` re-collects the entire upstream — fine for a cold flow, meaningless for a hot one.",
+        "Jitter matters because synchronized clients all retry at once and thundering-herd the backend on recovery."
       ],
       "answer": "The shape — `retryWhen { cause, attempt -> if (cause is IOException && attempt < 3) { delay(1000L * (1 shl attempt) + Random.nextLong(500)); true } else false }`:\n\n#### Mechanics to land\n- `retry`/`retryWhen` **re-collect the entire upstream**. For a cold flow (`flow { api.fetch() }`) that means the whole fetch runs again — correct. For a hot flow (`MutableStateFlow` upstream), re-collecting subscribes to a stream that has already moved on; retry is meaningless there.\n- The attempt counter is **zero-based**: the first retry is `attempt == 0`, so the delay formula is `base * 2^attempt`, giving 1s, 2s, 4s.\n- **Do not retry 4xx.** A 404 or 401 is not going to succeed on a retry; only transient failures (IO, 5xx, 429) qualify. Filter on the exception type or status before you schedule a retry.\n- **Jitter** — the random component — stops a fleet of clients whose first request failed at the same moment from all retrying in lockstep and thundering-herding the backend on recovery.\n- Beware stacking: this retry *on top of* OkHttp's retry *and* WorkManager's retry gives three compounding backoffs. Pick one owner.",
       "code": [
@@ -175,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0043",
@@ -190,9 +192,9 @@
       ],
       "q": "`flow { }` vs `channelFlow { }` vs `callbackFlow { }` — how do you choose?",
       "shortAnswer": [
-        "`flow {}` is the default: cold, sequential, context-preserving and cheapest.",
-        "`channelFlow {}` breaks the emission-context rule so multiple coroutines can `send` concurrently, at the cost of a channel plus a coroutine.",
-        "`callbackFlow` is `channelFlow` specialised for register/unregister of a listener, with a non-negotiable `awaitClose`."
+        "`flow {}` is the default: cold, sequential, context-preserving, and cheapest.",
+        "`channelFlow {}` breaks the emission-context rule so multiple coroutines can `send` concurrently — at the cost of a channel plus a coroutine.",
+        "`callbackFlow` is `channelFlow` specialised for registering and unregistering a listener, with a non-negotiable `awaitClose`."
       ],
       "answer": "**`flow {}`** is the default and the cheapest: cold, sequential, and it preserves the collector's context (emissions happen in the collector's coroutine, which is exactly the flow invariant). Use it unless you have a reason not to.\n\n**`channelFlow {}`** exists to break the emission-context rule deliberately. Inside it, `send` is thread-safe, so multiple child coroutines can emit concurrently — the builder allocates a `Channel` plus an extra coroutine to bridge them into the downstream. Use it when a single producer thread is not enough: a fan-in of several sources, or a producer that needs its own dispatcher.\n\n**`callbackFlow {}`** is `channelFlow` specialised for the register/unregister lifecycle of an external listener. You register your callback, emit from it with `trySend`, and its non-negotiable contract is **`awaitClose`** — the suspension that keeps the flow alive while the listener is attached and, critically, the only place you reliably unregister it. Forgetting `awaitClose` is a compile-adjacent runtime failure: the flow completes immediately and the listener leaks.",
       "code": [
@@ -218,7 +220,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0044",
@@ -234,8 +237,8 @@
       "q": "Wrap a listener-based API (say `LocationManager`) in a Flow. What goes wrong?",
       "shortAnswer": [
         "Omitting `awaitClose` throws at runtime and leaks the listener — it is both the suspension that keeps the flow alive and the unregister point.",
-        "You cannot `send` from a non-suspending callback, so it is `trySend`.",
-        "`trySend` with RENDEZVOUS capacity fails silently unless you pass a capacity or add `.buffer()`/`.conflate()`."
+        "You cannot `send` from a non-suspending callback, so it has to be `trySend`.",
+        "With RENDEZVOUS capacity, `trySend` fails silently — pass a capacity or add `.buffer()`/`.conflate()`."
       ],
       "answer": "Three failures, in order of severity.\n\n1. **Missing `awaitClose`.** The block completes the moment the collector subscribes, the flow completes immediately, and — because there is no `awaitClose` — the unregister code that belongs there never runs. The listener stays registered on `LocationManager` forever, delivering to a dead flow. `awaitClose` is simultaneously the suspension that keeps the flow alive for the collector's lifetime and the guaranteed place to remove the listener.\n\n2. **Calling `send` from the callback.** The location callback is a plain, non-suspending interface method; `send` is suspending and cannot be called there. The correct call is `trySend`, which returns a `ChannelResult` instead of suspending.\n\n3. **The silent-drop capacity trap.** `callbackFlow`'s underlying channel defaults to RENDEZVOUS (capacity 0): `trySend` succeeds only if a receiver is waiting *right now*. If the collector is busy, `trySend` fails silently and the fix is dropped with no error. The fix is to give the channel headroom — `callbackFlow` with a capacity argument, or `.buffer()`/`.conflate()` on the downstream — and to check `trySend(...).isSuccess` and surface the drop rather than quietly losing location fixes.",
       "code": [
@@ -261,7 +264,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0045",
@@ -276,8 +280,8 @@
       ],
       "q": "Enumerate the Channel capacities and `BufferOverflow` modes, then design a telemetry pipeline that must never block the producer.",
       "shortAnswer": [
-        "RENDEZVOUS (0), BUFFERED (64 default), CONFLATED, UNLIMITED, with SUSPEND / DROP_OLDEST / DROP_LATEST.",
-        "For telemetry, a bounded buffer with DROP_OLDEST — never UNLIMITED, which is an OOM with extra steps.",
+        "Capacities: RENDEZVOUS (0), BUFFERED (64 default), CONFLATED, UNLIMITED. Overflow: SUSPEND, DROP_OLDEST, DROP_LATEST.",
+        "For telemetry, use a bounded buffer with DROP_OLDEST — never UNLIMITED, which is an OOM with extra steps.",
         "`close()` lets receivers drain then finish; `cancel()` discards the buffer."
       ],
       "answer": "**Capacities**: `RENDEZVOUS` (0 — producer blocks until a receiver is ready), `BUFFERED` (64 by default via `kotlinx.coroutines.channels.defaultBuffer`), `CONFLATED` (capacity 1, keep newest), `UNLIMITED` (never blocks, unbounded memory). **Overflow modes**: `SUSPEND` (block the producer until space), `DROP_OLDEST` (drop the oldest buffered value), `DROP_LATEST` (drop the newest incoming value).\n\n#### The telemetry design\nThe requirement is never block the producer. A bounded buffer with `DROP_OLDEST` is the answer: `Channel(1024, BufferOverflow.DROP_OLDEST)` — the analytics thread `trySend`s, drops the oldest event when full, and never suspends. `UNLIMITED` looks tempting (no drops) but is an unbounded queue holding whatever the producer emits — under a burst it is an OOM with extra steps. `SUSPEND` blocks the producer, which is exactly what the requirement forbids.\n\n#### Close vs cancel\n`close()` is graceful: existing receivers drain the buffered values, then the channel completes. `cancel()` discards the buffer and closes with failure — appropriate when the data is already stale. Two more details: `ClosedSendChannelException` is what a send throws after close, and `onUndeliveredElement` gives you a hook to reclaim resources for elements that are dropped or never received.",
@@ -304,7 +308,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0046",
@@ -320,7 +325,7 @@
       "q": "One-shot events (navigate, show a snackbar): `Channel`, `SharedFlow`, or state? Argue all three.",
       "shortAnswer": [
         "`SharedFlow(replay = 0)` drops events emitted while the UI is STOPPED — the exact window `repeatOnLifecycle` creates.",
-        "A `Channel` gives exactly-once delivery to a single consumer but breaks with two collectors and loses everything on process death.",
+        "A `Channel` gives exactly-once delivery to a single consumer, but breaks with two collectors and loses everything on process death.",
         "Modelling the event as state with `onEventConsumed()` survives both, at the cost of boilerplate."
       ],
       "answer": "**`SharedFlow(replay = 0)`** — the popular event bus. Its failure mode is the lifecycle window: with `repeatOnLifecycle(STARTED)` the collection is cancelled while STOPPED, so an event emitted in that window (a navigation triggered by a push notification) is dropped — nobody is subscribed. `replay = 0` means there is nothing to catch it later.\n\n**`Channel`** — exactly-once delivery to a single consumer, in order. But channels are single-consumer by design: two collectors split the stream (each value goes to exactly one receiver), which is wrong if two screens could ever observe the same event. And a `Channel` lives in memory — process death empties it, and re-created UI never sees the event.\n\n**Event as state** — `data class NavState(val screen: Screen?, val consumed: Boolean)`; the UI shows the screen and calls `onEventConsumed()` to clear it. This survives the lifecycle window (the value is still there when collection resumes) and process death (if you mirror it in `SavedStateHandle`). The cost is boilerplate and a class of stale-state bugs.\n\nThe interview answer must take a position: for navigation that must not be lost, state-with-consumption is the robust choice; a Channel is acceptable for fire-and-forget UI ephemera within one screen's lifetime. Name which failure mode you are knowingly accepting.",
@@ -347,7 +352,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0047",
@@ -363,7 +369,7 @@
       "q": "StateFlow vs SharedFlow vs LiveData — which do you expose for UI state, and why is LiveData out?",
       "shortAnswer": [
         "StateFlow always has a value, is conflated, dedupes by `equals`, and `.value` is readable synchronously — the default for UI state.",
-        "SharedFlow has no initial value, configurable replay, no dedup — for events and broadcast.",
+        "SharedFlow has no initial value, configurable replay, and no dedup — for events and broadcast.",
         "LiveData is lifecycle-aware but main-thread-bound, has no operators, no KMP, and is superseded by the lifecycle-aware collectors."
       ],
       "answer": "**StateFlow** is the default for UI state. It always holds exactly one value (an initial value is required), conflates (only the latest survives), deduplicates emissions by `equals`, and exposes `.value` for synchronous reads and writes. Collecting it never misses the current state because the current value is replayed to each new collector.\n\n**SharedFlow** is the event/broadcast sibling: no initial value, configurable `replay` and `extraBufferCapacity`, and no deduplication. Use it when there is no 'current value' concept — a stream of events, a broadcast to many subscribers.\n\n**LiveData** is out for new code. It is lifecycle-aware out of the box — the point in its favour — but it is main-thread-bound (reads and writes on the main thread), offers no operators, is not KMP-usable, and its lifecycle awareness is exactly what `repeatOnLifecycle`/`collectAsStateWithLifecycle` now give you on a plain `Flow`. The key asymmetry to land: **StateFlow is not lifecycle-aware on its own** — that is the entire reason the lifecycle-aware collectors exist.",
@@ -390,7 +396,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0048",
@@ -406,8 +413,8 @@
       "q": "You update the state in the ViewModel but the UI does not change. Why?",
       "shortAnswer": [
         "StateFlow conflates by `equals`, so re-emitting an equal value emits nothing.",
-        "Mutating a `MutableList` in place and assigning the same reference back, or a data class with an `Array` field, produce a silent no-op.",
-        "Fix with immutable state and `update { it.copy(...) }`."
+        "Mutating a `MutableList` in place and assigning the same reference back, or a data class with an `Array` field, produces a silent no-op.",
+        "Fix it with immutable state and `update { it.copy(...) }`."
       ],
       "answer": "StateFlow's contract is *no duplicate emissions*: an emission is forwarded to collectors only if the new value is not `equals` to the current one. So when your 'update' produces a value that compares equal — or literally is the same instance — nothing is emitted and the UI stays put. Two classic shapes:\n\n1. **Mutate-in-place then reassign.** `state.value = state.value` where you mutated a `MutableList` in the flow's value. The reference is identical, `equals` is true, nothing emits. The flow did not break; the data was 'updated' by changing an object nobody re-read.\n2. **Identity-based equality.** A data class with an `Array` field: arrays use reference equality, so two logically equal states compare unequal — or worse, the reverse: a state that *should* change compares equal because the field holding the change is an array being compared by identity.\n\n#### The fix\nKeep state immutable and rebuild it on change: `state.update { it.copy(items = newList) }`. `update` also closes the read-modify-write race. And name the other half of conflation: intermediate values from a fast producer are dropped *by design*, so StateFlow is the wrong type for a stream of events you must not miss.",
       "code": [
@@ -433,7 +440,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

@@ -16,9 +16,9 @@
       ],
       "q": "You want to pin the certificate for your API endpoint. How does the Network Security Config do it, and what makes a pinning rollout safe?",
       "shortAnswer": [
-        "Network Security Config pins by hashing the server's SubjectPublicKeyInfo into a pin-set with SHA-256 digests, applied per domain in an XML file you reference from the manifest.",
-        "Pin the public key, not the leaf certificate — keys outlive certificates, so a normal renewal doesn't break the pin — and ship at least two pins.",
-        "Add a backup pin and a remote kill switch or server flag to disable pinning; a pin mismatch is a hard outage for every user, so you must be able to unpin faster than you can update the store."
+        "Network Security Config pins per domain via an XML file from the manifest: each `<pin>` is a SHA-256 digest of the server's `SubjectPublicKeyInfo`.",
+        "Pin the public key, not the leaf certificate — keys outlive certificates, so a normal renewal won't break the pin. Ship at least two pins.",
+        "Add a backup pin and a remote kill switch: a mismatch is an instant outage for every user, so unpin faster than a store update."
       ],
       "answer": "#### What Network Security Config gives you\nA declarative XML file in `res/xml/network_security_config.xml`, referenced from the manifest via `android:networkSecurityConfig`. Per domain you control trust anchors (which CAs are trusted), `cleartextTrafficPermitted=\"false\"`, and certificate pinning through `<pin-set>`. A `<pin>` holds a SHA-256 digest of the server's **SubjectPublicKeyInfo** — the public key, not the leaf certificate. Pinning the key means a routine certificate renewal (new leaf, same key) does not break the pin, which is why pinning by public key is the documented pattern.\n\n#### Why pin at all\nTLS alone trusts every pre-installed CA; a single compromised or rogue CA can mint a certificate for your host. Pinning narrows trust to a specific key. The same mechanism exists at the HTTP layer with OkHttp's `CertificatePinner`, which is worth knowing for non-WebView traffic.\n\n#### The rollout discipline\nThe failure mode interviewers probe: a pin mismatch bricks the app for every user at once, and store review delays mean a wrong pin is a multi-day outage. So you ship **two pins** — a primary and a backup — and you keep a server-side kill switch that can disable pinning remotely while a corrected build goes through review. Rotation works by adding the new pin alongside the old one, letting installs overlap, then dropping the old pin.",
       "code": [
@@ -49,7 +49,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0015",
@@ -64,9 +65,9 @@
       ],
       "q": "Why can't you ship a secret inside the APK, and where does an API key actually have to live?",
       "shortAnswer": [
-        "An APK is public — anyone downloads it, and apktool, strings, and jadx recover every resource, constant, and literal, so a value in the package is a value anyone can read.",
-        "Encrypting doesn't save you, because the decrypt key must ship in the same APK; 'encrypted' secrets are one more obfuscated lookup away from the attacker.",
-        "Real secrets live server-side. The client holds short-lived, revocable credentials, and the server authenticates the instance with Play Integrity and binds access to the user."
+        "An APK is public — anyone can download it, and apktool, strings, and jadx recover every resource and literal.",
+        "Encrypting doesn't help, because the decrypt key has to ride in the same APK. 'Encrypted' secrets are one extra lookup away from the attacker.",
+        "Real secrets live server-side. The client gets short-lived, revocable credentials, and the server checks the instance with Play Integrity and binds access to the user."
       ],
       "answer": "#### The client is public\nAn APK is a zip any device can download and unpack. `apktool` decodes the resources, `strings` dumps every literal, and a decompiler such as jadx reconstructs readable code. A `BuildConfig` field, a `strings.xml` entry, a constant in a native `.so` — all of it is recoverable in minutes. Nothing about packaging or obfuscation changes this, because the device has to be able to read the value in order to use it; anything the device can read, an attacker with the same APK can read.\n\n#### Why encryption fails\nIf you encrypt a key or a value, the decrypt key must be present in the same package. The attacker follows the same one line of code you wrote. Key-in-APK is obfuscation, not security — it slows the casual look, and it does nothing against a motivated one.\n\n#### Where secrets actually live\nAnything that must remain secret — signing keys, API keys that gate paid backend usage, credentials with broad scope — belongs server-side. The client authenticates as the user with a short-lived access token plus a refresh token, both revocable. When a key does leak, the fix is server-side rotation; a baked-in key cannot be un-shipped without a forced update.",
       "code": [
@@ -92,7 +93,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0016",
@@ -107,7 +109,7 @@
       ],
       "q": "R8 renames and strips your code — why is obfuscation defense in depth rather than real security?",
       "shortAnswer": [
-        "R8 shrinks dead code, optimizes, and renames classes and members — the output is smaller and the symbol table is destroyed, but strings and behavior survive verbatim.",
+        "R8 shrinks dead code, optimizes, and renames classes and members — the APK gets smaller, but strings and behavior survive verbatim.",
         "String literals, URLs, JSON keys, and algorithms read plainly after decompilation; a hardcoded key is still a hardcoded key, just harder to grep for.",
         "Treat it as one cheap layer that raises the cost of analysis, then put the real controls elsewhere — server-side secrets, integrity checks, short-lived tokens."
       ],
@@ -135,7 +137,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0017",
@@ -150,9 +153,9 @@
       ],
       "q": "How do you keep sensitive content out of screenshots, screen recordings, and the clipboard?",
       "shortAnswer": [
-        "Set FLAG_SECURE on the window — the system blanks the view from screenshots, screen recording, and the recents thumbnail, and in-app screenshots return blank.",
-        "The clipboard is a shared system surface every app can read; don't put secrets there, and when a copy button is required, clear it on pause or after a short timeout.",
-        "Both are per-screen decisions: weigh the UX cost of blocking legitimate sharing against the value of the data, rather than applying protection app-wide."
+        "Set `FLAG_SECURE` on the window: the view goes blank in screenshots, screen recording, and the recents thumbnail, including in-app captures.",
+        "The clipboard is readable by any app, so keep secrets out — if you must offer copy, clear it on pause or after a timeout.",
+        "Both are per-screen calls: weigh the UX cost of blocking legit sharing against the data's value, instead of locking the whole app."
       ],
       "answer": "#### FLAG_SECURE\nThe load-bearing tool is `WindowManager.LayoutParams.FLAG_SECURE`, applied with `window.setFlags(FLAG_SECURE, FLAG_SECURE)` or set declaratively from Compose. With the flag, the system omits the window from screenshots, from screen recording, and from the recents task thumbnail, and in-app screenshots of the view come back blank. It is the only reliable way to block Android's native capture paths — worth knowing it also visibly dims the content for the user, which is a behavior change, not just a policy.\n\n#### The clipboard\nThe clipboard is a system-wide shared surface; on many devices any app can observe it (`OnPrimaryClipChangedListener` fires for every app). Rule one: don't place secrets on the clipboard at all. Where a copy affordance is genuinely needed — a one-time code, a recovery key — clear it shortly after copying, and clear on `onPause` so it doesn't linger while the app is backgrounded.\n\n#### The trade-off\nFLAG_SECURE is a blunt instrument: it blocks screen sharing, support screen-casts, and debugging workflows. Apply it per-screen by data value — payment details, recovery keys, private messages — and pair it with backup exclusions so the sensitive content doesn't leak out through a different channel.",
       "code": [
@@ -178,7 +181,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0018",
@@ -193,9 +197,9 @@
       ],
       "q": "Permissions are a privacy surface. How do you minimize them, and what does the Play Data Safety form actually require you to declare?",
       "shortAnswer": [
-        "Minimize at the design level: use system pickers like the Photo Picker and the Storage Access Framework so you never hold broad read permissions, and request at the point of use.",
-        "Every declared permission is attack surface plus Play review scrutiny — a permission the feature doesn't need is a rejection waiting for a reviewer to notice.",
-        "The Data Safety form asks what data types you collect and share, with whom, whether they travel under encryption, and your deletion commitments — including third-party SDKs."
+        "Minimize at the design level: pickers like the Photo Picker and Storage Access Framework mean no broad read permissions; request at the point of use.",
+        "Every declared permission is attack surface plus Play review scrutiny — an unneeded one is a rejection waiting for a reviewer to notice.",
+        "The Data Safety form asks what you collect and share, with whom, whether it travels encrypted, and your deletion commitments — third-party SDKs included."
       ],
       "answer": "#### Permissions as attack surface\nEvery `dangerous` permission you hold is a capability granted on the user's behalf — and a review flag. The minimization playbook: request at the point of use rather than at install or first launch, request the narrowest alternative the platform offers, and design so nothing is held while the feature is idle. Modern Android removes the need for many broad permissions entirely: the system Photo Picker returns a scoped `content://` URI with no `READ_MEDIA_*` permission, and the Storage Access Framework does the same for documents.\n\n#### Why minimization is also a review strategy\nFewer permissions means a smaller surface for a compromised app to abuse, fewer dialog-driven UX frictions, and a cleaner Play review. The store correlates your declared permissions with your Data Safety disclosures and your code paths — a permission nothing uses is exactly the kind of drift a reviewer flags.\n\n#### The Data Safety form\nThe Play Console form asks which data types you **collect**, whether you **share** them and with whom, whether collection happens in transit and under encryption, and how users can request deletion — and it applies to data collected by your own code and by every third-party SDK. The form, your privacy policy, and the actual binary must agree; when they diverge, the rejection reads \"declared data use doesn't match observed behavior.\"",
       "code": [
@@ -226,7 +230,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0019",
@@ -241,8 +246,8 @@
       ],
       "q": "Someone asks 'how would you secure this app?' — how do you answer with structure instead of a list of features?",
       "shortAnswer": [
-        "Anchor the answer in a framework: OWASP MASVS defines security requirements by verification level, and the MASTG provides the concrete tests that prove each one is met.",
-        "Pick the level the app needs — MASVS-L1 as baseline, MASVS-L2 when it handles sensitive data — then map your controls across architecture, network, storage, crypto, and resilience.",
+        "Anchor in a framework: OWASP MASVS defines requirements per level, and the MASTG gives the concrete tests that prove each one is met.",
+        "Pick the level the app needs — MASVS-L1 as baseline, MASVS-L2 for sensitive data — and map controls across architecture, network, storage, crypto, and resilience.",
         "Close with the assurance story: automated checks in CI, a periodic manual pass against the MASTG, and a written list of accepted risks."
       ],
       "answer": "#### The framework first\nThe strongest answer to 'how would you secure this app' starts with structure, not a checklist. **OWASP MASVS** is a set of security requirements organized by level: MASVS-L1 is the baseline every app should meet; MASVS-L2 applies when the app handles sensitive data and demands stronger platform protection. **OWASP MASTG** is the companion testing guide — for each requirement it names the concrete test, so a claim of compliance becomes auditable.\n\n#### How to walk it\nDecide the level, then work through the categories MASVS uses: **architecture and code**, **network** (TLS everywhere, no cleartext, hostname verification), **platform interaction** (WebViews, IPC, permissions), **data storage and crypto** (Keystore, at-rest), and **resilience** (tamper resistance). For each, cite the test that demonstrates it — for example the MASTG test that flags `cleartextTrafficPermitted=\"true\"`, an unlocked backup, or a WebView with file access enabled.\n\n#### The closing move\nFinish with the assurance loop, not the inventory: automated checks in CI that fail on insecure config, a periodic manual test pass run against the MASTG, and a short written list of accepted risks with owners. Structure, evidence, and honest acceptance is what separates this answer from someone who just names features.",
@@ -269,7 +274,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0020",
@@ -284,9 +290,9 @@
       ],
       "q": "Walk me through threat modeling a mobile feature — where do you start and what do you produce?",
       "shortAnswer": [
-        "Start with assets and trust boundaries: name the crown jewels — the token, PII, the purchase — and mark where data or code crosses a boundary.",
-        "Decompose into components and data flows, then enumerate threats per flow with STRIDE: spoofing, tampering, repudiation, disclosure, DoS, elevation of privilege.",
-        "Prioritize by likelihood and impact, assign mitigations that live on the right side of the boundary, and record the accepted risks with owners."
+        "Start with assets and trust boundaries: name the crown jewels — token, PII, purchase — and note where data or code crosses a boundary.",
+        "Break it into components and data flows, then list threats per flow with STRIDE: spoofing, tampering, repudiation, disclosure, DoS, elevation of privilege.",
+        "Rate each threat by likelihood and impact, assign mitigations on the right side of the boundary, and record accepted risks with owners."
       ],
       "answer": "#### Start with assets and boundaries\nThreat modeling is decomposition before defense. First name the crown jewels — the auth token, PII, a purchase — because every later decision trades against these. Then draw the trust boundaries: app to server, app to another app (intents, content URIs), app to WebView, device to an attacker with physical or rooted access. Everything that crosses a boundary is a data flow worth examining; the rest is, for the attacker, on the far side of a line.\n\n#### STRIDE per flow\nEnumerate threats per flow with STRIDE: **Spoofing** (a fake identity or component), **Tampering** (data modified in transit or at rest), **Repudiation** (an action with no auditable record), **Information disclosure** (data leaking via logs, backups, or screenshots), **Denial of service**, and **Elevation of privilege**. A payment flow is dominated by spoofing and tampering; a chat app by disclosure.\n\n#### Prioritize and mitigate\nRate each threat by likelihood and impact — a twenty-item STRIDE list is fine; what you do with it matters. Assign concrete mitigations that live on the correct side of the boundary: server-side enforcement, Keystore-bound tokens, integrity signals. Write the survivors down as accepted risks with owners. The deliverable is not the diagram; it is the short list of controls you actually built because of it.",
       "code": [
@@ -312,7 +318,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0021",
@@ -327,9 +334,9 @@
       ],
       "q": "A security researcher reports a vulnerability in your app. Walk me through the process from report to ship.",
       "shortAnswer": [
-        "Triage first: reproduce the issue, confirm affected versions and what an attacker can actually do, and assign a severity before anyone says anything publicly.",
-        "Fix through the normal release pipeline — a regression test, the patch, a staged rollout — and hold public details until a meaningful share of users can update.",
-        "Coordinate disclosure timing with the reporter, publish an advisory with a CVE where warranted, and run a root-cause review so the whole bug class is fixed."
+        "Triage first: reproduce the issue, confirm which versions are affected and what an attacker can really do, and assign severity before saying anything publicly.",
+        "Fix through the normal release pipeline — regression test, patch, staged rollout — and hold public details until a meaningful share of users can update.",
+        "Coordinate disclosure timing with the reporter, publish an advisory with a CVE where warranted, and do a root-cause review so the whole bug class dies."
       ],
       "answer": "#### Reproduce and triage\nThe first step is verification, not panic. Reproduce the issue, confirm which versions and components are affected, and assess what an attacker can actually do — read other users' data, act as the user, or crash the service. That drives severity, which drives the SLA, the rollout speed, and how widely you communicate. Acknowledge the reporter's timeline immediately; the relationship is an asset.\n\n#### Fix and hold\nShip the fix through your normal pipeline: a regression test that reproduces the bug, the patch, then a staged rollout. Hold public details until a meaningful share of users has updated, because an advisory before users can patch is a gift to attackers. Where the window matters, describe the change vaguely in the changelog rather than naming the vulnerability.\n\n#### Disclose and close the loop\nCoordinate timing with the reporter — the industry norm is a grace period, Google's own policy uses 90 days, compressed to 7 for actively exploited zero-days. Then publish the advisory: what was affected, which versions are patched, and a CVE identifier where warranted, crediting the researcher. The closing loop is a root-cause review so the class of bug dies, not just this instance.",
       "code": [
@@ -360,7 +367,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0022",
@@ -375,8 +383,8 @@
       ],
       "q": "In a KMP project, what do you actually share, and what stays native?",
       "shortAnswer": [
-        "You share the platform-agnostic brain: domain models, validation, business rules, use cases, repositories, and their tests in commonTest — one implementation, correct everywhere.",
-        "The UI stays native per platform, and so do platform services — secure storage, permissions, biometrics, notifications — each implemented with that platform's own APIs.",
+        "You share the platform-agnostic brain: domain models, validation, business rules, use cases, repositories, and their tests in `commonTest` — one implementation, correct everywhere.",
+        "The UI stays native per platform, and so do platform services — secure storage, permissions, biometrics, notifications — each built with that platform's own APIs.",
         "The contract that makes it work: shared code depends only on common abstractions, and platform differences hide behind interfaces supplied per platform."
       ],
       "answer": "#### What earns a place in commonMain\nThe shared layer is the part of the app that does not need a platform API: domain models, validation, business rules, use cases, state machines, and the repositories that orchestrate them — plus the unit tests in `commonTest` that run on every target. This is where KMP's value lives: one implementation of pricing rules, sync logic, or an offline mutation queue, tested once, correct everywhere.\n\n#### What stays native\nThe UI stays native — SwiftUI on iOS, Compose or Views on Android — because platform feel, lifecycle, and accessibility live there. Platform services stay native too: secure storage (Keystore vs Keychain), permissions, biometrics, notifications, analytics SDKs. Even networking is nuanced: Ktor runs everywhere, but the engines under it are per-platform (OkHttp on Android, the Darwin engine on iOS), and any library with platform dependencies must be provided per side.\n\n#### The contract that makes it work\nShared code can only depend on common abstractions. Platform differences — clocks, UUIDs, storage, permissions — are declared as interfaces in common code and supplied per platform, either via a single `expect`/`actual` seam or through DI. The honest summary: KMP shares the *brain* of the app, not its *nerves*. Everything that touches the OS stays per platform, and pretending otherwise is how shared modules accumulate platform leaks.",
@@ -403,7 +411,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0023",
@@ -419,9 +428,9 @@
       ],
       "q": "When is expect/actual the wrong tool, and why are interfaces plus a platform factory often better?",
       "shortAnswer": [
-        "expect/actual bakes one platform implementation into the whole codebase at compile time — tests in commonTest can't substitute a fake, and the pairing is a global contract.",
+        "`expect`/`actual` bakes one platform implementation into the codebase at compile time — `commonTest` can't substitute a fake, and the pairing is a global contract.",
         "An interface in common code with per-platform implementations injected at the seam keeps consumers testable and lets teams swap implementations without touching shared source.",
-        "Reserve expect/actual for true platform primitives — file paths, OS calls, low-level shims — and use interfaces plus a factory or DI graph for anything with a swappable implementation."
+        "Reserve `expect`/`actual` for true platform primitives — file paths, OS calls, low-level shims — and use interfaces plus a factory for anything swappable."
       ],
       "answer": "#### What expect/actual is for\n`expect` declares a construct in common code with no implementation; each platform source set supplies the matching `actual`, and the compiler verifies the pairing across all targets at compile time. That is exactly right for genuine platform primitives — a process ID, a file-path root, an OS-level API — where there is precisely one correct implementation per platform and the coupling is the point.\n\n#### Why it is often the wrong tool\nFor anything with more than one valid implementation, expect/actual becomes a trap. Common consumers call the `expect` symbol directly, so `commonTest` cannot inject a fake — the `actual` is hardwired in. Adding a platform means touching a global contract, and the seam is implicit: nothing in the signature signals that the implementation is swappable. Every fix or refactor now depends on which `actual` resolved for the current target, and teams end up writing fake platform source sets just to unit-test.\n\n#### The alternative\nDeclare an **interface** in common code, implement it once per platform in plain classes, and let a **factory** — a plain function or a DI graph like Koin — supply the right instance at the composition root. Consumers depend on the interface, so common tests inject fakes, teams can provide their own implementations, and the seam is explicit. The rule of thumb: expect/actual for what the OS *is*; interfaces plus a factory for what your app *does* with it.",
       "code": [
@@ -447,7 +456,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

@@ -15,6 +15,11 @@
         "backtracking"
       ],
       "q": "Word Search II — trie-pruned grid search",
+      "shortAnswer": [
+        "Return all words from a list that can be built from adjacent grid cells, each cell used at most once per word.",
+        "Build a trie of the words, then DFS the grid once, passing the trie node down and pruning the moment a child letter is absent.",
+        "The gotchas are dedup — clear each collected word — and in-place `#` marking for visited cells. The trie prunes hard, beating per-word DFS."
+      ],
       "prompt": "Given a `board: Array<CharArray>` and a `List<String>` of words, return all words that can be built from adjacent (up/down/left/right) cells, each cell used at most once per word.\n\nNaive: run the single-word DFS (Word Search I) for each word — O(words × board × 4^len). The trick is to build a trie of all words first and walk the grid once, pruning branches the moment the current prefix stops being a trie prefix. That's the difference between an interview answer that scales and one that doesn't.",
       "hints": [
         "Running DFS per word is correct but slow. What structure can answer 'is this prefix worth pursuing?' in O(1)?",
@@ -42,7 +47,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "findWords(arrayOf(charArrayOf('o','a','a','n'), charArrayOf('e','t','a','e'), charArrayOf('i','h','k','r'), charArrayOf('i','f','l','v')), listOf(\"oath\", \"pea\", \"eat\", \"rain\"))",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0042",
@@ -56,6 +63,11 @@
         "bfs"
       ],
       "q": "Clone a Graph",
+      "shortAnswer": [
+        "Deep-copy an undirected graph and return a copy of the starting node.",
+        "DFS with a `HashMap` from original node to copy, checked before recursing — the map breaks the cycle.",
+        "Without the map, undirected edges recurse forever on cycles. Time O(V + E), space O(V)."
+      ],
       "prompt": "Given a reference to a node in an undirected graph (each node has a value and a list of neighbors), deep-copy the entire graph and return a copy of the starting node.\n\nCycles make naive recursion loop forever — you need a visited map from original node to its copy. This is the canonical \"graph deep copy\" and the same map discipline as ds-0036 (copy list with random pointer).",
       "hints": [
         "Copying the root then recursing on neighbors loops forever on cycles. What breaks the cycle?",
@@ -83,7 +95,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val one = GNode(1); val two = GNode(2); val three = GNode(3); val four = GNode(4)\n    one.neighbors.addAll(listOf(two, four)); two.neighbors.addAll(listOf(one, three))\n    three.neighbors.addAll(listOf(two, four)); four.neighbors.addAll(listOf(one, three))\n    val copy = cloneGraph(one)!!\n    copy.value.toString() + \" with \" + copy.neighbors.size + \" neighbors\"\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0043",
@@ -97,6 +111,11 @@
         "bfs"
       ],
       "q": "Word Ladder — shortest transformation sequence",
+      "shortAnswer": [
+        "Return the length of the shortest word transformation sequence, one letter per step, through words in a list.",
+        "This is unweighted shortest path, so BFS: at each position try every letter, look up neighbors in a set, and remove them as visited.",
+        "Generate neighbors cheaply — 26·L set lookups per word, not a scan of the list. Bidirectional BFS is the level-4 differentiator to name."
+      ],
       "prompt": "Given `beginWord`, `endWord`, and a `wordList`, return the length of the shortest transformation sequence from `begin` to `end`, where each step changes exactly one letter and every intermediate word must be in the list. Return 0 if impossible.\n\nThe insight: this is unweighted shortest path on a graph of words — BFS. The optimization (bidirectional BFS) is the level-4 differentiator; mention it even if you code the one-directional version first.",
       "hints": [
         "Model each word as a node, edges between words differing by one letter. Shortest path in an unweighted graph = BFS.",
@@ -124,7 +143,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "ladderLength(\"hit\", \"cog\", listOf(\"hot\", \"dot\", \"dog\", \"lot\", \"log\", \"cog\"))",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0044",
@@ -138,6 +159,11 @@
         "dijkstra"
       ],
       "q": "Network Delay Time — single-source shortest path",
+      "shortAnswer": [
+        "Return the time until all nodes receive a signal from node `k` over weighted edges, or -1 if any is unreachable.",
+        "Run Dijkstra with a min-heap keyed by distance, relax edges, skip stale heap entries, and take the maximum settled distance.",
+        "The gotcha is that weighted edges rule out BFS, and 'all nodes' means max of shortest paths. O(E log V); explain the stale-entry skip."
+      ],
       "prompt": "You have `n` nodes and `times: List<IntArray>` of `[u, v, w]` directed edges with transmission delays. Starting from node `k`, return the time it takes for *all* nodes to receive the signal, or -1 if any node is unreachable.\n\nClassic Dijkstra. Two things to say out loud: the graph is weighted (so BFS is wrong), and \"time for all nodes\" is the maximum of the shortest paths — i.e. run Dijkstra and take the max distance.",
       "hints": [
         "Weights are non-negative and we need shortest paths from one source to all nodes — which algorithm?",
@@ -165,7 +191,9 @@
           "url": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "networkDelayTime(listOf(intArrayOf(2,1,1), intArrayOf(2,3,1), intArrayOf(3,4,1)), 4, 2)",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0045",
@@ -179,6 +207,11 @@
         "topological"
       ],
       "q": "Course Schedule II — return a valid order",
+      "shortAnswer": [
+        "Return a valid order to take all courses given prerequisites, or an empty list if a cycle makes it impossible.",
+        "Kahn's algorithm: enqueue zero in-degree courses, pop one into the result, decrement neighbors, and enqueue any reaching zero.",
+        "The cycle check is automatic — fewer than `numCourses` processed means impossibility. Time O(V + E), space O(V + E)."
+      ],
       "prompt": "There are `n` courses labeled 0..n-1 and prerequisites `[[a,b]]` meaning course `b` must be taken before `a`. Return a valid ordering of all courses, or an empty list if it's impossible.\n\nCourse Schedule I (ds-0011) just asks *can* you finish; this one asks for the actual topological order. Kahn's algorithm (in-degree + queue) or DFS with colors. You should be able to write Kahn's and explain cycle detection in the same breath.",
       "hints": [
         "Topological order = an ordering where every edge points forward. When the graph is a DAG, Kahn's works.",
@@ -206,7 +239,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-array-deque/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "findOrder(4, arrayOf(intArrayOf(1,0), intArrayOf(2,0), intArrayOf(3,1), intArrayOf(3,2))).contentToString()",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0046",
@@ -220,6 +255,11 @@
         "union-find"
       ],
       "q": "Redundant Connection — find the edge that closes a cycle",
+      "shortAnswer": [
+        "Find the edge whose removal restores a tree, from a graph with exactly one extra edge.",
+        "Union-find with path compression: add edges one at a time, and the first edge whose endpoints are already connected is the answer.",
+        "The input-order guarantee is the whole trick — the first cycle-closing edge is the last removable one in the input. Near O(n) with `α(n)`."
+      ],
       "prompt": "A tree of `n` nodes has exactly one extra edge added, producing a graph with exactly one cycle. Given the edge list `edges: Array<IntArray>` in order, return the edge that appears last in the input and could be removed to restore a tree.\n\nUnion-Find with path compression is the intended answer: add edges one at a time; the first edge whose two endpoints are *already connected* is the answer. Learn this alongside ds-0012 (number of islands) — they share the same data structure.",
       "hints": [
         "Adding edges one by one, a cycle forms the moment you connect two nodes already in the same set.",
@@ -247,7 +287,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int-array/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "findRedundantConnection(arrayOf(intArrayOf(1,2), intArrayOf(1,3), intArrayOf(2,3))).contentToString()",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0047",
@@ -261,6 +303,11 @@
         "matrix"
       ],
       "q": "N-Queens — place queens without attacks",
+      "shortAnswer": [
+        "Place `n` queens on an n×n board so none attack, and return all distinct solutions as boards.",
+        "Place one queen per row, checking column, `r - c`, and `r + c` in O(1), pruning the moment a placement is illegal.",
+        "The O(1) attack checks — two diagonal formulas instead of board scans — plus backtracking by unmarking. Worst case O(n!) with pruning."
+      ],
       "prompt": "Place `n` queens on an n×n board so no two attack each other (same row, column, or diagonal). Return all distinct solutions as boards of '.' and 'Q'.\n\nThe canonical constraint-backtracking problem. The level-4 crux is tracking the three attack lines (column, main diagonal, anti-diagonal) with arrays so the check is O(1), and pruning as soon as a placement is illegal — never filling a full board to test it.",
       "hints": [
         "Place one queen per row, and only try safe columns. This already prevents same-row and same-column attacks.",
@@ -288,7 +335,9 @@
           "url": "https://kotlinlang.org/docs/collections-overview.html",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "solveNQueens(4)",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

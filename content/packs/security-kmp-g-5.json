@@ -16,9 +16,9 @@
       ],
       "q": "How do you build a home-screen widget with Glance, and what are its constraints compared to a Compose screen?",
       "shortAnswer": [
-        "Glance is a Compose-like DSL that compiles down to RemoteViews, so you describe a GlanceAppWidget with provideGlance/GlanceComposable and back it with a GlanceAppWidgetReceiver.",
-        "There is no recomposition loop — you push state by calling update(context, glanceId), and the composition runs synchronously to emit RemoteViews.",
-        "The constraints are real: input is clicks via PendingIntent only, the component set is small, and you must handle launcher sizing explicitly with SizeMode."
+        "Glance is a Compose-like DSL that compiles down to `RemoteViews`: you describe a `GlanceAppWidget` with `provideGlance`/`GlanceComposable` and back it with a `GlanceAppWidgetReceiver`.",
+        "There's no recomposition loop — you push state by calling `update(context, glanceId)`, and the composition runs synchronously to emit `RemoteViews`.",
+        "The constraints are real: input is clicks via `PendingIntent` only, the component set is small, and you must handle launcher sizing explicitly with `SizeMode`."
       ],
       "answer": "#### What Glance is\nGlance is Jetpack's Compose-like API for home-screen widgets. It is not Compose running on your GPU — it is a DSL that describes a widget and is compiled to a **RemoteViews** hierarchy. A widget is a `GlanceAppWidget` subclass plus a `GlanceAppWidgetReceiver`, and its UI is declared in a `GlanceComposable` block inside `provideGlance`.\n\n#### The rendering and update model\nThere is no recomposition in the Compose sense. State that should appear on the widget is pushed from your app — or from a WorkManager job, because app processes get killed — by calling `update(context, glanceId)`. The composition then runs synchronously to produce RemoteViews, so it must be fast and free of blocking work.\n\n#### The constraints to know\nInput is clicks only: `clickable` launches a `PendingIntent`, which must be `FLAG_IMMUTABLE`. The component set is deliberately small (Box, Column, Row, Text, Button, Image, and a few more). Sizing is explicit: `SizeMode.Exact`, `SizeMode.Responsive`, or `SizeMode.Single`, because a launcher grid can resize your widget. Glance's recent releases have expanded the surface, but the RemoteViews ceiling is permanent — no custom layouts, no arbitrary drawing.\n\n#### When to use it\nFor glanceable views of existing state — a timer, a tracker, a trip summary. If you need rich interactive behavior, that is a signal to link back into the app rather than fight the widget surface.",
       "code": [
@@ -49,7 +49,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0045",
@@ -65,9 +66,9 @@
       ],
       "q": "You have a mature phone app. What actually changes when you add Wear OS, Android TV, Android Auto, and Android XR?",
       "shortAnswer": [
-        "The domain, data, and ViewModel layers survive untouched — what changes is the input model, the UI toolkit, and the hard constraints of each surface.",
-        "Wear adds rotary input, complications, and ambient mode; TV is D-pad focus with Compose for TV; Auto forbids custom UI in favor of distraction-safe templates; XR renders your Compose UI as spatial panels.",
-        "The gating factor is adaptive design first: if the phone app does not already scale across windows and screen sizes, none of these surfaces will behave."
+        "The domain, data, and ViewModel layers survive untouched — what changes is the input model, the UI toolkit, and each surface's hard constraints.",
+        "Wear brings rotary input, complications, and ambient mode; TV is D-pad focus; Auto allows only distraction-safe templates; XR renders Compose UI as spatial panels.",
+        "The gating factor is adaptive design first: if the phone app doesn't already scale across windows and screen sizes, none of these surfaces will behave."
       ],
       "answer": "#### What survives\nYour architecture already pays for itself here: repositories, use cases, ViewModels, and the Compose state model carry across all four surfaces unchanged. Nothing about these form factors changes your domain design. What changes is the presentation layer and the constraints each surface imposes.\n\n#### Wear OS\nCompose for Wear brings rotary input, Tiles, complications, and watch faces. You must handle the **ambient/always-on display** and treat battery and glanceability as first-class: the watch is for quick actions, and deep work stays in the phone companion app.\n\n#### Android TV\nInput is a D-pad, so **focus handling replaces touch**. Compose for TV provides focus-aware components, and the design is a content-centric 10-foot UI — rows of cards and previews, not dense lists. Voice search and the playback controls matter more than fine touch gestures.\n\n#### Android Auto\nThe strictest case. While driving you get **template-based apps** through the car app library, and custom interactive UI is not allowed — media, messaging, and navigation are expressed through Google's templates. Distraction safety dictates every decision; there is no design freedom to trade.\n\n#### Android XR\nYour Compose UI is rendered into spatial panels in a 3D scene. Jetpack XR Compose handles windows, spatial layout, and gaze-and-hand input, and existing Compose content largely ports over — which is the payoff of the adaptive work.\n\n#### The pattern\nOne codebase that scales across windows first, then thin per-surface UI layers. The phone app's layout quality is the prerequisite for all four.",
       "code": [
@@ -98,7 +99,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0046",
@@ -113,8 +115,8 @@
       ],
       "q": "Walk me through implementing Play Billing for a subscription. What are the moving parts, and where does server verification come in?",
       "shortAnswer": [
-        "The client uses the Play Billing library: queryProductDetailsAsync, launchBillingFlow with a BillingFlowParams built from the chosen ProductDetails, and every purchase must be acknowledged within three days or it is refunded.",
-        "Subscriptions add base plans with layered offers, upgrades and downgrades with proration, and renewals that happen on Google's infrastructure — your job is tracking the purchase-state transition.",
+        "The client uses the Play Billing library: `queryProductDetailsAsync`, then `launchBillingFlow` — and every purchase must be acknowledged within three days or it's refunded.",
+        "Subscriptions add base plans with layered offers, upgrades and downgrades with proration, and renewals on Google's infrastructure — your job is tracking the purchase-state transition.",
         "The client is untrusted: your backend validates the purchase token against the Play Developer API and reacts to Real-Time Developer Notifications for renewals and cancellations."
       ],
       "answer": "#### The client flow\nEverything starts from `ProductDetails`: query with `queryProductDetailsAsync(QueryProductDetailsParams)`, build `BillingFlowParams` with `setProductDetailsParamsList`, launch the flow from an activity, and handle the callback. Any purchase must be **acknowledged** (`acknowledgePurchase`) within three days of purchase or Google refunds it and revokes access. Acknowledge on the server once it has verified the token — that is the safe ordering.\n\n#### Subscriptions are a state machine\nA subscription is described by **base plans** (monthly, yearly) with **offers** layered on top. Purchases change over time: upgrades and downgrades use proration (`BillingFlowParams.ProrationMode`), and renewals happen on Google's infrastructure, not inside your app. Handle the `PENDING` purchase state — payment-method edge cases where the user has not finished paying — and decide what access they get in the meantime. Every new purchase carries a token that replaces the old one.\n\n#### Server-side verification\nThe client is hostile territory. The app posts the `Purchase` token to your backend, which validates it against the **Google Play Developer API**. Better still, subscribe to **Real-Time Developer Notifications** (Cloud Pub/Sub) so your backend learns about renewals, cancellations, and refunds even when the app is closed. Your entitlements come from this server truth, never from a client-side boolean.\n\n#### Policy and testing\nUse license testing with your own test accounts, remember digital content must flow through Play billing (with real exceptions like physical goods), and keep the Data Safety form honest about what the purchase flow collects.",
@@ -146,7 +148,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0047",
@@ -161,9 +164,9 @@
       ],
       "q": "How do you prompt users to update your app, and how do you ask for a Play Store rating?",
       "shortAnswer": [
-        "In-app updates use AppUpdateManager: fetch the update info, then startUpdateFlowForResult with IMMEDIATE or FLEXIBLE mode and route the result through the activity result callback.",
-        "FLEXIBLE lets the user keep using the app while the update downloads and installs on restart; IMMEDIATE blocks with a full-screen, non-dismissible update flow.",
-        "In-app review is a separate ReviewManager flow that Google quota-limits, so you gate it on milestones, never on every launch, and handle ReviewErrorCode as non-fatal."
+        "In-app updates use `AppUpdateManager`: fetch the update info, then `startUpdateFlowForResult` with `IMMEDIATE` or `FLEXIBLE` mode, routing the result through the activity result callback.",
+        "`FLEXIBLE` lets the user keep using the app while the update downloads and installs on restart; `IMMEDIATE` blocks with a full-screen, non-dismissible flow.",
+        "In-app review is a separate `ReviewManager` flow that Google quota-limits: gate it on milestones, never every launch, and treat `ReviewErrorCode` as non-fatal."
       ],
       "answer": "#### In-app updates\n`AppUpdateManager` is the entry point: `AppUpdateManagerFactory.create(context)` then `appUpdateInfo`. That tells you the `updateAvailability`, whether installation is allowed, and the **update priority** you set per rollout in the Play Console. When an update is available you call `startUpdateFlowForResult` with one of two strategies:\n- **Immediate** — a full-screen, non-dismissible flow; use it when the update is critical (security fix, broken feature).\n- **Flexible** — a non-blocking background download with a resume UI that installs on the next app restart; use it for routine releases.\nRoute the request code and `ActivityResult` through your activity-result handler: `RESULT_OK` means the user went along, `RESULT_CANCELED` means deferred — re-check state rather than caching it, and resurface flexibly later.\n\n#### In-app review\nA separate API. `ReviewManager.requestReviewFlow()` gives a `ReviewInfo`, then `launchReviewFlow(activity, reviewInfo)` shows Google's rating card. Quotas are enforced, so you can never force the dialog to appear — treat a `ReviewErrorCode` failure as non-fatal and re-attempt at a later milestone. Common practice: gate on meaningful achievements and throttle aggressively.\n\n#### Design\nUse the rollout priority flag for severity, respect the user's defer, and reserve immediate updates for cases where the cost of not updating is worse than the interruption.",
       "code": [
@@ -194,7 +197,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0048",
@@ -209,9 +213,9 @@
       ],
       "q": "Why did Play move to App Bundles, and how do Play Feature Delivery and Play Asset Delivery let you ship smaller?",
       "shortAnswer": [
-        "The Android App Bundle is the upload artifact; Play generates and signs the optimized APKs each device actually needs — a base APK plus splits for ABI, density, and language.",
-        "Play Feature Delivery modularizes code into dynamic features that install with the app, on demand, or conditionally, cutting the install-time download.",
-        "Play Asset Delivery handles large game-style assets as install-time, fast-follow, or on-demand packs, with texture-compression targeting so users only get the assets their GPU uses."
+        "The App Bundle is what you upload; Play generates and signs the per-device APKs — base APK plus ABI, density, and language splits.",
+        "Play Feature Delivery splits code into dynamic features that install with the app, on demand, or conditionally, cutting the install-time download.",
+        "Play Asset Delivery serves large game-style assets as install-time, fast-follow, or on-demand packs, with texture-compression targeting so users only get the assets their GPU uses."
       ],
       "answer": "#### The App Bundle\nYou upload an `.aab`, not an APK. Play App Signing holds the app signing key, and Play generates a **base APK** plus configuration splits — one per ABI, density bucket, and language — so each install pulls only what its device needs. The bundle also solves a signing-rotation problem: the key stays with Google, so a leaked upload key no longer forces a whole migration.\n\n#### Play Feature Delivery\nModules are declared with the `com.android.dynamic-feature` Gradle plugin. A feature can be **install-time** (part of the base experience), **on-demand** (downloaded when the user reaches it), or **conditional** (delivered by country, API level, or other criteria). On-demand features need `SplitCompat` so their code can be loaded after download, and state is tracked with `SplitInstallManager`. The payoff is a smaller initial download and an honest push toward modular architecture — features you cannot isolate are features you should not split.\n\n#### Play Asset Delivery\nBuilt for game-scale payloads: **install-time**, **fast-follow** (downloaded right after install, before first launch), or **on-demand** asset packs, each capped in size. You can target **texture-compression formats**, so a device only receives the ASTC/ETC2 assets its GPU supports — a real size saver for large games.\n\n#### The trade-off\nSmaller downloads and better ABI targeting cost complexity: more modules to build and test, and on-demand paths that must handle download failures, retries, and user cancellation.",
       "code": [
@@ -242,7 +246,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0049",
@@ -257,9 +262,9 @@
       ],
       "q": "Which Play policies actually gate a release for an Android engineer, and how do you keep a release unblocked?",
       "shortAnswer": [
-        "The hard gates are mechanical and date-bound: targetSdk 36 is required by 2026-08-31 (extension window to 2026-11-01), and 16 KB page-size support is required for updates from 2027-02-01.",
-        "The second gate is behavioral: the Data Safety form, the permissions policy, and the content/behavior policies are enforced through review, and violations carry strikes.",
-        "Keep policy in the release loop — a policy checklist, staged rollouts, and Pre-launch reports — so problems surface before a full rollout instead of after a suspension."
+        "The hard gates are mechanical and date-bound: `targetSdk 36` by 2026-08-31 (extension to 2026-11-01), and 16 KB page-size support for updates from 2027-02-01.",
+        "The second gate is behavioral: the Data Safety form, permissions policy, and content policies are enforced via review, and violations carry strikes.",
+        "Keep policy in the release loop — a policy checklist, staged rollouts, and Pre-launch reports — so problems surface before a full rollout."
       ],
       "answer": "#### What actually blocks you\nThe un-negotiable gates are checked at upload time. **Target API level**: apps below the requirement cannot be updated and new apps cannot be published — for the current train that means `targetSdk 36` required by **2026-08-31**, with an extension window to **2026-11-01**. **16 KB page sizes**: 16 KB-page devices are being enabled across the ecosystem, so apps and updates must support them from **2027-02-01** — practically, verify your native libraries and APK alignment, and test on 16 KB emulator images. Both are dates, not preferences.\n\n#### Data safety and permissions\nThe Data Safety form and the permissions policy form the second gate: you declare what data you collect and how it is shared, and every requested permission must be necessary and demonstrably used. Enforcement here is retrospective — a form that is technically filed but inaccurate is a removal risk later. The Play Console also surfaces device-eligibility and policy findings to fix before rollout.\n\n#### The reviewer gate\nContent and behavior policies (prohibited content, ads, gambling, disclosures) are enforced by review and carry **strikes**. Strikes are account-level: an unresolved strike can pull an app, and repeated offenses can terminate the whole developer account.\n\n#### Keeping releases unblocked\nTreat policy as a CI gate. Keep a checklist — targetSdk, 16 KB readiness, data-safety declarations, permissions, compliance surface — run staged rollouts so you can pause, and let Pre-launch reports and coverage data catch issues before 100% of users get the build.",
       "code": [
@@ -295,7 +300,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0050",
@@ -310,9 +316,9 @@
       ],
       "q": "Where does Firebase fit in a modern Android stack, and how do you make Crashlytics actually useful?",
       "shortAnswer": [
-        "Firebase is a managed backend covering analytics, crash reporting, remote config, auth, Firestore, messaging, and functions — a strong default when speed beats infrastructure ownership.",
-        "The durable core is Analytics plus Crashlytics plus Remote Config; for core business state, think hard about vendor lock-in, security rules, and cost before adopting Firestore.",
-        "Crashlytics becomes genuinely useful when every crash carries deobfuscated stacks, breadcrumbs, custom keys, and user context, and is correlated with releases and rollouts."
+        "Firebase is a managed backend: analytics, crash reporting, remote config, auth, Firestore, messaging, and functions — a strong default when speed beats infrastructure ownership.",
+        "The durable core is Analytics plus Crashlytics plus Remote Config; before adopting Firestore for core state, think hard about vendor lock-in, security rules, and cost.",
+        "Crashlytics is genuinely useful when every crash carries deobfuscated stacks, breadcrumbs, custom keys, and user context, and is correlated with releases and rollouts."
       ],
       "answer": "#### What the stack gives you\nThe durable core for a modern app is **Analytics + Crashlytics + Remote Config**: product signal, failure signal, and remote control without a release. Around that sit Auth, Firestore, Cloud Messaging, and Cloud Functions. The Firebase BoM keeps SDK versions aligned, and the integration seam is your `google-services.json` plus the build-time plugin wiring.\n\n#### The architectural judgment\nThe right answer is *partial* adoption. Analytics, crash reporting, and configuration are commodity capabilities with no upside to self-host — use Firebase there without guilt. For core business state, you are coupling your schema, security rules, and pricing to Google's platform. Decide deliberately where the data layer lives, and structure code so the storage choice is replaceable.\n\n#### Making Crashlytics useful\n- **Deobfuscation**: upload R8/ProGuard mappings so stack traces are readable — symbol-less traces turn triage into guessing.\n- **Context**: `crashlytics.log()` breadcrumbs, `setCustomKey()` for state, `setUserId()` for repro, and `recordException()` for non-fatal errors you actually want to track.\n- **Actionability**: tie crashes to releases and rollouts, set up issue alerts, and remember that 'no crash' is not the same as 'no problem' — some of your worst bugs are silent.\n- **Privacy**: wire `setDataCollectionEnabled(false)` to your consent flow rather than sending everything by default.",
       "code": [
@@ -343,7 +349,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0051",
@@ -358,9 +365,9 @@
       ],
       "q": "What is the Privacy Sandbox on Android, and what changed about the advertising ID that a mobile engineer must know?",
       "shortAnswer": [
-        "The Privacy Sandbox replaces cross-app tracking with privacy-preserving APIs — Topics, Protected Audience, Attribution Reporting — plus an SDK Runtime that isolates ad-tech code from your app.",
-        "The advertising ID is no longer a stable key: it needs the ACCESS_ADSERVICES_AD_ID permission, resets on user opt-out, and on Android 16+ ships disabled by default, reading as zeros until the user opts in.",
-        "That means first-party identity, server-side aggregation, and measurement fallbacks replace anything keyed on the ad ID — design for the all-zeros case."
+        "The Privacy Sandbox replaces cross-app tracking with privacy-preserving APIs — Topics, Protected Audience, Attribution Reporting — plus an SDK Runtime isolating ad-tech code.",
+        "The advertising ID is no longer a stable key: it needs `ACCESS_ADSERVICES_AD_ID`, resets on opt-out, and ships disabled on Android 16+.",
+        "That means anything keyed on the ad ID gets replaced by first-party identity, server-side aggregation, and measurement fallbacks — design for the all-zeros case."
       ],
       "answer": "#### The advertising ID problem\n`AdvertisingIdClient` let any app with the `AD_ID` permission read a stable, reset-able identifier and combine it across apps into profiles — exactly the cross-app tracking the Privacy Sandbox exists to end. On Android 13+ reading it already requires `ACCESS_ADSERVICES_AD_ID`; after user opt-out or reset the API returns zeros. On **Android 16+, new devices ship with the ad ID disabled by default**, with users able to opt back in via Google's ads settings — so treating it as a stable identity key breaks by design.\n\n#### The Privacy Sandbox APIs\n- **Topics** — coarse, on-device interest signals per app, with no cross-app linking by the platform.\n- **Protected Audience** — on-device ad selection and remarketing without shipping user lists to ad tech at runtime.\n- **Attribution Reporting** — aggregate, differentially-private conversion measurement.\n- **SDK Runtime** — ad SDKs run through isolated APIs so an embedded SDK cannot scrape your whole app context.\nThese land in waves across API levels, availability is platform- and consent-gated, and the app does not get to decide when they are enabled.\n\n#### What you must change\nAnything keying measurement or identity off the ad ID is now a liability. Rework attribution around first-party IDs and server-side aggregation, adopt `AdvertisingServices`-aware SDKs, and make consent flows honest about data sharing. Validate every pipeline against the all-zeros case — that is the default state on the newest devices, not an edge case.",
       "code": [
@@ -391,7 +398,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0052",
@@ -406,9 +414,9 @@
       ],
       "q": "Your app runs on phones only today. What does it take to meet the large-screen and foldable quality guidelines?",
       "shortAnswer": [
-        "The bar is adaptive layout, not separate builds: UI responds to WindowSizeClass (Compact, Medium, Expanded) and reflows across the folding posture of foldables.",
-        "Use Compose's adaptive Material3 scaffolds — ListDetailPaneScaffold and SupportingPaneScaffold with pane expansion — rather than hardcoded phone breakpoints.",
-        "The guidelines grade actual behavior: no letterboxing, no orientation lock on foldables, proper resizability, and a full keyboard, mouse, and stylus input story."
+        "The bar is adaptive layout, not separate builds: UI responds to `WindowSizeClass` (Compact, Medium, Expanded) and reflows across a foldable's postures.",
+        "Use Compose's adaptive Material3 scaffolds — `ListDetailPaneScaffold` and `SupportingPaneScaffold` with pane expansion — rather than hardcoded phone breakpoints.",
+        "The guidelines grade actual behavior: no letterboxing, no orientation lock on foldables, proper resizability, and full keyboard, mouse, and stylus input support."
       ],
       "answer": "#### The baseline: resizable windows\nQuality starts with **window size classes** — `WindowSizeClass` (Compact, Medium, Expanded) from the adaptive library — because a foldable changes the window metrics mid-session. Layouts branch on the class, and the classes drive Material3 adaptive scaffolds: `ListDetailPaneScaffold`, `SupportingPaneScaffold`, and the adaptive `NavigationSuite`. That is the difference between 'it scales' (a phone layout stretched) and 'it uses the space' (a real second pane appears).\n\n#### Foldables specifically\nUnfolding produces a **resize/config change, not an activity recreation** — your ViewModel and saved state must survive it. Handle the hinge through the WindowManager library's `WindowInfoTracker`/`FoldingFeature` (state: flat, half-open, full-open, plus occlusion and hinge bounds), keep critical UI clear of the hinge and safe areas, and do not lock orientation on foldables.\n\n#### What the guidelines actually test\nPlay evaluates real behavior against the quality criteria: no letterboxing, correct resizability across the supported size range, and the full input ecosystem — keyboard navigation, focus order, mouse, and stylus. Testing is the other half: emulator size presets, the foldable emulator's posture states, and running every screen at all three size classes.\n\n#### The architecture takeaway\nHoist pane-level state so list and detail are independently saveable, let the adaptive scaffold own the two-pane switch, and the domain layer never learns that a size class exists.",
       "code": [
@@ -439,7 +447,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0053",
@@ -454,9 +463,9 @@
       ],
       "q": "Why is accessibility a shipping requirement, and what is the minimum bar for an Android engineer?",
       "shortAnswer": [
-        "Accessibility is a legal and product requirement — WCAG-style compliance and Play's quality expectations — and it is good engineering that benefits every user.",
-        "The minimum bar: every image has a contentDescription or is explicitly decorative, every interactive element has a name and role, targets are at least 48dp, and contrast is sufficient.",
-        "Compose derives semantics from components for free; extend them with semantics{}, roles, and clearAndSetSemantics{}, then verify with TalkBack and the Accessibility Scanner."
+        "Accessibility is a legal and product requirement — WCAG-style compliance and Play's quality expectations — and it's good engineering that benefits every user.",
+        "The minimum bar: every image has a `contentDescription` or is decorative, elements have names and roles, touch targets are at least 48dp, and contrast is sufficient.",
+        "Compose derives semantics from components for free; extend them with `semantics {}`, roles, and `clearAndSetSemantics {}`, then verify with TalkBack and the Accessibility Scanner."
       ],
       "answer": "#### Why it is a requirement\nAccessibility is a shipping condition, not a feature. Software accessibility has regulatory teeth (WCAG and its equivalents), Play's quality expectations call it out, and enterprises will not approve a product that fails it. The engineering case is the durable one: better semantics, targets, and contrast improve usability for everyone — the elderly user, the user in bright glare, the one-thumb user.\n\n#### The minimum bar — a practical checklist\n- Every meaningful `Image`/`Icon` has a `contentDescription`; decorative ones are explicitly null.\n- Every interactive element exposes a name and role. Compose does this by default for `Button`, `Checkbox`, and friends; custom clickables need `semantics { role = Role.Button }`.\n- Touch targets are at least 48dp — Material does this, a raw `Modifier.clickable` may not.\n- Text contrast is at least 4.5:1 for body copy, and no information is conveyed by color alone.\n- Focus order is meaningful, and custom views implement `onInitializeAccessibilityEvent`.\n\n#### How you verify\nDo not assume — run TalkBack over the real user flows, including dialogs and error states; run the Accessibility Scanner; and inspect Compose's semantics tree with the testing APIs. Build it into the definition of done. Retrofitting accessibility after launch is the expensive way to do it, and it is where the risk actually lives.",
       "code": [
@@ -487,7 +496,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

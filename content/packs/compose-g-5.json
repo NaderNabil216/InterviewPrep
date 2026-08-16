@@ -16,9 +16,9 @@
       ],
       "q": "How do you build styled text with links and inline icons?",
       "shortAnswer": [
-        "`buildAnnotatedString` with `SpanStyle` for character ranges and `ParagraphStyle` for blocks.",
-        "`LinkAnnotation.Url`/`LinkAnnotation.Clickable` make links focusable and announced by TalkBack.",
-        "`InlineTextContent` with a `Placeholder` embeds inline icons; annotations are plain data you can assert on in tests."
+        "`buildAnnotatedString` styles ranges with `SpanStyle` and blocks with `ParagraphStyle`.",
+        "`LinkAnnotation.Url`/`LinkAnnotation.Clickable` make links focusable and readable by TalkBack.",
+        "`InlineTextContent` with a `Placeholder` embeds inline icons. Annotations are plain data, so tests can assert on them."
       ],
       "answer": "`buildAnnotatedString` builds rich text as a sequence of spans: `withStyle(SpanStyle(...))` styles character ranges — color, font weight, text decoration — and `withStyle(ParagraphStyle(...))` styles blocks such as line height or text indent. The result is one `AnnotatedString` rendered by a single `Text`.\n\n#### Links that actually behave\n`LinkAnnotation.Url(url)` and `LinkAnnotation.Clickable(...)` attach link behaviour to a range and are the modern replacement for `ClickableText` plus manual offset mapping. They are real links: focusable by keyboard, announced by TalkBack, and clickable without hand-rolling hit testing. The annotated text keeps its correct layout because the annotation is a property of the span, not of a separately positioned overlay.\n\n#### Inline icons\n`InlineTextContent` pairs a `Placeholder` (width, height, vertical alignment) with a composable to draw — an emoji, a small icon, a badge — sitting inline in the text flow. Annotations deserve one more mention: they are plain data. A test can read the ranges and assert that the 'Terms' link covers exactly the word 'Terms', which is how you verify rich text without a screenshot.",
       "followUps": [
@@ -36,7 +36,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0053",
@@ -51,9 +52,9 @@
       ],
       "q": "Why is text usually the most expensive thing on your frame, and what do you do about it?",
       "shortAnswer": [
-        "Text layout shapes glyphs, resolves fonts and breaks lines — it dominates measure time in a list row.",
-        "Async `FontFamily` resolution causes a visible reflow when the font lands; preload or pick a fallback with matching metrics.",
-        "`rememberTextMeasurer` + `drawText` is for drawing text on a canvas; auto-sizing binary-searches sizes, measuring repeatedly."
+        "Text layout shapes glyphs, resolves fonts, and breaks lines — it dominates measure time in a list row.",
+        "An async `FontFamily` causes a visible reflow when it loads. Preload it, or pick a fallback with matching metrics.",
+        "`rememberTextMeasurer` + `drawText` draw text on a canvas. Auto-sizing binary-searches sizes, measuring repeatedly."
       ],
       "answer": "Text layout is disproportionately expensive because it is real typography work: glyph shaping, font resolution, and line breaking against the measured width — all per call, and it dominates the measure pass of a list row with a title plus a couple of body lines.\n\n#### Fonts are a hidden tax\nA `FontFamily` loaded asynchronously resolves after the first frame, so the text re-lays-out with a visible reflow when the font lands. The mitigations: preload the font, or choose a fallback whose metrics match the target font so the swap is invisible.\n\n#### Drawing text yourself\nWhen text sits on a canvas — an annotated list, a custom control — `rememberTextMeasurer` + `drawText` do the layout once and draw the cached result, instead of a full `Text` composable per element. The `DrawTextResult` from one `measure` call is reused for every draw.\n\n#### The auto-size trap\n`TextAutoSize` and auto-sizing `TextStyle` binary-search font sizes until the text fits — each probe is a full layout, so a one-liner becomes several measures per frame. In a scrollable list with many auto-sized texts, that multiplies the most expensive operation in the frame. Reserve auto-sizing for a few headline-level texts, not list bodies.",
       "followUps": [
@@ -71,7 +72,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0054",
@@ -86,9 +88,9 @@
       ],
       "q": "Why does gesture-driven motion need `Animatable` rather than `animate*AsState`?",
       "shortAnswer": [
-        "`snapTo` while the finger is down, then `animateTo`/`animateDecay` with `initialVelocity` from a `VelocityTracker`.",
-        "`animate*AsState` has no velocity handoff and no interruption control.",
-        "`Animatable`'s `MutatorMutex` guarantees a single owner by cancelling the previous animation; `splineBasedDecay`/`exponentialDecay` give natural fling."
+        "`snapTo` follows the finger, then `animateTo`/`animateDecay` continues with `initialVelocity` from a `VelocityTracker`.",
+        "`animate*AsState` can't take over velocity and can't be interrupted.",
+        "`Animatable`'s `MutatorMutex` keeps one owner by cancelling the previous animation. `splineBasedDecay`/`exponentialDecay` give a natural fling."
       ],
       "answer": "Gesture-driven motion is a loop: the finger drives the value directly, and the moment the finger lifts, an animation takes over from the current value *and current velocity*. `Animatable` is the tool because it supports exactly that. While dragging you call `snapTo(offset)` on every move event — no animation, just direct placement. On release you call `animateDecay(flingVelocity)` with a `DecayAnimationSpec` — `splineBasedDecay()` or `exponentialDecay()` — so the motion continues at the user's real speed.\n\n#### What `animate*AsState` cannot do\n`animateTo` (target-value animation) has no notion of incoming velocity — it animates from the current value at zero speed, so releasing a fast fling snaps to a crawl before easing. `animate*AsState` is a stateless convenience for target-value changes, not for mid-stream handoffs.\n\n#### The interruption contract\n`Animatable` serializes animations through a `MutatorMutex`: starting a new animation cancels the previous one, so a tap mid-fling cleanly takes over. That single-owner guarantee is what makes gesture handling safe — no two animations fight over the same value.",
       "followUps": [
@@ -106,7 +108,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0055",
@@ -121,9 +124,9 @@
       ],
       "q": "Why use `Transition`/`updateTransition` instead of several `animate*AsState` calls, and what is `SeekableTransitionState` for?",
       "shortAnswer": [
-        "One clock and one target change keeps N properties in lockstep and gives per-property `transitionSpec`s.",
-        "`updateTransition` supports `createChildTransition` and is what the Animation Inspector can introspect.",
-        "`SeekableTransitionState` drives the same transition by fraction rather than time — for predictive back and scrubbed motion."
+        "One clock and one target change keep N properties in lockstep, each with its own `transitionSpec`.",
+        "`updateTransition` supports `createChildTransition` and can be introspected by the Animation Inspector.",
+        "`SeekableTransitionState` drives a transition by fraction instead of time — for predictive back and scrubbed motion."
       ],
       "answer": "`updateTransition(targetState, label)` creates a `Transition` that owns one animation clock. All the properties defined on it — `animateFloat`, `animateColor`, `animateDp`, including size and alpha together — animate in lockstep from the old target to the new one when the target changes. That is the win over a pile of `animate*AsState` calls: the properties cannot drift apart, they share a single completion, each property gets its own `transitionSpec`, and a transition can define `createChildTransition` for nested coordinated motion. The Animation Inspector can also pause and step an introspected `Transition`, which it cannot do for independent `animate*AsState` calls.\n\n#### Seekable transitions\n`SeekableTransitionState` is a `Transition` you drive by *fraction* instead of time: set `snapTo(progress)` and every property lands at the same progress point. That is exactly what predictive back needs — the swipe progress scrubs the whole exit animation — and what gesture-dragged transitions want. `MutableTransitionState` is the companion for animating on first composition, when the initial state is the target.",
       "followUps": [
@@ -141,7 +144,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0056",
@@ -156,9 +160,9 @@
       ],
       "q": "Explain `pointerInput`: event passes, consumption, and the bug everyone hits.",
       "shortAnswer": [
-        "`awaitPointerEventScope { awaitFirstDown(); ... }` with the ready-made detectors like `detectTapGestures` and `detectDragGesturesAfterLongPress`.",
-        "Every event travels Initial → Main → Final so ancestors can pre-intercept and children consume in Main via `change.consume()`.",
-        "The classic bug: `pointerInput(Unit)` never restarts its coroutine, so the block captures stale values — the key is what re-launches it."
+        "Use `awaitPointerEventScope { awaitFirstDown(); ... }` or ready-made detectors like `detectTapGestures` and `detectDragGesturesAfterLongPress`.",
+        "Every event passes through Initial, Main, and Final. Ancestors pre-intercept in Initial; children consume in Main via `change.consume()`.",
+        "The classic bug: `pointerInput(Unit)` never restarts its coroutine, so the block keeps stale values — the key re-launches it."
       ],
       "answer": "`Modifier.pointerInput(key) { awaitPointerEventScope { ... } }` suspends a coroutine that awaits pointer events in a loop. On top of it sit the detectors: `detectTapGestures`, `detectDragGestures`, `detectDragGesturesAfterLongPress`, `detectTransformGestures` — each wrapping the event loop with a recognizer.\n\n#### The pass model\nEvery pointer event passes through three stages: Initial, Main, and Final. In Initial, ancestors see the event before children and may pre-intercept; in Main, the receiving modifier decides and may `change.consume()`; in Final, everyone sees what was consumed. Consumption is how the framework knows which gesture won — once consumed, later detectors in the same scope do not act on it.\n\n#### The bug everyone hits\n`pointerInput(Unit)` passes `Unit` as the key, so the coroutine is launched once and *never restarts*. Any value captured in the block — a `remember`ed state, a lambda, a scroll position — is frozen at first composition, and the gesture behaves against stale data. The fix is keying on whatever the block reads (`pointerInput(visible, someState)`) so a change re-launches the block with fresh values.",
       "followUps": [
@@ -176,7 +180,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0057",
@@ -191,9 +196,9 @@
       ],
       "q": "Build swipe-to-dismiss with `AnchoredDraggable`.",
       "shortAnswer": [
-        "`AnchoredDraggableState` with `DraggableAnchors`, a `positionalThreshold` and a `velocityThreshold`, plus a `decayAnimationSpec` for the fling.",
-        "Read `requireOffset()` inside a `graphicsLayer`/`offset` lambda so the row never recomposes mid-drag.",
-        "It replaced `swipeable`; pair it with `nestedScroll` so the gesture does not fight the parent list."
+        "`AnchoredDraggableState` takes `DraggableAnchors`, a `positionalThreshold`, a `velocityThreshold`, and a `decayAnimationSpec` for the fling.",
+        "Read `requireOffset()` inside a `graphicsLayer`/`offset` lambda, so the row never recomposes mid-drag.",
+        "It replaced `swipeable`. Pair it with `nestedScroll` so the gesture doesn't fight the parent list."
       ],
       "answer": "`AnchoredDraggableState` models a value that settles at discrete anchors — in a swipe-to-dismiss row, the anchors are `Start` (0f), `PartiallyHidden`, and `End` (full dismiss offset). You construct it with `anchors = DraggableAnchors { Start at 0f; End at -width }`, a `positionalThreshold` that decides how far the drag must go to commit to the next anchor, a `velocityThreshold` for fast swipes, and a `decayAnimationSpec` (usually `splineBasedDecay`) for the fling after release.\n\n#### Wiring the offset\nAttach `Modifier.anchoredDraggable(state, orientation = Orientation.Horizontal)` and read `state.requireOffset()` inside a `graphicsLayer { translationX = offset }` lambda. Reading there keeps the offset out of composition — the row repositions every drag frame without recomposing.\n\n#### The two details that matter\nAnchoredDraggable replaced the old `swipeable` API, so a modern codebase should not be on `swipeable`. And a row inside a `LazyColumn` must cooperate via `nestedScroll`: the drag consumes its own delta first so it dismisses, and lets the remaining vertical delta scroll the list — otherwise the horizontal gesture and the vertical scroll fight for the same move events.",
       "followUps": [
@@ -211,7 +216,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0058",
@@ -226,9 +232,9 @@
       ],
       "q": "Touch interop: a Compose gesture inside a scrolling View, and a legacy View inside Compose.",
       "shortAnswer": [
-        "`AndroidComposeView` receives `dispatchTouchEvent` like any other View, so a `ViewPager2`/`RecyclerView` ancestor can intercept the move stream.",
-        "The fix is `requestDisallowInterceptTouchEvent` from inside the gesture.",
-        "The other direction uses `pointerInteropFilter` to hand raw `MotionEvent`s to a legacy child — and you must decide who consumes what."
+        "`AndroidComposeView` gets `dispatchTouchEvent` like any View, so a `ViewPager2`/`RecyclerView` ancestor can intercept the moves.",
+        "The fix is `requestDisallowInterceptTouchEvent`, called from inside the gesture.",
+        "The other direction uses `pointerInteropFilter` to pass raw `MotionEvent`s to a legacy child — you must decide who consumes what."
       ],
       "answer": "Compose renders into `AndroidComposeView`, which participates in the View system's touch pipeline: the window delivers `dispatchTouchEvent`, ancestors get `onInterceptTouchEvent` first. So a Compose gesture inside a scrolling View parent — a `ViewPager2` or `RecyclerView` hosting a `ComposeView` — can be silently defeated: the View parent intercepts the move stream and the Compose gesture never sees the events.\n\n#### The fix\nFrom inside your Compose gesture, call `requestDisallowInterceptTouchEvent(true)` — normally wrapped in a helper that reaches the `AndroidComposeView` — to tell the View ancestors to stop intercepting until you release. That is the standard interop dance for a horizontal Compose swipe inside a vertical View scroll.\n\n#### The reverse direction\nTo hand raw `MotionEvent`s to a legacy View inside Compose, `pointerInteropFilter` receives every event before Compose's own gesture detectors and lets you forward them. Then the contract is yours: decide which events you `consume()` so the legacy child handles them and Compose's recognizers ignore them — a swallowed `ACTION_DOWN` or an unconsumed move is where gestures start misbehaving.",
       "followUps": [
@@ -246,7 +252,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0059",
@@ -262,7 +269,7 @@
       "shortAnswer": [
         "`rememberNavBackStack(HomeKey)` returns an observable list of `NavKey`s.",
         "`NavDisplay(backStack, onBack = { backStack.removeLastOrNull() }, entryProvider = entryProvider { entry<Detail> { ... } })` renders it.",
-        "Keys are `@Serializable` data classes, so arguments are constructor parameters and navigating is just list mutation."
+        "Keys are `@Serializable` data classes, so arguments are constructor parameters and navigation is just list mutation."
       ],
       "answer": "Navigation 3 replaces the string-route system with observable state. The back stack is a plain `List<NavKey>`: `val backStack = rememberNavBackStack(HomeKey)`. Navigating is list mutation — `backStack += DetailKey(id)` pushes, `backStack.removeLastOrNull()` pops.\n\n#### Rendering\n`NavDisplay(backStack = backStack, onBack = { backStack.removeLastOrNull() })` observes the list and renders entries. The `entryProvider` maps a key to its content: `entryProvider { entry<Detail> { DetailScreen(entry.key.id) } }`, using `@Serializable` data class keys so the argument `id` is a constructor parameter — no string route, no `navArgs`, no cast.\n\n#### What you inherit for free\nBecause keys are serializable, the back stack can be persisted across process death — `rememberNavBackStack` restores it. Two senior notes: `NavDisplay`'s `contentType` and transitions are configured around the key type, and pushing a key that is already on the stack inserts a *new* entry unless you guard it — the list is a model, not a deduped stack. That visibility — the back stack as ordinary state you can read, react to, and mutate — is the whole point of Nav3.",
       "followUps": [
@@ -280,7 +287,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0060",
@@ -295,9 +303,9 @@
       ],
       "q": "How does one Navigation 3 back stack render two panes at once?",
       "shortAnswer": [
-        "A `SceneStrategy` inspects the back stack and decides which entries render together as a `Scene`.",
-        "A list-detail strategy pulls the last two entries into two panes on an expanded window and falls back to one on compact.",
-        "Back pops the detail, not the whole scene; entries not currently displayed are still on the stack."
+        "A `SceneStrategy` looks at the back stack and decides which entries render together as a `Scene`.",
+        "A list-detail strategy puts the last two entries in two panes on a wide window, and one pane on compact.",
+        "Back pops the detail, not the whole scene. Off-screen entries stay on the stack."
       ],
       "answer": "Navigation 3 decouples the *back stack* from the *rendering*. One `NavDisplay` hands its observable back stack to a `SceneStrategy`, which decides how many entries compose into the current scene. A list-detail strategy looks at the last two entries: on an expanded window it renders both as a two-pane `Scene` — the list entry in the left pane, the detail entry in the right — and on a compact window it renders only the top entry full-screen.\n\n#### The pane back stack\nNavigation 3 gives each scene a pane-level back stack: pressing back on the expanded layout pops the detail entry and leaves the list, rather than popping the entire scene. That is the behaviour you cannot get by simply rendering two screens side by side — the back semantics belong to the navigation layer.\n\n#### Entries and metadata\nThe list entry is still *on* the stack while the detail is displayed — scenes render a window of entries, they do not remove the rest. A destination opts into a pane via entry `metadata` (declared on the key or in the provider), which is how the strategy knows which entries are pane-eligible. The strategy API is what makes this testable: you can assert which entries a given stack produces on a given window size.",
       "followUps": [
@@ -315,7 +323,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0061",
@@ -330,9 +339,9 @@
       ],
       "q": "How do you implement predictive back in a Compose app?",
       "shortAnswer": [
-        "`PredictiveBackHandler` / the navigation event APIs give you a `Flow<BackEventCompat>` with progress 0..1 and the swipe edge.",
+        "`PredictiveBackHandler` and the navigation event APIs give you a `Flow<BackEventCompat>` with progress 0..1 and the swipe edge.",
         "Collect the flow, drive the animation, and complete it — or handle cancellation in a `finally` block.",
-        "Drive the progress into a `SeekableTransitionState` for a real scrubbed transition; a plain `BackHandler` can only pop instantly."
+        "Feed progress into a `SeekableTransitionState` for a scrubbed transition. A plain `BackHandler` can only pop instantly."
       ],
       "answer": "Predictive back lets the system animate your exit as the user swipes. `PredictiveBackHandler { ... }` provides a `Flow<BackEventCompat>` inside its block: each event carries `progress` (0..1) and `swipeEdge` (which screen edge the gesture came from). Your block collects that flow, feeds `progress` into the transition, and when the gesture completes, your block finishes and the system finishes the pop. If the gesture is cancelled, the flow throws, and a `finally` must snap the UI back.\n\n#### The scrubbed animation\nThe interesting implementation drives the progress into a `SeekableTransitionState` — same fraction-based transition used for other scrubbed motion — so the exit animation tracks the finger exactly and completes the remaining distance when released.\n\n#### The plumbing\nBack behavior needs opt-in wiring: the manifest `android:enableOnBackInvokedCallback=\"true\"` plus the `OnBackInvokedCallback` path on supported platform versions, falling back to the old `BackHandler` instant pop below. The contrast worth making: a plain `BackHandler` can only *pop instantly* — no progress, no scrubbing — which is why predictive back is a separate API with a real event stream rather than a boolean callback.",
       "followUps": [
@@ -350,7 +359,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

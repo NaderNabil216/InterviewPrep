@@ -16,9 +16,9 @@
       ],
       "q": "What does `@Preview` actually render, and why can't you preview a screen that takes a ViewModel?",
       "shortAnswer": [
-        "Previews render a composable in an environment with no real Activity, no ViewModelStore and no data layer.",
-        "So `viewModel()`/`hiltViewModel()` cannot resolve — the practical argument for stateless composables with a thin stateful wrapper.",
-        "`@PreviewParameter` feeds sample data; `@PreviewLightDark`, `@PreviewFontScale` and `@PreviewScreenSizes` cover variations."
+        "Previews render a composable with no real Activity, no ViewModelStore, and no data layer.",
+        "So `viewModel()`/`hiltViewModel()` can't resolve — the practical argument for stateless composables with a thin stateful wrapper.",
+        "`@PreviewParameter` feeds sample data. `@PreviewLightDark`, `@PreviewFontScale`, and `@PreviewScreenSizes` cover variations."
       ],
       "answer": "A `@Preview` composable is rendered in a special host environment: no real `Activity`, no `ViewModelStore`, no lifecycle beyond a stub, and no data layer or DI graph. It executes the composable against that minimal environment in the IDE. That is why `viewModel()` and `hiltViewModel()` crash or render nothing in a preview — there is no store or owner to resolve them from.\n\n#### The design consequence\nThis is the strongest practical argument for the stateless pattern: the screen composable takes plain parameters (`value`, `onEvent`), and a thin stateful wrapper owns the ViewModel and wires the events. The preview renders the stateless screen with fabricated data; tests exercise it the same way. The stateful layer is thin precisely so the renderable part is previewable.\n\n#### Feeding the preview\n`@PreviewParameter(MyProvider::class)` supplies sample data through a `PreviewParameterProvider`, so the annotation itself stays serializable and simple. The multipreview annotations — `@PreviewLightDark`, `@PreviewFontScale`, `@PreviewScreenSizes` — render the same composable across a matrix of light/dark, font scales and screen sizes, which turns the preview into a cheap layout-regression scanner before any test runs.",
       "followUps": [
@@ -36,7 +36,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0073",
@@ -51,9 +52,9 @@
       ],
       "q": "How do you screenshot-test a Compose UI across theme, font scale and locale?",
       "shortAnswer": [
-        "Define a matrix that catches real bugs: light/dark, 1.0 and 2.0 font scale, RTL, the longest translation, compact vs expanded width.",
-        "Pin device config so CI is deterministic.",
-        "Compare the Compose Preview screenshot plugin with JVM tools like Roborazzi/Paparazzi, and know what screenshots should not assert."
+        "Test a matrix that catches real bugs: light/dark, font scale 1.0 and 2.0, RTL, the longest translation, compact vs expanded width.",
+        "Pin the device config so CI renders identically every run.",
+        "Know the trade-offs of the Compose Preview screenshot plugin vs JVM tools like Roborazzi/Paparazzi, and what screenshots can't assert."
       ],
       "answer": "Screenshot tests are only as good as the matrix. The useful one is: light and dark theme, font scale 1.0 and 2.0, an RTL locale, the longest string translation (not the default English), and compact versus expanded width. Each dimension catches a distinct failure class — dark-theme contrast, clipping at 200% font, RTL alignment, text overflow in a long language — and the matrix is only trustworthy if the device configuration is pinned so CI renders identically every run.\n\n#### The two tool families\nThe Compose Preview screenshot-testing Gradle plugin renders composables on a device profile and asserts pixel output, including real font rendering. JVM tools — Roborazzi, Paparazzi — run headless, are fast and CI-cheap, but they do not reproduce device font rendering exactly, so a font metric difference can pass JVM and fail on-device. The senior answer pairs them: fast JVM for iteration, on-device for the release gate.\n\n#### What screenshots should not assert\nThey cannot assert behaviour, state flow, or accessibility. A screenshot pass proves pixels, not logic — semantic correctness still needs the Compose test API (`onNodeWithText`, click, assert). Screenshots are the visual regression net, not the behavioural one.",
       "followUps": [
@@ -71,7 +72,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0074",
@@ -86,9 +88,9 @@
       ],
       "q": "What actually differs when you move Compose UI to Compose Multiplatform?",
       "shortAnswer": [
-        "The runtime, compiler and most of Foundation/Material are shared; everything Android-specific is not.",
-        "Resources move to `compose.components.resources`, there is no `Context`/`AndroidView`/Activity result APIs, and back handling, fonts and insets differ.",
-        "On iOS you host in a `UIViewController` with its own scroll and text-input behaviour; the honest answer is which layers you share."
+        "The runtime, compiler, and most of Foundation/Material are shared. Everything Android-specific is not.",
+        "Resources move to `compose.components.resources`. There's no `Context`, `AndroidView`, or Activity result APIs, and back handling, fonts, and insets differ.",
+        "On iOS you host in a `UIViewController` with its own scroll and text-input behaviour. The honest answer is which layers you share."
       ],
       "answer": "Compose Multiplatform shares the core: the Compose runtime, the compiler plugin, and most of Foundation and Material compile unchanged across platforms. The divergence is everything that touches Android as a platform. `Context` and `Context`-based resources are gone — resources move to the `compose.components.resources` system with generated `Res` accessors. `AndroidView` interop is Android-only. Activity result APIs, `LocalContext`-based access and the `LocalLifecycleOwner` wiring are platform-specific.\n\n#### The per-platform stories\nBack handling differs — CMP has its own `PredictiveBackHandler` mapping and the `ComposeNavigation` package for multiplatform navigation. Fonts and insets have per-platform stories; iOS does not give you the Android inset model for free. On iOS the composition is hosted in a `UIViewController` via `ComposeUIViewController`, and UIKit's scroll and text-input behaviour surface through the shared APIs — a scroll feel and a keyboard story that are not identical to Android.\n\n#### The honest interview answer\nCMP 1.11.0 is stable on iOS, but the design decision is the answer: identify the shared layer — data, ViewModel, pure UI — and be explicit that theme, resources, back and input are the layers where you still write per-platform code.",
       "followUps": [
@@ -106,7 +108,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0075",
@@ -121,9 +124,9 @@
       ],
       "q": "Glance looks like Compose — where does the illusion break?",
       "shortAnswer": [
-        "Glance reuses the Compose runtime and compiler but its Applier emits `RemoteViews`, not LayoutNodes.",
-        "You get a restricted composable set, no arbitrary custom layouts or `Modifier.Node`, and no per-frame animation.",
-        "State lives in `GlanceStateDefinition`/DataStore and updates go through `updateAppWidget`; interaction is limited to actions."
+        "Glance reuses the Compose runtime and compiler, but its Applier emits `RemoteViews`, not LayoutNodes.",
+        "You get a small composable set: no arbitrary custom layouts, no `Modifier.Node`, no per-frame animation.",
+        "State lives in `GlanceStateDefinition`/DataStore, updates go through `updateAppWidget`, and interaction is limited to actions."
       ],
       "answer": "Glance is Compose-shaped but not Compose. It reuses the Compose runtime and compiler, so it *feels* declarative — `GlanceAppWidget` with a `content` composable and state via `provideContent` — but its Applier emits `RemoteViews`, the rendering format of app widgets. RemoteViews are a fixed, stateless view description, and that constraint is where the illusion ends.\n\n#### What you lose\nOnly a restricted composable set exists — `Text`, `Image`, `Button`-style `Action`, basic layout boxes — no arbitrary custom layout, no `Modifier.Node`, no custom draw, and no per-frame animation (widgets render as static snapshots the system updates on a schedule or on events).\n\n#### State and interaction\nState is not Compose state: it lives in `GlanceStateDefinition` backed by DataStore, and updating it calls `updateAppWidget`, which re-renders the RemoteViews. Interaction is confined to `Action`s — `actionRunCallback`, `actionStartActivity`, `actionStartService` — no arbitrary touch handling. And the platform limits still apply: RemoteViews size caps and update-frequency throttling constrain what a widget can do per update.",
       "followUps": [
@@ -141,7 +144,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

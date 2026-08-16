@@ -16,9 +16,9 @@
       ],
       "q": "How does OkHttp's connection pool work, and why does reusing one client matter?",
       "shortAnswer": [
-        "Every OkHttpClient owns a ConnectionPool of idle keep-alive connections keyed by address, so a call reuses a warm socket instead of paying a fresh TCP+TLS handshake.",
-        "Pool, dispatcher, and caches are per-client — newBuilder() shares them with the parent, so the pattern is one root client plus per-feature newBuilder() copies, never new OkHttpClient() per request.",
-        "HTTP/2 makes pooling even more valuable: a single multiplexed connection serves many concurrent streams, so one pooled socket carries the whole app's traffic to a host."
+        "Every `OkHttpClient` owns a `ConnectionPool` of idle keep-alive connections keyed by address. A call reuses a warm socket instead of paying for a fresh TCP + TLS handshake.",
+        "Pool, dispatcher, and caches live per client. `newBuilder()` shares them with the parent, so use one root client plus per-feature `newBuilder()` copies — never `new OkHttpClient()` per request.",
+        "HTTP/2 makes pooling even more valuable: one multiplexed connection serves many streams at once, so a single pooled socket can carry all the app's traffic to a host."
       ],
       "answer": "#### What OkHttp pools\nEvery `OkHttpClient` owns a `ConnectionPool` holding **idle keep-alive connections**, keyed by address. When you execute a call, OkHttp's connection selector first asks the pool for a live connection to that host; only a miss triggers a fresh TCP connect and TLS handshake. Reusing a warm connection skips the expensive parts — on cellular that is often hundreds of milliseconds.\n\n#### Why one client\nPool, dispatcher, and caches are per-client. `client.newBuilder()` returns a *new* client that **shares** the parent's pool, dispatcher, and caches — so the pattern is one root client plus `newBuilder()` per feature, never `OkHttpClient()` inside a factory. A new client per request means an empty pool every time: no reuse, no HTTP/2, and a fresh thread pool.\n\n#### Pool tuning\n`ConnectionPool(maxIdleConnections, keepAliveDuration)` bounds idle connections; a dedicated thread evicts connections that idle past the keep-alive. With HTTP/2, one pooled connection multiplexes many streams, so a multiplexed host effectively needs a single connection rather than a pile of them.",
       "code": [
@@ -49,7 +49,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0006",
@@ -64,9 +65,9 @@
       ],
       "q": "How does the OkHttp dispatcher decide which calls run, and how do you tune it?",
       "shortAnswer": [
-        "The dispatcher is the scheduler for async calls: enqueue() hands a call to its own thread pool, while execute() blocks the calling thread and skips the queue.",
-        "It enforces two limits — maxRequests (default 64) across the client and maxRequestsPerHost (default 5) per host — promoting queued calls as slots free up.",
-        "Tune it on the builder via dispatcher(), observe with runningCallsCount()/queuedCallsCount(), and detect quiescence with idleCallback or awaitIdle()."
+        "The dispatcher schedules async calls: `enqueue()` hands a call to its own thread pool, while `execute()` blocks the calling thread and skips the queue.",
+        "It enforces two limits — `maxRequests` (default 64) across the client and `maxRequestsPerHost` (default 5) per host — and promotes queued calls as slots free up.",
+        "Tune it on the builder with `dispatcher()`, watch the queue with `runningCallsCount()`/`queuedCallsCount()`, and wait for idle with `idleCallback` or `awaitIdle()`."
       ],
       "answer": "#### The dispatcher\n`Dispatcher` is OkHttp's scheduler for **asynchronous** calls. `client.newCall(request).enqueue(callback)` hands the call to the dispatcher, which runs it on its own thread pool; `execute()` bypasses the queue and blocks the calling thread. The dispatcher keeps `runningCalls` and `queuedCalls` and promotes a queued call whenever a running one finishes and a slot is free.\n\n#### The two limits\n- `maxRequests` — default **64** concurrent in-flight calls across the whole client.\n- `maxRequestsPerHost` — default **5** per host, protecting a single server from a client's thundering herd.\n\nBoth are `@Volatile` and settable at runtime; OkHttp re-checks them each time a call completes.\n\n#### Tuning and observing\nConfigure them on the builder: `dispatcher(Dispatcher()).apply { maxRequests = 32; maxRequestsPerHost = 4 }`. Watch queue depth with `runningCallsCount()`/`queuedCallsCount()`, and wait for everything to settle with `idleCallback` or `awaitIdle()`. If you supply a custom `ExecutorService`, OkHttp uses it as-is but can no longer guarantee idle tracking for a pool with more than one thread — the built-in pool is usually right.\n\n#### Why it matters\nRetrofit suspend calls and image loaders all funnel through one dispatcher. A screen that fires 200 requests is exactly what `maxRequests` and `maxRequestsPerHost` are there to throttle.",
       "code": [
@@ -97,7 +98,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0007",
@@ -112,9 +114,9 @@
       ],
       "q": "How does OkHttp's HTTP cache work, and how do you control it with Cache-Control?",
       "shortAnswer": [
-        "HTTP caching is opt-in: you pass a Cache(directory, maxSize) to the client, and OkHttp stores eligible responses on disk and serves them only when the semantics allow.",
-        "Cache-Control decides freshness — max-age marks a response fresh, no-cache forces revalidation on every use, and no-store forbids storing it at all.",
-        "A cached response carrying an ETag or Last-Modified is revalidated with a conditional request, so an unchanged resource returns 304 with no body instead of a full download."
+        "HTTP caching is opt-in: pass a `Cache(directory, maxSize)` to the client, and OkHttp stores eligible responses on disk and serves them only when the rules allow.",
+        "`Cache-Control` decides freshness — `max-age` marks a response fresh, `no-cache` forces revalidation every use, and `no-store` forbids storing it at all.",
+        "A cached response with an `ETag` or `Last-Modified` is revalidated with a conditional request, so an unchanged resource comes back as a 304 with no body instead of a full download."
       ],
       "answer": "#### Opting in\nNo `Cache`, no caching. `OkHttpClient.Builder().cache(Cache(File(cacheDir, \"http\"), 10L * 1024 * 1024))` enables it, and OkHttp stores responses in the directory's LRU journal, evicting past `maxSize`.\n\n#### What is cacheable\nOnly **GET** (and HEAD) responses — and only with the right headers. `Cache-Control: public, max-age=3600` makes a response fresh for an hour; a fresh response is served straight from disk with no network round trip. Request-side `Cache-Control` also works: you can send `max-stale` to accept stale data when offline.\n\n#### The three directives that matter\n- `max-age` — freshness window in seconds.\n- `no-cache` — do not serve without revalidating; the response is stored, but every use triggers a conditional request.\n- `no-store` — never store it at all (the common choice for token or personal-data responses).\n\n#### Revalidation\nA stored response with `ETag` is sent back with `If-None-Match`; if unchanged, the server returns **304 Not Modified** and OkHttp serves the cached body — you saved the body bytes, not the round trip.\n\n#### The honest scope\nOkHttp's cache saves bandwidth and latency for genuinely cacheable GETs. It is not an offline layer — for offline-first you need a real local store, with Room, not cache headers.",
       "code": [
@@ -145,7 +147,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0008",
@@ -160,9 +163,9 @@
       ],
       "q": "How does Retrofit turn an interface method into an actual HTTP call?",
       "shortAnswer": [
-        "create() builds a dynamic proxy: every method invocation is routed to a handler that looks up a cached ServiceMethod holding the parsed annotations, parameter handlers, converter, and call adapter.",
-        "An OkHttpCall wraps the real OkHttp Call, and a CallAdapter adapts it into the declared return type (Call<T>, Observable<T>, or plain T for suspend) while a Converter does the body serialization.",
-        "The endpoint path, baseUrl, and return-type handling are all resolved when the proxy is built — bugs like a missing HTTP annotation surface at construction, not at runtime."
+        "`create()` builds a dynamic proxy: every method call is routed to a handler that looks up a cached `ServiceMethod` holding the parsed annotations, parameter handlers, converter, and call adapter.",
+        "An `OkHttpCall` wraps the real OkHttp `Call`, and a `CallAdapter` turns it into the declared return type (`Call<T>`, `Observable<T>`, or plain `T` for suspend). A `Converter` does the body serialization.",
+        "The path, `baseUrl`, and return type are resolved when the proxy is built — so bugs like a missing HTTP annotation fail at construction, not at runtime."
       ],
       "answer": "#### The proxy\n`Retrofit.create(Api::class.java)` builds a **dynamic proxy** (`Proxy.newProxyInstance`) around your interface. Every method invocation routes to an `InvocationHandler`, which looks up a cached `ServiceMethod` — the parsed `@GET`/`@POST` annotation, `@Path`/`@Query`/`@Body`/`@Header` parameter handlers, the converter, and the call adapter — resolved **once** at first use and cached in a `ConcurrentHashMap`.\n\n#### Build-time errors\nBecause the interface is parsed eagerly, Retrofit throws *at construction* for a method with no HTTP annotation or an unsupported return type. Your interface bugs surface before any network I/O.\n\n#### The collaborators\nA `CallAdapter.Factory` decides what your method returns (`Call<T>`, RxJava `Observable<T>`, `Deferred<T>`, or plain `T` for suspend) and an `OkHttpCall` wraps the real OkHttp `Call`. A `Converter.Factory` turns the `@Body` into request bytes and response bytes into `T`. Actual I/O happens only when you call `enqueue`, `execute`, or `await`.\n\n#### The URL\n`RequestFactory` builds the `HttpUrl` from `baseUrl()` plus the annotated relative path, substituting `@Path` and `@Query` values. The base URL must end in `/` and the path must not begin with one — Retrofit throws if you get that backwards.",
       "code": [
@@ -188,7 +191,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0009",
@@ -203,9 +207,9 @@
       ],
       "q": "Walk me through how Retrofit converters, call adapters, and suspend support compose.",
       "shortAnswer": [
-        "A Converter.Factory produces the wire-type mappers — one Converter for the @Body request and one from ResponseBody into T — and Retrofit uses the first factory in your list that handles the type.",
-        "A CallAdapter.Factory maps an OkHttpCall into your declared return type, and suspend support is exactly that: when the last parameter is a Continuation, Retrofit returns the inner type T directly.",
-        "In suspend mode a non-2xx response throws HttpException and transport failures throw IOException, so a Response<T> return type is the way to observe status codes instead of exceptions."
+        "A `Converter.Factory` produces the wire-type mappers: one `Converter` for the `@Body` request, one from `ResponseBody` into `T`. Retrofit uses the first factory in your list that handles the type.",
+        "A `CallAdapter.Factory` maps an `OkHttpCall` into your declared return type. Suspend support is exactly that: when the last parameter is a `Continuation`, Retrofit returns the inner type `T` directly.",
+        "In suspend mode, a non-2xx response throws `HttpException` and transport failures throw `IOException`. So `Response<T>` is the way to see status codes instead of exceptions."
       ],
       "answer": "#### Converters\nA `Converter.Factory` produces two kinds of mapper: `Converter<T, RequestBody>` for the `@Body` and `Converter<ResponseBody, T>` for responses. Retrofit walks your factory list and keeps the **first factory that can handle the type**, so the most specific (kotlinx.serialization or Moshi) must be installed before a generic `GsonConverterFactory`. The chosen converter is cached on the `ServiceMethod`.\n\n#### Call adapters\nA `CallAdapter.Factory` adapts an `OkHttpCall` into your declared return type. Factories are checked in order: `DefaultCallAdapterFactory` handles `Call<T>`, RxJava's handles `Observable<T>`, and coroutines are served by `KotlinExtensions` — when the last parameter is a `Continuation`, Retrofit produces a suspend variant and the call adapter returns `T` directly.\n\n#### suspend in practice\n`suspend fun getUser(): User` is just an adapted result. Retrofit executes the underlying call and resumes the continuation with the deserialized `User`, or throws `HttpException` for non-2xx and `IOException` for transport failure. That throw-on-error behavior is why returning `Response<User>` is the idiomatic way to see status codes without a try/catch around every call.\n\n#### Writing your own\nThe recipe: recognize a return type, adapt the `Call`, return a value from `adapt()`. Since suspend is first-class you rarely need one, but a Flow or Deferred adapter still buys interop with existing Rx/Flow-based code.",
       "code": [
@@ -231,7 +235,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0010",
@@ -246,9 +251,9 @@
       ],
       "q": "How do you handle errors properly with Retrofit?",
       "shortAnswer": [
-        "Decide up front whether a non-2xx should throw (plain T) or be data (Response<T>); Response<T> is usually right so the UI reacts to status codes instead of exceptions.",
-        "enqueue fires onResponse for every HTTP response including 4xx/5xx and only calls onFailure for transport failures; suspend mode throws HttpException for non-2xx and IOException for network errors.",
-        "Map outcomes to a sealed UiState — a raw exception or a bare isSuccessful boolean should never reach the composable."
+        "Decide up front: should a non-2xx throw (plain `T`) or be data (`Response<T>`)? `Response<T>` is usually right, so the UI reacts to status codes instead of exceptions.",
+        "`enqueue` fires `onResponse` for every HTTP response, including 4xx/5xx; `onFailure` only fires for transport failures. Suspend mode throws `HttpException` for non-2xx and `IOException` for network errors.",
+        "Map outcomes to a sealed `UiState` — a raw exception or a bare `isSuccessful` boolean should never reach the composable."
       ],
       "answer": "#### The contract\n`enqueue` always fires `onResponse` for *any* HTTP response — a 500 lands in `onResponse`, not `onFailure`. `onFailure` fires only when the request never completed: no connectivity, timeout, cancellation. So `response.isSuccessful` is the check that splits 2xx from everything else, and `errorBody()` carries the server's error payload.\n\n#### Typed vs untyped\nWith a plain `T` return, non-2xx throws `HttpException` (suspend) or is handed to you as an unsuccessful `Response`. When the UI must act on specific codes, return `Response<T>`: build `Response.success(body)` for 2xx and `Response.error(code, errorBody)` for the rest, deserializing `errorBody` with the same converter into a typed error model.\n\n#### Suspend and cancellation\n`suspend` calls throw `HttpException` (carrying `code()` and `response()`) and `IOException` for transport failures. A blanket `catch (e: Exception)` that swallows `CancellationException` is a cancellation bug — always rethrow it.\n\n#### To the UI\nFold everything into a sealed `UiState` — Loading / Success / Error(retry) — and keep the network layer free of view concerns. That mapping is where interviews look for judgment, not for try/catch everywhere.",
       "code": [
@@ -274,7 +279,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0011",
@@ -289,9 +295,9 @@
       ],
       "q": "When should you pin certificates, and how can pinning backfire?",
       "shortAnswer": [
-        "Pinning binds a host to an approved key hash on the client, so only an expected identity is accepted — it blocks MITM, but only for hosts you fully control.",
-        "It backfires when the server rotates certs or a legitimate proxy is in the path: a pin mismatch hard-fails every request until you ship a fix.",
-        "Pin the SPKI of a long-lived CA or an intermediate rather than the leaf, keep a backup pin, and ship pin updates out-of-band so rotation doesn't brick the app."
+        "Pinning binds a host to an approved key hash on the client, so only an expected identity is accepted. It blocks MITM, but only for hosts you fully control.",
+        "It backfires when the server rotates certs or a legitimate proxy is in the path: a pin mismatch fails every request until you ship a fix.",
+        "Pin the SPKI of a long-lived CA or an intermediate, not the leaf. Keep a backup pin, and ship pin updates out-of-band so rotation doesn't brick the app."
       ],
       "answer": "#### What pinning is\nOkHttp's `CertificatePinner` binds a host to one or more `sha256/...` hashes. The modern target is the **SPKI** (Subject Public Key Info) of a CA you control or a long-lived intermediate — never the leaf certificate, which rotates on every renewal.\n\n#### When it backfires\n- your certificate or CA rotates and the app hasn't shipped the new pin yet,\n- a corporate proxy or a debugging proxy replaces the cert chain,\n- users on enterprise or carrier MITM networks get hard failures,\n- a pin with no backup = the app is broken until a hotfix ships.\n\n#### Doing it safely\nPin at most your own API host. Keep a **backup pin** (a second, independent key) so a rotation swaps in the backup instead of failing. Ship pin updates out-of-band — remote config or a feature flag — so pin rotation doesn't require a forced app update. Pinning a third-party host you can't rotate is a self-inflicted outage.\n\n#### The config path\nThe Android **network security config** can also express pins per domain in XML, enforced by the OS for *all* traffic — not just OkHttp. Prefer the OkHttp pinner when you want code-level control and tests; prefer the config when the policy must apply app-wide.",
       "code": [
@@ -322,7 +328,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0012",
@@ -338,9 +345,9 @@
       ],
       "q": "How do TLS, HTTP/2, and HTTP/3 change mobile networking, and what is head-of-line blocking?",
       "shortAnswer": [
-        "TLS encrypts every connection and HTTP/2 multiplexes many streams over one connection, so an app talks to a host through a single TLS session instead of many parallel sockets.",
-        "HTTP/2's remaining head-of-line blocking sits at the TCP layer: one lost packet stalls every multiplexed stream on that connection until the loss window recovers.",
-        "HTTP/3 runs over QUIC on UDP, carrying streams independently so a lost packet blocks only its own stream, plus faster 0-RTT resumption and connection migration on network switch."
+        "TLS encrypts every connection, and HTTP/2 multiplexes many streams over one connection. So an app talks to a host through a single TLS session instead of many parallel sockets.",
+        "HTTP/2's remaining head-of-line blocking sits at the TCP layer: one lost packet stalls every multiplexed stream on that connection until the loss recovers.",
+        "HTTP/3 runs over QUIC on UDP. Streams are independent, so a lost packet blocks only its own stream, and QUIC adds faster 0-RTT resumption and connection migration on network switch."
       ],
       "answer": "#### TLS\nEvery HTTPS call runs a TLS handshake before HTTP bytes flow. TLS 1.3 finishes in a single round trip and supports 0-RTT on resumption, which is why pooled connections and session reuse matter so much on mobile: the handshake, not the bytes, is often the latency.\n\n#### HTTP/2\nHTTP/2 multiplexes many streams over one TCP connection using framed messages and HPACK-compressed headers. OkHttp negotiates it automatically via ALPN over TLS, and its connection pool exploits it — one socket carries many concurrent requests. What HTTP/2 does **not** fix is **head-of-line blocking at the TCP layer**: a single lost packet stalls *all* streams on that connection until retransmission recovers, which is brutal on a flaky mobile radio.\n\n#### HTTP/3 / QUIC\nHTTP/3 runs over QUIC (UDP). Streams are independent — a lost packet stalls only its own stream — and QUIC connection IDs allow a connection to survive a Wi-Fi-to-cellular switch without re-handshaking (connection migration), plus 0-RTT for fast restarts. That's why HTTP/3 matters on mobile: fewer stalls and cheaper reconnects.\n\n#### On Android\nOkHttp negotiates HTTP/2 over TLS via ALPN by default; HTTP/3 requires opting into a QUIC-capable HTTP/3 client and a server/CDN that supports it.",
       "code": [
@@ -371,7 +378,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "dn-0013",
@@ -386,9 +394,9 @@
       ],
       "q": "How do you make a network layer resilient with timeouts, retries, and idempotency?",
       "shortAnswer": [
-        "Set connect, read, write, and call timeouts — callTimeout is the one everyone forgets and the only one that bounds the whole operation including retries.",
-        "Retry only idempotent operations, back off exponentially with full jitter, and cap attempts so a dead server can't wedge the app.",
-        "OkHttp auto-retries connection failures for replayable (idempotent or bodyless) requests; everything else is your retry policy on top."
+        "Set connect, read, write, and call timeouts. `callTimeout` is the one everyone forgets — it's the only one that bounds the whole operation, including retries.",
+        "Retry only idempotent operations. Back off exponentially with full jitter, and cap attempts so a dead server can't wedge the app.",
+        "OkHttp auto-retries connection failures for replayable requests (idempotent or bodyless). Everything else needs your own retry policy on top."
       ],
       "answer": "#### The four timeouts\nOkHttp defaults: `connectTimeout`, `readTimeout`, `writeTimeout` each 10 seconds, and `callTimeout = 0`, meaning **unlimited**. `callTimeout` bounds the entire call — DNS, connect, TLS, request, response — and is the one teams forget. Without it, a hung read plus your retry loop can multiply a 10-second stall into a minute-plus of frozen UI.\n\n#### What OkHttp retries for you\n`retryOnConnectionFailure` (default true) auto-retries **only when the request is replayable**: an idempotent method or a request with no body. A `POST` with a body is not — replaying it could double-create on the server.\n\n#### Your retry policy\nApp-level retries use **exponential backoff with full jitter**: `delay = min(cap, base * 2^attempt) + jitter`. Full jitter matters because a herd of clients that all failed together will otherwise retry in lockstep and re-flood the server. Cap attempts at 3–4, and only retry idempotent work. For the POST case, add an `Idempotency-Key` header and let the server dedupe, or the double-tap becomes a double-order.\n\n#### Putting it together\n`callTimeout` on the client bounds the attempt; jittered retries around the suspend call handle the app layer; `WorkManager`'s backoff policy handles retries that outlive the session. Retry is not a substitute for timeouts — one bounds the other.",
       "code": [
@@ -419,7 +427,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

@@ -19,7 +19,7 @@
       "shortAnswer": [
         "`enum` — a fixed set of **singleton** constants, all the same shape. Each constant is one instance.",
         "`sealed class`/`interface` — a closed set of **types** that can each carry different data and have multiple instances.",
-        "`sealed interface` is the modern default: a type can implement several sealed interfaces, so you can model overlapping categories that a sealed class hierarchy can't."
+        "`sealed interface` is the modern default: a type can implement several of them, so you can model overlapping categories that a sealed class hierarchy can't."
       ],
       "answer": "#### The distinction that matters\nAn `enum` constant is a single instance with fixed data — `Status.LOADING` is always the same object. A sealed subtype is a *type* — `Error(cause)` can have thousands of distinct instances carrying different payloads.\n\nIf the variants need to carry different data, you need sealed. If they're just labels, `enum` is lighter and gets you `values()`, `entries`, `valueOf`, and `ordinal` for free.\n\n#### Exhaustiveness\nBoth give the compiler a closed set, so `when` can be exhaustive without an `else`. **Always omit the `else`** — adding a variant then becomes a compile error at every site that must handle it; `else` throws that safety away. Kotlin 2.3 made exhaustiveness data-flow-aware.\n\n#### Why sealed interface is usually better\n- A class can implement **multiple** sealed interfaces, modeling cross-cutting categories — e.g. an error that is both `Retryable` and `UserFacing`.\n- No forced inheritance relationship, so implementations stay free to extend something else.\n- Existing types can join the hierarchy.\n\n`sealed class` is still right when the variants genuinely share state or behaviour that belongs in a base class.\n\n#### Sealed + data object\n`data object Loading : UiState` gives a proper `toString()` (`Loading` rather than the object default with a hash), which matters in logs and test failures.\n\n#### Permitted subtypes\nSubtypes must be in the same package and module (previously the same file). That is what makes the set closed and the check sound.",
       "code": [
@@ -51,7 +51,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.9"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0010",
@@ -66,9 +66,9 @@
       ],
       "q": "How are extension functions resolved, and why does that surprise people?",
       "shortAnswer": [
-        "Extensions are **statically dispatched** — resolved at compile time from the *declared* type of the receiver, not the runtime type.",
-        "They compile to static methods taking the receiver as the first parameter; they do not modify the class and cannot be overridden.",
-        "A member function always wins over an extension with the same signature — the extension becomes silently unreachable."
+        "Extensions are **statically dispatched**: the compiler picks them from the receiver's *declared* type, not the runtime type.",
+        "They compile to static methods with the receiver as the first parameter. They don't modify the class and can't be overridden.",
+        "A member function always wins over an extension with the same signature. The extension silently becomes unreachable."
       ],
       "answer": "#### Static dispatch\n`open class Base` / `class Derived : Base()` with `fun Base.name() = \"Base\"` and `fun Derived.name() = \"Derived\"` — then `val x: Base = Derived(); x.name()` resolves to `\"Base\"`, from the **declared** type.\n\nThis catches people out because member functions are virtual and extensions look identical at the call site. Extensions are just syntax sugar over `NameKt.name(x)`.\n\n#### Members win\nIf a class has a member with the same name and signature, the member is always called. Add a member later and every call site silently switches behaviour — no warning, no error. A real hazard when extending a class you don't control.\n\n#### What they compile to\n`fun String.shout(): String = uppercase() + \"!\"` becomes `public static String shout(String $receiver)`. So from Java: `UtilsKt.shout(\"hi\")`. Use `@JvmName` on the file to give that generated class a decent name.\n\n#### Where they earn their keep in Android\n- Adding domain-specific helpers to framework classes you can't modify (`Context.dp`, `View.hide()`).\n- Keeping mapping logic out of data classes: `UserDto.toDomain()` lives next to the code that cares, not on the DTO.\n- Scoped DSLs via extension *lambdas* (`build.gradle.kts`, Compose modifiers, `buildString`).\n\n#### Extension properties\nSame rules; note they can't hold state — there's no backing field, only a getter. `val View.isVisible get() = visibility == VISIBLE`.\n\n#### Nullable receivers\n`fun String?.orEmpty()` is legal — the receiver can be null inside the body. That's how the stdlib provides null-safe helpers.",
       "code": [
@@ -95,7 +95,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0011",
@@ -110,9 +110,9 @@
       ],
       "q": "What's actually new in Kotlin 2.x that you'd use day to day?",
       "shortAnswer": [
-        "**K2** is the compiler — faster, with a unified frontend across platforms and much better type inference and error messages.",
-        "Kotlin **2.3** stabilized nested type aliases, explicit backing fields, an unused-return-value checker, and data-flow-based `when` exhaustiveness; **2.4** is the current release (Jun 2026).",
-        "The practical Android impact: better inference, faster builds, and `expect`/`actual` plus Swift export maturing for KMP."
+        "**K2** is the compiler. It's faster, has one frontend across platforms, and gives much better type inference and error messages.",
+        "Kotlin **2.3** stabilized nested type aliases, explicit backing fields, an unused-return-value checker, and data-flow `when` exhaustiveness. **2.4** is the current release (Jun 2026).",
+        "For Android the practical impact: better inference, faster builds, and `expect`/`actual` plus Swift export maturing for KMP."
       ],
       "answer": "#### K2\nThe rewritten compiler frontend. What you notice:\n- Materially faster compilation, especially on large codebases.\n- Smarter smart-casts and inference, so code that used to need explicit types now compiles.\n- Clearer diagnostics.\n- One frontend for JVM/Native/JS/Wasm, which is why KMP features now land uniformly.\n\n#### Kotlin 2.3 highlights\n- **Explicit backing fields** — `val flow: StateFlow<T> field = MutableStateFlow(...)`. This kills the `_state`/`state` boilerplate pair every ViewModel has been writing: one property, private mutable type inside, public read-only type outside.\n- **Nested type aliases** — `typealias` can now be declared inside a class, so an alias is scoped where it is meaningful.\n- **Unused return value checker** — flags calls whose result you discarded but shouldn't have, catching the `list.filter { }`-with-no-assignment bug class.\n- **Data-flow-based `when` exhaustiveness** — the compiler proves more `when` expressions complete.\n- Stable time-tracking APIs and improved `Uuid` in the stdlib.\n\n#### Kotlin 2.4 (Jun 2026)\nThe current stable line (2.3.20 added name-based destructuring and an immutable-copy API for `Map.Entry`). Verify the current number against the release notes.\n\n#### Context parameters\nThe successor to experimental context receivers — ambient dependencies (a logger, a transaction, a scope) without threading them through every signature. Check its stability level before relying on it.\n\n#### How to answer this well\nDon't recite a changelog. Pick the one or two that changed how you write code — for most Android developers that's **explicit backing fields** and **K2 build speed** — and say what they replaced.",
       "code": [
@@ -149,7 +149,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.9"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0012",
@@ -164,9 +164,9 @@
       ],
       "q": "How do you model errors in Kotlin — exceptions, `Result`, or a sealed type?",
       "shortAnswer": [
-        "Kotlin has **no checked exceptions**, so the type system tells you nothing about what can fail — that's why explicit error modeling matters more than in Java.",
+        "Kotlin has **no checked exceptions**, so the type system says nothing about what can fail. That's why explicit error modeling matters more than in Java.",
         "Use a **sealed result type** for expected, recoverable domain failures the UI must render differently. Use **exceptions** for programming errors and truly exceptional conditions.",
-        "`kotlin.Result` is fine internally but is awkward as a public API type, and `runCatching` catches `CancellationException`, which silently breaks coroutine cancellation."
+        "`kotlin.Result` is fine internally but awkward as a public API type. And `runCatching` catches `CancellationException`, which silently breaks coroutine cancellation."
       ],
       "answer": "#### The problem\nJava's checked exceptions were widely disliked, but they did document failure. Kotlin removed them, so `fun load(): User` gives you no hint that it throws. Left alone, this produces apps that crash on a `SocketTimeoutException` nobody anticipated.\n\n#### Three tools, three jobs\n**Exceptions** — for bugs and unrecoverable conditions: `IllegalStateException`, `IllegalArgumentException`, `require`/`check`/`error`. These should crash in debug and be reported in release; don't catch them broadly.\n\n**Sealed result types** — for expected domain failures. The UI genuinely needs to distinguish \"no network\", \"not found\", \"rate limited\", and \"invalid input\" because each renders differently. Encode that in the type so `when` forces you to handle each.\n\n**`kotlin.Result<T>`** — a built-in success/failure wrapper. Useful inside a layer, but: it can only carry a `Throwable`, it has restrictions as a return type in some positions, and it doesn't express *which* failures are possible. Most codebases end up with their own sealed type.\n\n#### The runCatching trap\n`runCatching { repo.load() }` also catches `CancellationException`. When a coroutine is cancelled, `CancellationException` is thrown at the suspension point as normal control flow. Swallowing it means the coroutine keeps running after cancellation — structured concurrency quietly stops working. Either use explicit `catch` clauses for the types you expect, or rethrow cancellation.\n\n#### Where to convert\nConvert at the **data layer boundary**: the repository catches `IOException`/`HttpException` and returns your domain error type. Above that line, no code deals in Retrofit or SQLite exceptions, keeping domain and UI layers free of transport concerns and trivially testable.",
       "code": [
@@ -198,7 +198,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.9"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0013",
@@ -213,9 +213,9 @@
       ],
       "q": "How do type-safe builders / DSLs work, and where do you meet them in Android?",
       "shortAnswer": [
-        "The mechanism is a **lambda with receiver**: `T.() -> Unit`. Inside the lambda, `this` is a `T`, so the receiver's members are in scope unqualified.",
+        "The mechanism is a **lambda with receiver**: `T.() -> Unit`. Inside the lambda, `this` is a `T`, so its members are in scope without a qualifier.",
         "That's why `build.gradle.kts`, `buildString`, Compose `Modifier` chains, and Kotlin serialization config all read like small languages.",
-        "`@DslMarker` stops implicit access to outer receivers, which is what prevents nesting bugs in nested builders."
+        "`@DslMarker` blocks implicit access to outer receivers. That's what stops nesting bugs in nested builders."
       ],
       "answer": "#### The core trick\n`fun html(block: HtmlBuilder.() -> Unit): Html { val builder = HtmlBuilder(); builder.block(); return builder.build() }` — `this` inside the lambda IS the builder. Because the lambda's receiver is the builder, calling `body { }` inside resolves against the builder without any qualifier. Combined with the trailing-lambda syntax (`html { … }`), you get something that reads like declarative markup but is fully type-checked and IDE-completable.\n\n#### The @DslMarker problem\nWith nested builders, the inner lambda can still see the *outer* receiver's members, so `html { body { head { } } }` compiles when it shouldn't — `head` belongs to the outer html scope. Annotate your builder types with a `@DslMarker` annotation and the compiler forbids implicit access to outer receivers. Every serious DSL does this.\n\n#### Where you already use it\n- **Gradle Kotlin DSL** — `android { defaultConfig { … } }` is exactly this pattern.\n- **`buildString`, `buildList`, `buildMap`** in the stdlib.\n- **Compose** — `LazyColumn { item { } items() { } }` is a builder DSL; `Modifier` is a chained builder.\n- **kotlinx.serialization** `Json { ignoreUnknownKeys = true }`.\n- **OkHttp/Retrofit** builders (Java-style, but the Kotlin extensions add DSL wrappers).\n- **`Room`/`WorkManager`** request builders.\n\n#### When to build your own\nA DSL is worth it when a configuration is genuinely nested and will be written many times — test fixtures, navigation graphs, complex UI configuration. It is *not* worth it for a data class with four fields; named arguments and default values already solve that in Kotlin, which is why the Builder pattern is much rarer here than in Java.",
       "code": [
@@ -247,7 +247,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     }
   ]
 }

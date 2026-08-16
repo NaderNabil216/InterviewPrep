@@ -15,6 +15,11 @@
         "string"
       ],
       "q": "Longest common subsequence and edit distance — the 2D DP template",
+      "shortAnswer": [
+        "Compute the longest common subsequence and the minimum edit distance between two strings — one shared 2D DP grid.",
+        "`dp[i][j]` answers prefix questions: matching last characters extend the diagonal; otherwise take the best of the two ways to shrink the problem.",
+        "Base cases differ: LCS seeds zero row and column with 0, edit distance with `i` and `j`. Both are O(m·n); one row suffices unless reconstructing."
+      ],
       "prompt": "Two string DP problems that share one grid:\n\n1. **LCS** — length of the longest subsequence present in both strings (not necessarily contiguous).\n2. **Edit distance** — minimum insert/delete/replace operations to turn `a` into `b`.\n\nIf you can derive the grid and the recurrence for one, the other is a small edit. This pattern also covers regex matching, distinct subsequences, and longest palindromic subsequence.",
       "hints": [
         "Define `dp[i][j]` in terms of *prefixes*: the answer for the first `i` characters of `a` and the first `j` characters of `b`. Almost every string DP uses this state.",
@@ -54,7 +59,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "run { longestCommonSubsequence(\"abcde\", \"ace\").toString() + \" / \" + minDistance(\"horse\", \"ros\").toString() }"
     },
     {
       "id": "ds-0016",
@@ -69,6 +75,11 @@
         "greedy"
       ],
       "q": "Merge intervals and meeting rooms",
+      "shortAnswer": [
+        "Merge overlapping intervals, and count the minimum meeting rooms needed — both sort by start, then sweep.",
+        "Merging keeps the last interval and extends its end on overlap. Meeting rooms keep a min-heap of end times, reusing the earliest-freeing room.",
+        "The gotcha is the overlap test and that rooms can share an exact boundary. Both are sort-dominated at O(n log n)."
+      ],
       "prompt": "1. **Merge intervals** — given a collection of intervals, merge all overlapping ones.\n2. **Meeting rooms II** — given meeting intervals, return the minimum number of rooms required.\n\nInterval problems are almost always \"sort by start, then sweep\". The second one adds a heap, and it's a very common real-world-flavoured question.",
       "hints": [
         "Sort by start time. Now overlaps can only happen between adjacent intervals in the sorted order — that's the property that makes a single sweep sufficient.",
@@ -79,7 +90,7 @@
         {
           "lang": "kotlin",
           "caption": "Merge intervals — sort and sweep",
-          "src": "fun merge(intervals: Array<IntArray>): Array<IntArray> {\n    if (intervals.isEmpty()) return emptyArray()\n    intervals.sortBy { it[0] }\n\n    val result = mutableListOf(intervals[0])\n    for (i in 1 until intervals.size) {\n        val last = result.last()\n        val current = intervals[i]\n        if (current[0] <= last[1]) {\n            last[1] = maxOf(last[1], current[1])   // overlap: extend\n        } else {\n            result.add(current)                     // disjoint: start a new one\n        }\n    }\n    return result.toTypedArray()\n}"
+          "src": "import java.util.PriorityQueue\n\nfun merge(intervals: Array<IntArray>): Array<IntArray> {\n    if (intervals.isEmpty()) return emptyArray()\n    intervals.sortBy { it[0] }\n\n    val result = mutableListOf(intervals[0])\n    for (i in 1 until intervals.size) {\n        val last = result.last()\n        val current = intervals[i]\n        if (current[0] <= last[1]) {\n            last[1] = maxOf(last[1], current[1])   // overlap: extend\n        } else {\n            result.add(current)                     // disjoint: start a new one\n        }\n    }\n    return result.toTypedArray()\n}"
         },
         {
           "lang": "kotlin",
@@ -108,7 +119,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "run { merge(arrayOf(intArrayOf(1,3), intArrayOf(2,6), intArrayOf(8,10), intArrayOf(15,18))).map { it.toList() }.toString() + \" / rooms=\" + minMeetingRooms(arrayOf(intArrayOf(0,30), intArrayOf(5,10), intArrayOf(15,20))).toString() }"
     },
     {
       "id": "ds-0017",
@@ -124,6 +136,11 @@
         "android"
       ],
       "q": "Implement a trie for autocomplete",
+      "shortAnswer": [
+        "Implement a trie with `insert`, `search`, `startsWith`, and `suggest`, returning up to a limit of prefix completions.",
+        "Each node holds a character-keyed child map and an end-of-word flag; `search` and `startsWith` are the same walk. `suggest` walks to the prefix then DFS-collects.",
+        "The selling point is O(L) lookups independent of stored words; the gotcha is memory, since a `HashMap` per node is hungry."
+      ],
       "prompt": "Implement a trie supporting `insert(word)`, `search(word)`, `startsWith(prefix)`, and `suggest(prefix, limit)` returning up to `limit` completions.\n\n**Why it matters for Android:** this is the data structure behind a local search-suggestions box. The follow-up is usually \"now rank suggestions by frequency\" or \"now it has to fit in memory on a low-end device\".",
       "hints": [
         "Each node holds children keyed by character plus a flag marking end-of-word. The path from the root spells the prefix, so nodes don't need to store the string.",
@@ -158,7 +175,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "run {\n    val t = Trie()\n    t.insert(\"hello\"); t.insert(\"help\"); t.insert(\"help\", 5)\n    listOf(t.search(\"help\"), t.startsWith(\"hel\"), t.suggest(\"hel\", 1)).toString()\n}"
     },
     {
       "id": "ds-0018",
@@ -173,6 +191,11 @@
         "cache"
       ],
       "q": "Build a request de-duplicating cache (single-flight)",
+      "shortAnswer": [
+        "A suspending cache where N concurrent callers of the same missing key trigger exactly one fetch, and all receive the result.",
+        "Store `Deferred<V>` per in-flight key under a `Mutex`, double-check the cache inside the lock, and `await` outside it.",
+        "The gotchas: double-checking inside the lock, and removing the in-flight entry on failure so a crashed fetch isn't cached."
+      ],
       "prompt": "Implement a suspending cache: `get(key)` returns a cached value if present, otherwise fetches it. If **N callers request the same missing key concurrently, only one fetch should happen** and all N should receive the result.\n\nThis is a genuine Android problem — it's what stops ten composables from firing ten identical network calls on first render, and it's the same machinery behind the token-refresh stampede fix.",
       "hints": [
         "The naive `if (cache[key] != null) return it; fetch()` has a race: two coroutines both see null and both fetch. You need to make the *decision* and the *registration of the in-flight request* atomic.",
@@ -208,7 +231,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "run {\n    var fetches = 0\n    val cache = SingleFlightCache<Int, String> { k -> fetches++; \"v$k\" }\n    cache.get(1); cache.get(1); cache.get(2)\n    \"3 gets, fetcher ran $fetches time(s) — single-flight: one fetch per key\"\n}"
     },
     {
       "id": "ds-0019",
@@ -224,6 +248,11 @@
         "design"
       ],
       "q": "Design an offline mutation queue with retry and ordering",
+      "shortAnswer": [
+        "Design a queue that persists user mutations offline and drains them in order, with retry, a cap, and no duplicates.",
+        "The queue is a database table keyed by a client-generated UUID for idempotency; a constrained worker drains FIFO by `createdAt` and retries on transient errors.",
+        "The scored properties are durability, idempotency, ordering, bounded retry, and failure visibility; a 4xx is permanent and should unblock the queue."
+      ],
       "prompt": "Design and sketch a queue that accepts user mutations while offline, persists them, and drains them in order when connectivity returns — with exponential backoff, a retry cap, and no duplicates if a response is lost.\n\nThis sits exactly between coding and system design, which is why it shows up so often in Android loops. You'll be scored on persistence, idempotency, and ordering, not on clever algorithms.",
       "hints": [
         "Where does the queue live? If it's in memory, a process death loses the user's work — so the queue must be a database table, not a list.",
@@ -259,7 +288,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "run {\n    val ids = listOf(\"m1\", \"m2\", \"m3\")\n    \"offline mutation queue sketch: durable outbox, idempotent client UUID ($ids), FIFO by createdAt, retry cap with exponential backoff, failed rows visible to the user\"\n}"
     }
   ]
 }

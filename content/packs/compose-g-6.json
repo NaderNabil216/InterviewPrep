@@ -16,9 +16,9 @@
       ],
       "q": "What is `WindowSizeClass`, what are the breakpoints, and why not just check the screen size?",
       "shortAnswer": [
-        "Compact < 600 dp wide, medium 600–840 dp, expanded >= 840 dp; heights compact < 480, medium 480–900, expanded >= 900.",
-        "Obtain it via `currentWindowAdaptiveInfo()`.",
-        "It describes the *window*, so a split-screen app on a tablet is compact — branching on `screenWidthDp` or an `isTablet` flag breaks multi-window."
+        "Widths: compact < 600 dp, medium 600–840, expanded ≥ 840. Heights: compact < 480, medium 480–900, expanded ≥ 900.",
+        "Read it with `currentWindowAdaptiveInfo()`.",
+        "It describes the *window*, so a tablet in split-screen is compact. Branching on `screenWidthDp` or an `isTablet` flag breaks multi-window."
       ],
       "answer": "`WindowSizeClass` buckets the current window into three widths and three heights, measured in dp: width compact under 600, medium 600–840, expanded 840 and above; height compact under 480, medium 480–900, expanded 900 and above. You read it from `currentWindowAdaptiveInfo().windowSizeClass` in a composable.\n\n#### Why not the screen size\nThe entire point is that the decision must reflect the *window*, not the device. A tablet in split-screen is a compact window; a phone in landscape with a freeform window is whatever the window is. Branching on `Configuration.screenWidthDp`, a resource-bucket qualifier (`sw600dp`), or a cached `isTablet` boolean ignores the actual available space and produces layouts that break the moment the window changes — a resizable activity, multi-window, or a foldable posture.\n\n#### The practical consequence\nSize class is a *range*, not a pixel: 599 and 601 dp are different classes by design, so layouts flip at clean thresholds. And because the class is reactive — `currentWindowAdaptiveInfo()` observes the window metrics — the UI re-flows when the window resizes at runtime, which a one-shot device check cannot do.",
       "followUps": [
@@ -36,7 +36,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0063",
@@ -52,9 +53,9 @@
       ],
       "q": "Walk me through building an adaptive app: canonical layouts, pane scaffolds, foldables.",
       "shortAnswer": [
-        "List-detail, supporting-pane and feed are the canonical layouts; `NavigationSuiteScaffold` swaps bottom bar / rail / drawer by size class.",
-        "`ThreePaneScaffoldNavigator` owns its own pane back stack — watch it conflicting with the app's navigation.",
-        "For foldables, `WindowInfoTracker.windowLayoutInfo` is a Flow of `FoldingFeature` with bounds, state and occlusion."
+        "List-detail, supporting-pane, and feed are the canonical layouts. `NavigationSuiteScaffold` swaps bottom bar, rail, or drawer by size class.",
+        "`ThreePaneScaffoldNavigator` owns its own pane back stack — watch it fight the app's navigation for back.",
+        "For foldables, `WindowInfoTracker.windowLayoutInfo` is a `Flow` of `FoldingFeature`s with bounds, state, and occlusion."
       ],
       "answer": "An adaptive app starts from the canonical layouts — list-detail, supporting-pane, and feed — and picks one per size class. `NavigationSuiteScaffold` is the navigation container that switches between bottom bar (compact), navigation rail (medium) and navigation drawer (expanded) as the size class changes, so your destinations keep the same content while the chrome re-flows.\n\n#### Pane scaffolds\n`ThreePaneScaffoldNavigator` implements list-detail for three panes — list, detail, and an optional supporting pane — and it owns its own pane back stack. That is the conflict to watch: both the pane navigator and the app's `NavBackStackEntry` want to handle back, so you must route back correctly or the detail pops the app instead of the pane. The pane scaffold decides the arrangement from the window size class.\n\n#### Foldables\nFoldables are runtime windows too: `WindowInfoTracker.get().windowLayoutInfo(activity)` emits a `Flow<WindowLayoutInfo>` of `FoldingFeature`s, each with `bounds`, `orientation`, `state` (flat vs half-open) and `occlusionType` (hinge vs full occlusion). You use it to split panes at the hinge — list on one display, detail on the other — and to react to the tabletop posture by shifting controls to the bottom half.",
       "followUps": [
@@ -72,7 +73,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0064",
@@ -87,9 +89,9 @@
       ],
       "q": "How does Material 3 theming work, and what do you need to know about dynamic color?",
       "shortAnswer": [
-        "`MaterialTheme` provides ColorScheme, Typography and Shapes through CompositionLocals.",
-        "`dynamicLightColorScheme(context)` needs Android 12+, so a static fallback scheme is mandatory.",
-        "The senior move is extending with your own semantic tokens via a companion CompositionLocal instead of forking M3, and contrast-checking custom colours."
+        "`MaterialTheme` provides `ColorScheme`, `Typography`, and `Shapes` through CompositionLocals.",
+        "`dynamicLightColorScheme(context)` needs Android 12+, so a static fallback scheme is required.",
+        "The senior move: add your own semantic tokens via a companion CompositionLocal instead of forking M3, and contrast-check custom colours."
       ],
       "answer": "Material 3 theming is `MaterialTheme(colorScheme = ..., typography = ..., shapes = ...)`, each provided through a `CompositionLocal`. The crucial pairing is `colorScheme.surface` with `LocalContentColor`: components resolve a readable content colour from the surface automatically, which is why `Text` inside a `Card` looks right without being told — the theme carries the contrast relationship.\n\n#### Dynamic color\n`dynamicLightColorScheme(context)` derives a scheme from the user's wallpaper — Android 12+ only. That makes a static fallback mandatory: `if (Build.VERSION.SDK_INT >= 31) dynamic... else staticScheme`. Dynamic color is a real accessibility feature (users choose palettes that suit them), so it should be on by default with the fallback behind it.\n\n#### The senior extension pattern\nWhen Material's tokens do not cover your brand — a brand accent, a semantic status — the right move is a companion `CompositionLocal` (`val LocalBrandColors = staticCompositionLocalOf { ... }`) provided above `MaterialTheme`, not forking M3 to splice in a color. Forking the library breaks updates and the component token system. And every custom colour should be contrast-checked against its expected background — `LocalContentColor` only works when you actually use the scheme's surface pairing.",
       "followUps": [
@@ -107,7 +109,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0065",
@@ -123,8 +126,8 @@
       "q": "Edge-to-edge and window insets — how do you avoid double padding?",
       "shortAnswer": [
         "`enableEdgeToEdge()` plus `WindowInsets.safeDrawing`/`systemBars`/`ime` expose the bars.",
-        "`Modifier.windowInsetsPadding` *consumes* the inset for descendants; `padding(insets.asPaddingValues())` does not — that asymmetry is the double-padding bug.",
-        "`Scaffold` hands you `contentPadding` you must actually apply; `consumeWindowInsets` lets a list scroll under the bar yet clear it on the last item."
+        "`Modifier.windowInsetsPadding` *consumes* the inset for descendants; `padding(insets.asPaddingValues())` doesn't. That asymmetry causes double padding.",
+        "`Scaffold` gives you `contentPadding` — apply it. `consumeWindowInsets` lets a list scroll under the bar but clear it on the last item."
       ],
       "answer": "Edge-to-edge means content draws under the system bars, and insets tell you how much room the bars need. `enableEdgeToEdge()` opts in, and `WindowInsets.safeDrawing`, `systemBars` and `ime` are the flows of padding for status bar, navigation bar and keyboard.\n\n#### The double-padding bug\nThe mechanism to nail: `Modifier.windowInsetsPadding(insets)` *consumes* the inset — descendants asking for the same inset get zero, because it was already applied. `Modifier.padding(insets.asPaddingValues())` applies the same pixels but does *not* consume, so a child that also asks for the inset adds it again. Nest the two, or apply a padding where the parent already consumed, and you get double padding.\n\n#### Scaffold and the list\n`Scaffold` already consumes the insets and hands you `contentPadding`; forgetting to apply it is the most common edge-to-edge bug. The refined pattern: `consumeWindowInsets` around a list means the list draws full-bleed under the bar while `contentPadding` keeps the last item above it — content scrolls under the bar, then clears it, with no double inset.",
       "followUps": [
@@ -142,7 +145,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0066",
@@ -158,8 +162,8 @@
       "q": "Explain the semantics tree: merged vs unmerged, custom actions, and `testTag`.",
       "shortAnswer": [
         "`mergeDescendants = true` collapses a subtree into one announcement — the most common Compose test confusion.",
-        "`clearAndSetSemantics` replaces a subtree's description; `customActions` exposes swipe-only actions to TalkBack; `onClick(label = ...)` names a tap.",
-        "`testTagsAsResourceId` lets UIAutomator find nodes by the `testTag`."
+        "`clearAndSetSemantics` replaces a subtree's description. `customActions` exposes swipe-only actions to TalkBack. `onClick(label = ...)` names a tap.",
+        "`testTagsAsResourceId` lets UIAutomator find nodes by `testTag`."
       ],
       "answer": "Compose derives a semantics tree from the composition, and accessibility and tests read the *same* tree — the nodes they see are the nodes TalkBack announces. `mergeDescendants = true` (the default on containers) collapses a subtree into a single semantics node, so TalkBack announces one combined description and does not focus each child.\n\n#### Why tests miss nodes\nThe test consequence: a matcher asking for `onNodeWithText(...)` scans the *merged* tree by default, and content hidden inside a merged subtree is invisible to it. Asking for the unmerged tree — `useUnmergedTree = true` — reveals the real nodes. This is the single most common Compose test surprise.\n\n#### Custom semantics\n`clearAndSetSemantics { }` replaces whatever a subtree described — correct for fully custom controls. `customActions` registers TalkBack-accessible actions for gestures TalkBack cannot perform (swipe-to-delete). `onClick(label = \"…\")` names a click action so it is announced meaningfully. `stateDescription` and `progressBarRangeInfo` describe custom state and progress. And `testTag` becomes a resource id via `testTagsAsResourceId` so UIAutomator can address the node — one tag, both test systems.",
       "followUps": [
@@ -177,7 +181,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0067",
@@ -192,9 +197,9 @@
       ],
       "q": "`AndroidView`: what runs in `factory`, `update`, `onReset` and `onRelease`?",
       "shortAnswer": [
-        "`factory` runs once per instance; `update` is a snapshot-observed block that re-runs only when state it reads changes.",
-        "`onRelease` tears down; `onReset` is what makes an `AndroidView` reusable inside a lazy list instead of being recreated.",
-        "The real cost is two layout systems per row; `AndroidViewBinding` loads an existing XML layout."
+        "`factory` runs once per instance. `update` is snapshot-observed — it re-runs only when state it reads changes.",
+        "`onRelease` tears down. `onReset` lets an `AndroidView` be reused in a lazy list instead of recreated.",
+        "The real cost is two layout systems per row. `AndroidViewBinding` loads an existing XML layout."
       ],
       "answer": "`AndroidView(factory = { ... }, update = { ... }, onReset = { ... }, onRelease = { ... })` has four distinct lifetimes. `factory` runs once, when the view is created, and returns the instance. `update` is the interesting one: it is a snapshot-observed block, so it re-runs only when a `State` it *reads* changes — not on every recomposition of the surrounding composable. That is the mechanism that keeps an interop view from being reconfigured pointlessly.\n\n#### Reuse semantics\n`onRelease` is the destructor — remove listeners, cancel work — called when the view leaves composition. `onReset` is what makes the view recyclable: before a pooled `AndroidView` is rebound to new data inside a `LazyColumn`, `onReset` clears the previous data so `update` starts clean. Without it, the view is recreated for every item.\n\n#### The cost and the shortcut\nAn `AndroidView` per list row means two layout systems per row — Compose layout plus the View's own measure/layout — which is why heavy interop inside long lists is a measured jank source. For an existing XML layout, `AndroidViewBinding` inflates it with view binding instead of hand-wiring `findViewById` in the factory.",
       "followUps": [
@@ -212,7 +217,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0068",
@@ -227,9 +233,9 @@
       ],
       "q": "You're putting a `ComposeView` into an existing View screen. Which `ViewCompositionStrategy` and why?",
       "shortAnswer": [
-        "The default `DisposeOnDetachedFromWindow` is wrong in a Fragment — the view detaches and reattaches, so state dies or the composition outlives the view.",
-        "Use `DisposeOnViewTreeLifecycleDestroyed` in a Fragment; `DisposeOnDetachedFromWindowOrReleasedFromPool` in a RecyclerView item.",
-        "The host must supply `ViewTreeLifecycleOwner`/`SavedStateRegistryOwner` and a parent composition context or composition crashes / loses locals."
+        "The default `DisposeOnDetachedFromWindow` is wrong in a Fragment: the view detaches and reattaches, so state dies or the composition outlives the view.",
+        "In a Fragment use `DisposeOnViewTreeLifecycleDestroyed`; in a RecyclerView item, `DisposeOnDetachedFromWindowOrReleasedFromPool`.",
+        "The host must provide `ViewTreeLifecycleOwner`/`SavedStateRegistryOwner` and a parent composition context, or composition crashes or loses locals."
       ],
       "answer": "`ViewCompositionStrategy` decides when the composition inside a `ComposeView` is disposed, and the default — `DisposeOnDetachedFromWindow` — is wrong for the two most common hosts. In a Fragment, the view is detached on configuration change and reattached on the next layout: the default strategy disposes the composition on the detach, killing state you expected to survive, or in the other direction keeps a composition alive against a destroyed lifecycle.\n\n#### The right strategy per host\nIn a Fragment, `DisposeOnViewTreeLifecycleDestroyed` ties the composition to the `ViewTreeLifecycleOwner` — it survives detach/reattach and dies with the Fragment's lifecycle. In a RecyclerView item, the correct one is `DisposeOnDetachedFromWindowOrReleasedFromPool`, so the composition is disposed when the item is recycled out of the pool rather than on every detach.\n\n#### What the host owes the view\nThe host must set `ViewTreeLifecycleOwner`, `ViewTreeViewModelStoreOwner` and `SavedStateRegistryOwner` on the view tree, or composition and `rememberSaveable` crash or silently lose state. And to inherit the app's `CompositionLocals` — theme, typography — the interop layer should carry the parent composition context, or the ComposeView renders with defaults.",
       "followUps": [
@@ -247,7 +253,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0069",
@@ -262,9 +269,9 @@
       ],
       "q": "A screen janks while scrolling. Which tool answers which question, and in what order?",
       "shortAnswer": [
-        "Start with Macrobenchmark `FrameTimingMetric` on a release build — a debug build is 5–10x slower and will lie.",
-        "Then a Perfetto trace decides whether frames are composition-, layout- or draw-bound.",
-        "Layout Inspector skip counts find the composable that keeps re-running; composition tracing names composables inside the trace."
+        "Start with Macrobenchmark's `FrameTimingMetric` on a release build — debug builds are 5–10x slower and will lie.",
+        "Then a Perfetto trace shows whether frames are composition-, layout-, or draw-bound.",
+        "Layout Inspector skip counts find the composable that keeps re-running. Composition tracing names composables in the trace."
       ],
       "answer": "The jank investigation is a funnel, not a single tool.\n\n#### 1. Confirm and measure\n`Macrobenchmark` with `FrameTimingMetric` on a *release* build answers 'how bad and where'. Debug builds add 5–10x overhead and will attribute jank to the wrong layer — the numbers are only trustworthy on release.\n\n#### 2. Attribute the frame\nA Perfetto trace of the same scenario splits each frame's time into composition, layout and draw. This is the decision point: recomposition-heavy frames mean a different fix than draw-heavy ones.\n\n#### 3. Find the offender\nIf it is composition-bound, the Layout Inspector's recomposition/skip counts name the composable that keeps re-running and its unstable parameters. Add composition tracing (the `runtime-tracing` dependency) and the composable names appear directly inside the Perfetto trace. The compiler report answers the 'why' — the offending class or parameter the Inspector flagged.\n\n#### The ordered culprit list\nThe progression a senior recites: unstable parameters defeating skipping, a state read too high in the tree, a heavy item in a lazy list, an expensive draw (shadow, blur, text). Each has a distinct tool that points at it.",
       "followUps": [
@@ -282,7 +289,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0070",
@@ -297,9 +305,9 @@
       ],
       "q": "Why do baseline profiles matter more for a Compose app than a View app?",
       "shortAnswer": [
-        "Compose runs a lot of library code that would otherwise be interpreted and JIT'd on first use.",
-        "The signature symptom is a first scroll that stutters and is smooth ever after.",
-        "Generate with `BaselineProfileRule`/the baselineprofile plugin, and prove the win by benchmarking `CompilationMode.None()` against `Partial()`."
+        "Compose runs a lot of library code that would otherwise be interpreted and JIT-compiled on first use.",
+        "The tell-tale symptom: the first scroll stutters, then everything is smooth.",
+        "Generate with `BaselineProfileRule` or the baselineprofile plugin, and prove it by benchmarking `CompilationMode.None()` against `Partial()`."
       ],
       "answer": "Compose routes nearly every frame through library code — the runtime, the animation engine, layout and draw — that on a fresh install is interpreted and then JIT-compiled on first use. A View app has the same cost for its frameworks, but Compose multiplies the amount of code in the hot path, so the compile tax lands visibly in the first scroll: it stutters, then is smooth forever. That asymmetry is what baseline profiles fix.\n\n#### Generation\n`BaselineProfileRule.collectBaselineProfile` walks a set of critical flows — startup, a typical scroll — and the ART runtime records the methods that actually run, emitting a profile baked into the APK/AAB. The `androidx.baselineprofile` plugin automates running the rule in a profileable emulator at build time.\n\n#### Delivery and proof\nART merges the baseline profile at install/update time, so the listed methods are AOT-compiled before the first frame. The `CompilationMode` knob in a Macrobenchmark proves the win: `CompilationMode.None()` (no pre-compilation) versus `CompilationMode.Partial()` (baseline profile applied) shows exactly how many startup/scroll frames the profile buys.",
       "followUps": [
@@ -317,7 +325,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0071",
@@ -332,9 +341,9 @@
       ],
       "q": "How does a Compose test synchronize, and why does `Thread.sleep` never belong in one?",
       "shortAnswer": [
-        "The test rule drives and waits on the composition clock, so assertions already wait for idle.",
-        "An infinite animation means the clock is never idle and the test hangs — fix with `mainClock.autoAdvance = false` plus `advanceTimeBy`.",
-        "`waitUntil { ... }` covers work Compose cannot see; `registerIdlingResource` covers your own async; `runComposeUiTest` is the multiplatform entry point."
+        "The test rule drives the composition clock, so assertions already wait for idle.",
+        "An infinite animation means the clock never idles and the test hangs — fix it with `mainClock.autoAdvance = false` plus `advanceTimeBy`.",
+        "`waitUntil { ... }` covers work Compose can't see, `registerIdlingResource` covers your own async, and `runComposeUiTest` is the multiplatform entry point."
       ],
       "answer": "Compose tests run the composition on the test's `ComposeUiTest`, which controls the frame clock. Assertions automatically synchronize: before each assertion the framework advances and waits until the composition is idle, so you never sleep to 'let recomposition happen'. The corollary is that `Thread.sleep` is a lie — it does not advance the composition clock, so it neither waits for real work nor reliably times out — and it slows the suite or flakes.\n\n#### The infinite animation hang\nAn infinite animation — a shimmer, `rememberInfiniteTransition` — means the clock is never idle, so the framework's idle-wait blocks forever and the test hangs. The fix is to take control: `mainClock.autoAdvance = false`, then `mainClock.advanceTimeBy(...)` explicitly, which lets you step the animation frame by frame and assert mid-animation.\n\n#### What Compose cannot see\nCompose does not know about work it does not drive: a network call, a coroutine on your scope, a callback into your code. `waitUntil { ... }` polls a predicate (e.g. `fetchSemanticsNodes().isNotEmpty()`) until it holds, and `registerIdlingResource` tells the test about your own async so it counts as work. `runComposeUiTest` is the multiplatform entry point replacing the platform rule.",
       "followUps": [
@@ -352,7 +361,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

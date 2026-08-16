@@ -16,9 +16,9 @@
       ],
       "q": "How does destructuring work, and why is it risky on a data class?",
       "shortAnswer": [
-        "`val (a, b) = x` calls `component1()`/`component2()` positionally — nothing is matched by name.",
-        "Swapping two same-typed properties in a data class keeps compiling and silently swaps meaning at every destructuring call site.",
-        "Lambda destructuring (`map.forEach { (k, v) -> }`), `_` to skip, and `operator fun componentN` for non-data classes complete the picture."
+        "`val (a, b) = x` calls `component1()` and `component2()` by position. Nothing is matched by name.",
+        "Swapping two same-typed properties in a data class still compiles, and silently swaps meaning at every destructuring call site.",
+        "The full picture: lambda destructuring (`map.forEach { (k, v) -> }`), `_` to skip a value, and `operator fun componentN` on non-data classes."
       ],
       "answer": "Destructuring is **positional, not named**. `val (a, b) = x` desugars to `val a = x.component1(); val b = x.component2()`. The compiler generates `componentN()` on `data class`es in property declaration order, and on `Pair`/`Triple` and `Map.Entry` in the stdlib.\n\n#### Why it is risky on a data class\nThe properties are linked to `componentN()` *by order*. Reorder two same-typed properties in the data class — say `val email` before `val name` becomes `val name` before `val email` — and every `val (name, email) = user` call site keeps compiling, now silently binding the wrong values. There is no type error, no warning, no runtime failure. On a public data class this corrupts every consumer that destructures.\n\n#### The details that matter\n- **Lambda destructuring** `map.forEach { (k, v) -> }` works on entries; parameters are `component1()`/`component2()` of each entry.\n- **`_` to skip**: `val (_, b) = point` calls `component1()` (still executing any side effects) but discards the value. Destructuring also supports type/underscore on the whole value: `val (a, _) = x`.\n- **Non-data classes opt in** with explicit `operator fun component1(): String = ...`. Libraries do this for domain types.\n- **Return types**: `operator fun componentN()` can return any type, so destructuring is not limited to `data class`.\n\n#### Current status\nName-based destructuring (`val (name, email)` resolving by property *name*) has been discussed for the 2.3/2.4 line but is **not stable** — it remains positional. Do not claim otherwise; position is the contract.",
       "code": [
@@ -44,7 +44,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0025",
@@ -59,9 +60,9 @@
       ],
       "q": "`val` vs `var` vs `const val` — and why is `val` not immutability?",
       "shortAnswer": [
-        "`val` fixes the reference, not the object — `val list = mutableListOf()` is fully mutable inside.",
-        "`const val` is a compile-time constant — primitive or String, top-level or in an object/companion — inlined into every call site.",
-        "A `val` with a custom getter can even return a different value on every read, so it is neither a stable reference nor immutability."
+        "`val` fixes the reference, not the object. `val list = mutableListOf()` stays fully mutable inside.",
+        "`const val` is a compile-time constant: a primitive or `String`, top-level or in an object/companion, inlined into every call site.",
+        "A `val` with a custom getter can return a different value on every read. So it's neither a stable reference nor immutability."
       ],
       "answer": "`val` and `var` are **reference mutability**, not object immutability.\n\n`val x = mutableListOf(1)` rebinds nothing — `x` always points to the same list — but `x.add(2)` is completely legal: the *object* changed, the reference didn't. `var` additionally lets you rebind the reference itself. Saying `val` means 'immutable' is the classic interview slip; it means 'non-reassignable reference'.\n\nA sharper version of the trap: `val` with a **custom getter** can return a different value on every access — `val now: Long get() = System.currentTimeMillis()` is a `val` yet varies per read. It is a computed property, not a stored value; only a `val` with a backing field (plain initialization) is a stable reference.\n\n#### `const val`\n`const val` is the only truly compile-time thing:\n- Restricted to **primitive types and `String`** (no `List`, no `Date`).\n- Allowed **top-level or inside `object`/`companion object`** — never inside a class or function.\n- **Inlined at every call site**: `const val API = \"/v1\"` pastes the literal into each usage. That means there is no single field to patch at runtime, and changing its value requires recompiling every consumer (the reason public library constants must be `@JvmField val` instead — a real static field — when you want binary compatibility).\n\n#### Choosing\n- Need to mutate the reference → `var`.\n- Reference fixed, value can be computed → `val`.\n- Compile-time constant literal → `const val` (top-level/object only).\n- True deep immutability → `val` plus an immutable type (`listOf`, data copies, `kotlinx.collections.immutable`).",
       "code": [
@@ -87,7 +88,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0026",
@@ -102,9 +104,9 @@
       ],
       "q": "`lateinit` vs `by lazy` vs a nullable property — how do you choose?",
       "shortAnswer": [
-        "`lateinit` is `var`-only, non-null, no primitives or custom accessors, backed by a null field whose generated check throws UninitializedPropertyAccessException.",
-        "`by lazy` allocates a Lazy holder and caches forever — wrong for lifecycle-scoped or refreshable state.",
-        "A nullable property is the honest model when 'absent' is a real, checkable state rather than a bug."
+        "`lateinit` is `var`-only and non-null. No primitives or custom accessors. It's backed by a null field, and reading it too early throws `UninitializedPropertyAccessException`.",
+        "`by lazy` allocates a `Lazy` holder and caches forever. That's wrong for lifecycle-scoped or refreshable state.",
+        "A nullable property is the honest model when 'absent' is a real, checkable state — not a bug."
       ],
       "answer": "Three ways to defer initialization, three different contracts.\n\n#### `lateinit var`\n- `var` only; cannot be used on **primitives** (`lateinit var count: Int` is illegal — there is no null sentinel for `int`), cannot combine with custom getters/setters.\n- Compiles to a field holding `null` until assigned; reading before assignment throws **`UninitializedPropertyAccessException`**, not NPE.\n- Testable via `::prop.isInitialized`, reflection-free. This is why DI-injected views and Activity/ViewModel fields use it — the framework assigns them in `onCreate`.\n\n#### `by lazy {}`\n- **`val` only**; the lambda runs once, on first access, thread-safely by default (`LazyThreadSafetyMode.SYNCHRONIZED`).\n- Allocates a `Lazy` holder plus a `KProperty` reference per property.\n- Caches **forever** — no 'recompute' path. Wrong for lifecycle-scoped or refreshable state; right for constants that are expensive to build but immutable once built.\n- `by lazy(LazyThreadSafetyMode.NONE)` skips synchronization for single-threaded init.\n\n#### A nullable property\n`var prop: X? = null` models 'absent' as a **real state**. Choose it when null is a legitimate, checkable condition (`if (prop != null)`) — not a one-time setup that must have happened. It costs nothing and carries no holder.\n\n#### Rule of thumb\n- Injected/assigned later, absence is a bug → `lateinit`.\n- Expensive immutable value computed once → `by lazy`.\n- Absence is a real domain state → nullable property.",
       "code": [
@@ -130,7 +132,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0027",
@@ -145,9 +148,9 @@
       ],
       "q": "In what order do constructors, property initializers and `init` blocks run — and why is calling an `open` member from a constructor a bug?",
       "shortAnswer": [
-        "Order is: primary constructor → property initializers and `init` blocks interleaved in declaration order → secondary constructor body after its delegation.",
-        "A base-class `init` calling an `open` member runs the subclass override before the subclass's own initializers.",
-        "So a subclass property declared non-null can be observed as `null` inside that override — the classic NPE-from-nowhere."
+        "Order: primary constructor, then property initializers and `init` blocks interleaved in declaration order, then the secondary constructor body after delegation.",
+        "A base-class `init` that calls an `open` member runs the subclass override before the subclass's own initializers.",
+        "So a subclass property declared non-null can be seen as `null` inside that override. The classic NPE from nowhere."
       ],
       "answer": "The execution order is fixed and strictly defined:\n\n1. **Primary constructor parameters** are evaluated (initializers and `init` blocks run in **declaration order**, interleaved).\n2. For a **secondary constructor**, its `this(...)`/`super(...)` delegation runs first (which triggers the primary-constructor sequence for the delegation target), and only after delegation returns does the secondary body execute.\n3. For a **derived class**: the base class initializes first (its constructor → its `init` blocks → its property initializers), **then** the derived class's own `init` blocks and property initializers run.\n\n#### The open-member bug\nBecause base initialization precedes the derived class's own, a base-class `init` block that calls an `open` (or virtual) member dispatches to the **subclass override** — which runs while the subclass's properties are still default/uninitialized. The code in this item's `code` array shows `Base.init` calling `description`, which dispatches to `Derived.description` before its field is assigned.\n\n`Base.init` calls `description`, which dispatches to `Derived.description` before `Derived`'s field is assigned — observed as `null`. If `description` were declared non-null `String`, reading it at this moment gives `null` (the field is zero-initialized), a genuine runtime NPE from a property the type system swears is non-null.\n\n#### The rule\nNever call `open` members from a constructor or `init` block. Make the base behavior a function over explicit parameters, or compute in a lazy/after-construction hook. The compiler does not warn about this — it is a runtime hazard the type system cannot see.",
       "code": [
@@ -173,7 +176,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0028",
@@ -187,9 +191,9 @@
       ],
       "q": "What are explicit backing fields, and what are the rules?",
       "shortAnswer": [
-        "Explicit backing fields (stabilized in Kotlin 2.3) let one property hold a mutable type internally and expose a read-only type outside.",
+        "Explicit backing fields, stabilized in Kotlin 2.3, let one property hold a mutable type internally and expose a read-only type outside.",
         "`val state: StateFlow<UiState> field = MutableStateFlow(Loading)` — the mutable value is visible only inside the declaring scope.",
-        "The field type must be a subtype of the property type, and it does not make the exposed object immutable."
+        "The field type must be a subtype of the property type. It does not make the exposed object immutable."
       ],
       "answer": "Explicit backing fields (stabilized in Kotlin 2.3; preview before) retire the `_state`/`state` + `asStateFlow()` pattern.\n\n#### The syntax\n`val state: StateFlow<UiState> field = MutableStateFlow(Loading)` — one property, with the `field` keyword declaring its explicit backing field. The declared type `StateFlow<UiState>` is what outsiders see; the `field` initializer stores a `MutableStateFlow` — a **subtype** visible *only inside the declaring class*. Inside you can call `state.update { }`; everywhere else `state` is read-only. No second property, no `asStateFlow()` ceremony.\n\n#### The rules\n- The **field type must be a subtype** of the property type — `MutableStateFlow<UiState> <: StateFlow<UiState>`. The compiler narrows access to the field's declared type outside the class scope.\n- The **narrowing applies only outside the declaring scope**; inside you see the full field type. This is the entire point.\n- Supported on `val` and `var`, and the field can have a custom setter.\n- It does **not** make the object immutable — the read-only view is a *contract*, not an immutable snapshot.\n\n#### Why it matters\nThe old idiom depended on discipline (`_state` vs `state`, remembering `asStateFlow()`), cost a little indirection per read, and leaked mutable state if `_state` escaped. The explicit field encodes the pattern in the language.",
       "code": [
@@ -215,7 +219,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

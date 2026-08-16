@@ -15,8 +15,8 @@
       ],
       "q": "What is a `typealias` good for, what can it never do, and what changed with nested typealiases?",
       "shortAnswer": [
-        "A typealias is a compile-time alias with zero enforcement — `typealias UserId = String` still accepts any String, unlike a value class.",
-        "It cannot add members or constraints, and it expands in error messages; real uses are shortening function/generic types, disambiguating clashing imports, and `actual typealias` in KMP.",
+        "A typealias is a compile-time alias with zero enforcement. `typealias UserId = String` still accepts any `String`, unlike a value class.",
+        "It can't add members or constraints, and it expands in error messages. Real uses: shortening function/generic types, disambiguating clashing imports, and `actual typealias` in KMP.",
         "Kotlin 2.3 stabilized typealiases declared inside a class, so they can be scoped."
       ],
       "answer": "A `typealias` is a **pure compile-time alias**: the name exists only in source, and after compilation the underlying type is used everywhere. It is documentation-grade, not safety-grade.\n\n#### What it can never do\n- **No enforcement.** `typealias UserId = String` means `accept(UserId)` is still `accept(String)` — any `String` compiles. This is the contrast with a `value class`, which is a *new type* at compile time.\n- **No members.** You cannot add methods, companions, or operators to an alias.\n- **No constraints.** `typealias Positive = Int` does not check positivity. An alias can't narrow an existing type's contract.\n- **It expands in errors.** Messages show the underlying type, which can flood a large API with raw types.\n\n#### What it is genuinely good for\n- **Shortening function/generic types**: `typealias ClickHandler = (Item) -> Unit`, `typealias TableRow = Map<String, Any?>` — readability and a single place to change.\n- **Disambiguating clashing imports**: two `Domain` classes from different packages — `import a.Domain` and `typealias bDomain = b.Domain`.\n- **`actual typealias` in KMP**: map an `expect` declaration onto a platform type — `expect class Platform` / `actual typealias Platform = java.util.concurrent.Foo`. This is the *main* reason typealiases exist across multiplatform boundaries.\n\n#### Nested typealiases\nKotlin 2.3 **stabilized typealiases declared inside a class or object**: `class Container { typealias Items = List<Int> }` — scoped aliases that don't leak into the global namespace. Before that they were an experimental preview. Useful for namespacing a package-private shorthand inside its owning type.",
@@ -48,7 +48,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0060",
@@ -63,9 +64,9 @@
       ],
       "q": "`when`: guard conditions, exhaustiveness rules, and how it compiles.",
       "shortAnswer": [
-        "A guard (`is Loading if state.retries > 3 ->`) removes the nested `if` inside a branch but does NOT count toward exhaustiveness, so the compiler still demands an `else`.",
-        "A non-exhaustive `when` statement over a sealed/enum subject is now an error rather than a warning, and 2.3 added data-flow-based exhaustiveness.",
-        "Enum/Int/String subjects compile to table/lookupswitch while sealed subjects compile to an instanceof chain."
+        "A guard (`is Loading if state.retries > 3 ->`) removes the nested `if` in a branch. But it does NOT count toward exhaustiveness, so the compiler still demands an `else`.",
+        "A non-exhaustive `when` statement over a sealed/enum subject is now an error, not a warning. And 2.3 added data-flow-based exhaustiveness.",
+        "Enum/`Int`/`String` subjects compile to a table/lookupswitch. Sealed subjects compile to an instanceof chain."
       ],
       "answer": "#### Guards\nA guard attaches an `if` condition to a branch: `when (state) { is Loading if state.retries > 3 -> showRetry() }`. It removes the nested `if` from the branch body and lets multiple conditions share a subject. The critical rule: **a guard does not contribute to exhaustiveness**. The compiler does not reason 'guarded branch is covered' — it still needs every subtype covered or an `else`. So `when (sealed) { is A if cond -> ... ; is B -> ... }` with no `else` fails to compile unless the guard is provably complete (it generally isn't). The guard feature is available in Kotlin 2.1+; check the current stabilization note before asserting exact wording.\n\n#### Exhaustiveness\nA `when` **statement** (not expression) over a sealed/enum subject must cover all subtypes — since Kotlin 1.7 this non-exhaustiveness is an **error**, not a warning, for sealed/enum subjects. Kotlin 2.3 added **data-flow-based exhaustiveness**: `when` branches can be recognized as exhaustive when the subject's *flow-sensitive type* is narrowed to nothing — e.g. a subject whose type was already narrowed by earlier checks counts as covered.\n\n#### How it compiles\n- **Enum / `Int` / `String`** subjects → a **tableswitch** or **lookupswitch** (via `$WhenMappings` for enums; `hashCode`-based for String), O(1) dispatch.\n- **Sealed subjects** → an **instanceof chain** (no switch is possible; subtypes are different classes).",
       "code": [
@@ -96,7 +97,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0061",
@@ -110,9 +112,9 @@
       ],
       "q": "What are context parameters, why were context receivers dropped, and when would you actually use them?",
       "shortAnswer": [
-        "`context(logger: Logger, tx: Transaction)` declares NAMED ambient parameters resolved implicitly from the call-site scope.",
-        "Context receivers were redesigned because unnamed receivers were ambiguous, shadowed `this`, and were undiscoverable.",
-        "Good fits are genuinely cross-cutting scopes — logging, analytics, a transaction, an encoder; bad fits are real dependencies that belong in a constructor."
+        "`context(logger: Logger, tx: Transaction)` declares NAMED ambient parameters. They're resolved implicitly from the call-site scope.",
+        "Context receivers were redesigned: unnamed receivers were ambiguous, shadowed `this`, and were hard to discover.",
+        "Good fits are cross-cutting scopes: logging, analytics, a transaction, an encoder. Bad fits are real dependencies that belong in a constructor."
       ],
       "answer": "Context parameters (the successor to the experimental context receivers) let a function declare **ambient parameters**: `context(logger: Logger)` `fun log(msg: String)` — the caller provides `Logger` through a `withContext`/`this`-style scope instead of a positional argument. They are **named** (declared as `context(logger: Logger, tx: Transaction)`) and resolved implicitly.\n\n#### Why context receivers were dropped\nContext receivers were unnamed (`context(Logger, Transaction)`) and the compiler guessed which declaration each referred to. Three failure modes drove the redesign:\n1. **Ambiguity** — two receivers of the same type, or nested scopes, produced unclear resolution.\n2. **`this` shadowing** — `context(Foo)` made `this` mean `Foo` in unexpected places, breaking member references.\n3. **Undiscoverability** — a caller couldn't tell what the function needed without reading its declaration.\n\nThe current design fixes these with named ambient parameters and explicit `withContext { }` blocks at the call site.\n\n#### When would you actually use them\n- **Good fits**: genuinely cross-cutting, scope-shaped things — a `Logger`, an analytics tracker, a `Transaction`, an encoder/decoder. Every function in a module needs the same ambient; threading it as a parameter would be noise.\n- **Bad fits**: real dependencies that define identity or need test isolation — a repository, a clock, a store. Those belong in a **constructor** (DI), where they're explicit and substitutable; a context parameter hides a dependency.\n\n#### Status\nContext parameters remain an **experimental/preview feature** requiring a compiler flag (e.g. `-Xcontext-parameters`). State the current opt-in status accurately rather than claiming stabilization.",
       "code": [
@@ -138,7 +140,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0062",
@@ -153,9 +156,9 @@
       ],
       "q": "You are migrating a large Android codebase to the K2 compiler. What actually breaks, and how do you sequence it?",
       "shortAnswer": [
-        "The FIR frontend changes diagnostics and inference, so code relying on old smart-cast/platform-type behaviour now warns or errors.",
-        "kapt only runs in a K1-compatibility stub mode, so annotation processors are the long pole — move to KSP2; every compiler plugin needs a K2-capable version.",
-        "`-language-version`/`-api-version` are the staged escape hatch — sequence module by module with warnings-as-errors off first and measure the build-time win."
+        "The FIR frontend changes diagnostics and inference. Code that relied on old smart-cast or platform-type behavior now warns or errors.",
+        "kapt only runs in a K1-compatibility stub mode. Annotation processors are the long pole — move to KSP2. Every compiler plugin needs a K2-capable version.",
+        "`-language-version`/`-api-version` are the staged escape hatch. Move module by module, keep warnings-as-errors off first, and measure the build-time win."
       ],
       "answer": "K2 (the FIR-based frontend, default since Kotlin 2.0) is a new compiler pipeline — source-compatible in intent, but with real behavioural differences that surface during migration.\n\n#### What actually breaks\n1. **Diagnostics change.** New warnings, some new errors. Code that relied on K1 quirks — old smart-cast behaviour, platform-type loosening, deprecated syntax — now warns or fails.\n2. **Inference differences.** FIR's type inference is stricter in places; code that 'just worked' with K1's inference may need explicit types.\n3. **kapt.** Kapt only runs in a **K1-compatibility stub mode** under K2 — it works but is not the future. Annotation processors are the long pole of the migration; moving to **KSP2** (the K2-era processor API) is the recommended end state.\n4. **Compiler plugins.** Every plugin (parcelize, serialization, Compose) must ship a K2-capable version. Since Kotlin 2.0 the **Compose compiler ships with Kotlin**, so that one stops being a separate version to track.\n\n#### How to sequence\n- Start with `warningsAsErrors` **off** — let K2 surface its new warnings without failing the build.\n- Migrate **module by module**, keeping each module's `-language-version`/`-api-version` pinned to your current Kotlin while the rest moves.\n- Fix real inference/smart-cast breaks first (they are deterministic), then triage new warnings.\n- Track processor/plugin compatibility before flipping modules: get kapt→KSP2 and plugins onto K2-ready versions.\n- Measure the **build-time win** as evidence — K2 is meaningfully faster on large projects, which is part of the business case.",
       "code": [
@@ -181,7 +184,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0063",
@@ -195,9 +199,9 @@
       ],
       "q": "What is the unused-return-value checker, and would you turn it on?",
       "shortAnswer": [
-        "Kotlin 2.3 shipped an opt-in checker that flags discarded results of functions with no other effect — `list.filter { }` on its own line, `string.trim()`, an ignored `Result`.",
-        "Library authors opt types in with `@MustUseReturnValue` and carve out exceptions with `@IgnorableReturnValue` — the bug class Java needed ErrorProne's `@CheckReturnValue` for.",
-        "On a large codebase you enable it per module in warning mode first because fluent/builder APIs generate noise."
+        "Kotlin 2.3 shipped an opt-in checker. It flags discarded results of functions with no other effect: `list.filter { }` on its own line, `string.trim()`, an ignored `Result`.",
+        "Library authors opt types in with `@MustUseReturnValue`, and carve out exceptions with `@IgnorableReturnValue`. It's the bug class Java handled with ErrorProne's `@CheckReturnValue`.",
+        "On a large codebase, enable it per module in warning mode first, because fluent/builder APIs generate noise."
       ],
       "answer": "The unused-return-value checker (Kotlin 2.3, opt-in) is the language-level fix for the 'result ignored' bug class that Java had to patch with ErrorProne's `@CheckReturnValue`.\n\n#### What it flags\nAny expression statement whose **return value is discarded** while the call has no other effect. Concretely:\n- `list.filter { }` on its own line — the filtered list is thrown away; the original is unchanged (the classic 'I thought this mutated' bug).\n- `string.trim()` — `trim()` returns a new string; a bare call does nothing.\n- `result.takeIf { }`, `map.getOrElse` results, and an **ignored `Result`** — discarding a `Result` silently swallows a failure.\n\n#### How it works\n- **`@MustUseReturnValue`** — opt your own functions/types in: the checker then requires the return value be used or ignored explicitly.\n- **`@IgnorableReturnValue`** — the carve-out for deliberate fire-and-forget calls (e.g. `subscribe { }` where the subscription is intentionally dropped).\n\n#### Would you turn it on?\nYes — with staging. On a large codebase the first enable surfaces **noise from fluent/builder APIs**: chained builders whose intermediate results look 'unused' but are pure-style. So: enable per module in **warning mode** first, apply `@IgnorableReturnValue` to the deliberate cases, fix the genuine bugs (`filter`/`trim`/ignored `Result`), then escalate to error per module once the noise is cleared. The value is the `filter { }`-alone and swallowed-`Result` classes, which are otherwise invisible at runtime until a failure surfaces later.",
       "code": [
@@ -223,7 +227,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.9"
+      "addedIn": "2026.08.9",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

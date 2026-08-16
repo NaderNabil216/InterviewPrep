@@ -16,9 +16,9 @@
       ],
       "q": "Explain `Constraints`. Why is my child with `Modifier.size(48.dp)` rendering at 200 dp?",
       "shortAnswer": [
-        "Constraints carry min/max width and height down the tree from parent to child.",
-        "`size` sets a preferred size that the parent's constraints still clamp; `requiredSize` overrides them.",
-        "`fillMaxWidth` takes `maxWidth`, which is `Constraints.Infinity` inside a scrollable — why `fillMaxHeight` misbehaves in a `LazyColumn`."
+        "`Constraints` carries min/max width and height from parent to child down the tree.",
+        "`size` asks for a size, but the parent's constraints still clamp it. `requiredSize` overrides them.",
+        "`fillMaxWidth` reads `maxWidth`, which is `Constraints.Infinity` inside a scrollable — that's why `fillMaxHeight` misbehaves in a `LazyColumn`."
       ],
       "answer": "`Constraints` is the pair of min/max bounds a parent hands each child: `Constraints(minWidth, maxWidth, minHeight, maxHeight)`. A child measures itself within those bounds and reports a size back. `Modifier.size(48.dp)` does not command the size — it requests it, and the parent's constraints clamp the result. If the parent demands 200 dp minimum (an expanded row, a stretched column), the 48 dp request is ignored and the child renders at the enforced minimum.\n\n#### Forcing and following\n`Modifier.requiredSize(48.dp)` is the override: it measures at 48 dp regardless of constraints, then reports the *parent-imposed* size while drawing content at the smaller box — content can be clipped or overflow. `fillMaxWidth()` and `fillMaxSize()` read `maxWidth`/`maxHeight` from the constraints, which is why they behave differently in different parents.\n\n#### The infinity trap\nInside a scrollable, vertical constraints are `Constraints.Infinity`: the scrollable wants the child to tell it how tall the content is. `fillMaxHeight()` in a `LazyColumn` item therefore requests infinite height, which is meaningless, and misbehaves — while `fillMaxHeight` on a `Row`'s child (finite height) is fine. Understanding constraints is understanding most layout surprises.",
       "followUps": [
@@ -36,7 +36,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0043",
@@ -51,9 +52,9 @@
       ],
       "q": "Why does measuring a child twice throw, and what do intrinsics really cost?",
       "shortAnswer": [
-        "The single-measure invariant keeps Compose layout O(n) instead of the exponential blow-up weights allowed in nested `LinearLayout`s.",
+        "One measure per child keeps Compose layout O(n) — unlike nested `LinearLayout` weights, which could blow up exponentially.",
         "Measuring the same `Measurable` twice in one pass throws at runtime.",
-        "`IntrinsicSize.Min` is the sanctioned second look — but each query walks the whole subtree, and lazy layouts do not support them."
+        "`IntrinsicSize.Min` is the allowed second look, but each query walks the whole subtree, and lazy layouts don't support them."
       ],
       "answer": "Compose enforces one measure per child per pass. A `MeasurePolicy` that calls `measurable.measure(constraints)` on the same `Measurable` twice throws `IllegalStateException` at runtime. That rule is what keeps layout cost linear: a parent measures each child once, places it, and the pass completes. The historical alternative — the Android View system's nested `LinearLayout` with `layout_weight` — allowed measuring a subtree repeatedly, producing exponential worst cases that averted exactly this blow-up.\n\n#### Intrinsics are the second look\nThe sanctioned exception is intrinsics: `IntrinsicSize.Min`/`Max` in a `Column` measures children with special constraints so the column can be as tall as its tallest child while letting each row size itself. But every intrinsic query walks the entire subtree — it is a real pass, not a cached number — so columns of intrinsics inside a list are a measurable cost.\n\n#### What lazy layouts forbid\nLazy layouts do not support intrinsic measurement at all: an item cannot ask about a sibling it never composed. Rows that need to match heights inside a `LazyColumn` must instead share fixed state or a two-pass strategy, not intrinsics.",
       "followUps": [
@@ -71,7 +72,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0044",
@@ -86,9 +88,9 @@
       ],
       "q": "What does `SubcomposeLayout` actually cost, and when is `BoxWithConstraints` the wrong answer?",
       "shortAnswer": [
-        "It defers composition into the layout phase, so its content cannot be prefetched by a lazy list and state read there is attributed to layout.",
-        "`BoxWithConstraints` is a `SubcomposeLayout`, making it a real jank source inside a list item.",
-        "Cheaper alternatives: `Modifier.layout { }`, `onSizeChanged` plus state, or a plain `Layout` with intrinsics."
+        "It defers composition into the layout phase. A lazy list can't prefetch that content, and state reads there count as layout.",
+        "`BoxWithConstraints` is a `SubcomposeLayout`, so it's a real jank source inside a list item.",
+        "Cheaper options: `Modifier.layout { }`, `onSizeChanged` plus state, or a plain `Layout` with intrinsics."
       ],
       "answer": "`SubcomposeLayout` lets you compose *during* layout — a second composition pass deferred until the layout phase. That costs in three ways. First, prefetch: a lazy list prefetches items during composition, and content that only exists after layout cannot be prefetched, so it lands cold in the visible frame. Second, skipping: the deferred content sits outside the parent's normal recomposition path, so argument-based skipping does not cover it. Third, phase attribution: a state read inside deferred content is attributed to the layout phase, so the frame's layout cost hides it.\n\n#### The BoxWithConstraints trap\n`BoxWithConstraints` is a `SubcomposeLayout` under the hood. Using it to branch on `maxHeight` inside a `LazyColumn` item pulls a whole extra composition pass into every item — a classic hidden jank source in list rows.\n\n#### The cheaper toolbox\nFor size-conditional behaviour, prefer `Modifier.layout { }` with the constraints you already receive, `onSizeChanged` plus a remembered state (one frame late, but no deferred composition), or a plain `Layout` with intrinsics when siblings must coordinate. Reserve `SubcomposeLayout` for genuinely deferred content like `LazyLayout` or tooltips that need measured sizing.",
       "followUps": [
@@ -106,7 +108,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0045",
@@ -121,8 +124,8 @@
       ],
       "q": "How do `LookaheadScope` and shared-element transitions actually work?",
       "shortAnswer": [
-        "Lookahead runs a pre-pass that measures and places the final layout, then the approach pass animates current values toward those targets.",
-        "`SharedTransitionLayout` with `sharedElement`/`sharedBounds` and matching keys across an `AnimatedVisibilityScope` drives the shared animation.",
+        "Lookahead first measures and places the final layout in a pre-pass. Then the real pass animates current values toward those targets.",
+        "`SharedTransitionLayout` with `sharedElement`/`sharedBounds` and matching keys inside an `AnimatedVisibilityScope` drives the shared animation.",
         "A mismatched key silently animates nothing."
       ],
       "answer": "`LookaheadScope` makes a structural layout change animatable by running a *pre-pass*: it measures and places the children at their final target geometry before the visible frame. Then the actual pass runs, and layout modifiers participating via `Modifier.approachLayout` read both the current geometry and the lookahead target and animate toward it. The change that used to snap — a child moving from one container to another, a resizing header — now eases without you hardcoding start and end coordinates.\n\n#### Shared elements on top\n`SharedTransitionLayout` + `AnimatedVisibilityScope` combine two frames of the same screen into one transition. A composable wrapped in `Modifier.sharedElement(key, animatedVisibilityScope)` appears in both the outgoing and incoming screens; the framework interpolates position, size, clip and z-order between the two renderings, so the element appears to fly across. `sharedBounds` adds bounds-only morphing for elements that change shape.\n\n#### The failure mode\nIf the keys do not match across the transition — different key in source and destination, or one side not in a shared scope — the framework cannot pair them and *silently animates nothing*: no crash, just a snap. Clip and z-order mismatches cause visually clipped elements mid-flight.",
@@ -141,7 +144,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0046",
@@ -157,8 +161,8 @@
       "q": "`LazyColumn` vs `Column(Modifier.verticalScroll())` — when is the lazy one the wrong choice?",
       "shortAnswer": [
         "Lazy composes only the visible window plus a reuse pool, so it wins for long or unbounded lists.",
-        "For a short fixed screen it adds machinery and gives up simple `weight()` and intrinsic behaviour.",
-        "`LazyListScope` is not `@Composable`, so you cannot call composables directly in the DSL body — you must use `item { }`/`items()`."
+        "For a short fixed screen it adds machinery and loses simple `weight()` and intrinsics.",
+        "`LazyListScope` is not `@Composable`, so the DSL body can't call composables directly — use `item { }`/`items()`."
       ],
       "answer": "`LazyColumn` is a virtualizer: it composes only the visible items plus a prefetch window, reuses nodes from a pool as you scroll, and supports arbitrary item counts. That makes it the right tool for long lists, unbounded data, or feeds where the visible set is a fraction of the total.\n\n#### When it is the wrong tool\nFor a fixed, short screen — a settings page of a dozen rows, a sign-in form — the virtualizer buys nothing and costs something: no `weight()` for distributing space, no intrinsic measurement, more allocation and bookkeeping per item, and items' internal state needs keys to survive recycling. A plain `Column` with `verticalScroll()` composes everything once and lays out with the full constraint model.\n\n#### The gotcha worth naming\n`LazyColumn`'s DSL builder is `LazyListScope`, which is not a composable context. Calling a `@Composable` directly in the body fails to compile — every entry must be wrapped: `item { ComposableRow(...) }` or `items(items) { ... }`. The distinction between the DSL and a composable scope trips up people who treat the lazy DSL like a `Column`.",
       "followUps": [
@@ -176,7 +180,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0047",
@@ -192,9 +197,9 @@
       ],
       "q": "How do item reuse and prefetch work inside a lazy layout?",
       "shortAnswer": [
-        "Slots are recycled from a pool keyed by `contentType`; a reused slot keeps its node structure but drops its state.",
-        "`contentType` in a mixed feed turns an expensive rebuild into a cheap rebind.",
-        "Prefetch composes one item ahead within the frame budget — a heavy item or a missing baseline profile shows up during a fast fling."
+        "Slots come from a pool keyed by `contentType`. A reused slot keeps its node structure but drops its state.",
+        "In a mixed feed, `contentType` turns an expensive rebuild into a cheap rebind.",
+        "Prefetch composes one item ahead within the frame budget. A heavy item or a missing baseline profile shows up during a fast fling."
       ],
       "answer": "Lazy layouts keep a pool of composed items keyed by `contentType`. When an item scrolls off-screen, its slot returns to the pool; when a new item scrolls in, the layout pulls a slot of the same `contentType` and rebinds it. A rebind keeps the node structure — measure, layout, draw machinery — and re-runs composition against the new data. That is why a mixed feed benefits so much from `contentType`: an image card reusing an image card slot is a cheap rebind, while reusing a video card slot for an image card forces a full structural rebuild.\n\n#### Keys and state\nThe other pillar is the `key` parameter: without stable keys, Compose reuses the wrong slot and state leaks between items. With stable keys, a slot that scrolls back into view keeps its `remember`ed state.\n\n#### Prefetch\nCompose prefetches one item ahead during composition within the frame budget, and nested prefetch for a `LazyRow` inside a `LazyColumn` composes the row's children. The visible symptom of both: a heavy first item, or a missing baseline profile, shows up as a stutter in the first frames of a fast fling — after that, warm pools mask it.",
       "followUps": [
@@ -212,7 +217,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0048",
@@ -228,8 +234,8 @@
       "q": "Implement a collapsing toolbar with `NestedScrollConnection`.",
       "shortAnswer": [
         "Override `onPreScroll`/`onPostScroll`/`onPreFling`/`onPostFling` and return the `Offset`/`Velocity` you consumed.",
-        "The child gets the remainder; sign conventions are what trip people up.",
-        "Keep the offset in a `Float` read inside a `graphicsLayer`/`layout` lambda so the header never recomposes per frame."
+        "The child gets what's left — sign conventions are what trip people up.",
+        "Keep the offset in a `Float` read inside a `graphicsLayer`/`layout` lambda, so the header never recomposes per frame."
       ],
       "answer": "A collapsing toolbar is a nested-scroll consumer. `Modifier.nestedScroll(connection)` plugs your `NestedScrollConnection` into the scroll chain. The list scrolls and offers its deltas through the callbacks: `onPreScroll` runs before the child consumes, `onPostScroll` after. Your `connection` returns the `Offset` it consumed, and the remainder flows on to the child. A positive vertical delta as the finger moves down means the list would scroll down; to collapse the header on a downward scroll you consume the delta before it reaches the list, driving the header offset and letting the list stay put until the header is gone.\n\n#### The details that matter\n`onPreFling`/`onPostFling` handle the velocity handoff — consumed velocity stops the list; what you return is passed on. Sign conventions flip based on direction; the canonical implementation clamps the offset to the header height and applies `FlingBehavior` math to settle it.\n\n#### Performance\nThe offset should live in a plain `Float` read inside `graphicsLayer { translationY = offset }` or a `layout` lambda — the header repositions without recomposing, matching the deferred-read pattern. The structural note: two nested same-direction scrollables throw instead of silently dividing the scroll.",
       "followUps": [
@@ -247,7 +253,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0049",
@@ -262,9 +269,9 @@
       ],
       "q": "How does nested scroll work across the Compose/View boundary?",
       "shortAnswer": [
-        "`rememberNestedScrollInteropConnection()` lets a Compose scrollable participate as a nested-scroll child of a View parent like `CoordinatorLayout`.",
-        "The reverse direction — a scrolling View inside a Compose scrollable — has no equivalent bridge and needs the View to enable nested scrolling itself.",
-        "The diagnostic symptom is a toolbar that never collapses over a `ComposeView`."
+        "`rememberNestedScrollInteropConnection()` lets a Compose scrollable act as a nested-scroll child of a View parent like `CoordinatorLayout`.",
+        "The reverse — a scrolling View inside a Compose scrollable — has no bridge. The View must enable nested scrolling itself.",
+        "The tell-tale sign: a toolbar that never collapses over a `ComposeView`."
       ],
       "answer": "Nested scroll in Compose and nested scrolling in Views are different systems. Compose implements its own nested-scroll protocol; the View system uses `NestedScrollingParent`/`NestedScrollingChild`. The bridge is `rememberNestedScrollInteropConnection()`, passed to `Modifier.nestedScroll(...)`. It translates a Compose scrollable's deltas into the View nested-scroll protocol, so the Compose list becomes a nested-scroll child of a View `NestedScrollingParent3` — `CoordinatorLayout` with an `AppBarLayout` behavior, for example.\n\n#### What you get\nWith the connection installed, the collapsing toolbar in the View `AppBarLayout` collapses as the Compose list scrolls — scroll deltas flow from the Compose child up to the View parent, and the parent's consumption flows back down as displaced content.\n\n#### What you do not get\nThere is no bridge for the reverse direction: a scrolling View *inside* a Compose scrollable cannot be nested-scrolled by the Compose parent. The View must enable nested scrolling itself (e.g. a `NestedScrollView` inside a `LazyColumn`). The classic symptom to recognize: the toolbar simply never collapses when the scrolling content lives in a `ComposeView` — the connection was never installed.",
       "followUps": [
@@ -282,7 +289,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0050",
@@ -297,8 +305,8 @@
       ],
       "q": "When would you drop down to `LazyLayout`?",
       "shortAnswer": [
-        "`LazyLayout` plus a `LazyLayoutItemProvider` is the engine under LazyColumn, LazyGrid and Pager.",
-        "You reach for it when the virtualization rule is not a simple linear window — an infinite calendar, a timeline, a tiled canvas.",
+        "`LazyLayout` plus a `LazyLayoutItemProvider` is the engine under `LazyColumn`, `LazyGrid`, and Pager.",
+        "Drop down to it when the visible window isn't a simple linear range — an infinite calendar, a timeline, a tiled canvas.",
         "You re-implement item keys, saveable state, prefetch policy, and placement animations by hand."
       ],
       "answer": "`LazyLayout` is the low-level virtualization primitive that `LazyColumn`, `LazyVerticalGrid` and `HorizontalPager` are all built on. You drop down to it when the built-in layouts' virtualization rule — a linear window of items composed in order — does not match your layout. Canonical cases: an infinite scrolling calendar where months have variable heights and you must compute the visible window from dates, not indices; a timeline with non-uniform entries that need custom placement; a tiled canvas panning in two dimensions where items appear and disappear in a rectangle.\n\n#### What you re-implement\n`LazyLayout` gives you `rememberLazyLayoutItemProvider` for the items, and then it is yours: the mapping from scroll position to visible item indices, per-item keys and identity for the reuse pool, saveable state per item (`rememberSaveable` inside items is on you), the prefetch policy, and item placement animations. Every one of those is a real subsystem that the standard layouts implement for you.\n\n#### The honest recommendation\nThe pragmatic answer is usually 'compose the existing layouts instead': a vertical `LazyColumn` of horizontal `LazyRow`s covers most grids and multi-row feeds without re-owning virtualization.",
@@ -317,7 +325,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0051",
@@ -332,9 +341,9 @@
       ],
       "q": "Why `sp` for text and `dp` for everything else — and what changed with non-linear font scaling?",
       "shortAnswer": [
-        "`sp` honours the user's font-size preference; `dp` does not.",
-        "Since Android 14 the sp-to-px curve is non-linear, so you cannot derive dp from sp by multiplying by `fontScale`.",
-        "The failure mode is fixed-height containers and `maxLines` clipping at 200% — test at the largest scale plus display size."
+        "`sp` follows the user's font-size preference; `dp` doesn't.",
+        "Since Android 14 the sp-to-px curve is non-linear, so `sp * fontScale` no longer gives the right size.",
+        "The failure mode: fixed-height containers and `maxLines` clip at 200% — test at the largest scale plus display size."
       ],
       "answer": "`sp` (scaled pixels) multiplies the base size by the user's font-size preference; `dp` (density pixels) is fixed regardless of that preference. Text uses `sp` so accessibility settings actually scale it — a user with 2x font sees text at 2x. Everything else uses `dp` because geometry should not inflate with text preferences.\n\n#### What Android 14 changed\nBefore Android 14 the mapping was a simple multiply: `px = sp * fontScale`. Since then the scale is *non-linear* — the system applies a curve that grows faster above 1.2x — so `fontScale` alone cannot convert sp to dp. Any code that derived a fixed height from `sp * fontScale` now mis-sizes.\n\n#### The failure modes\nThe classic breakage: text in a fixed-height `dp` container clips when the user's font is large, and `maxLines` truncates at 200% font. The fixes: convert through `LocalDensity` (`with(density) { 14.sp.toPx() }`) so the density object does the scaling correctly, design for flexible heights, and test at the largest font scale *and* display size — the two settings compose, and combinations are where clipping appears.",
       "followUps": [
@@ -352,7 +361,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

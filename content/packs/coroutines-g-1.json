@@ -16,9 +16,9 @@
       ],
       "q": "How is a coroutine different from a thread?",
       "shortAnswer": [
-        "A coroutine is a heap object scheduled onto a thread pool, not an OS thread.",
+        "A coroutine is a heap object a dispatcher schedules onto a thread pool, not an OS thread.",
         "It costs a few hundred bytes versus a roughly megabyte thread stack, so you can have a hundred thousand of them.",
-        "And coroutines do not make blocking code non-blocking — a coroutine that calls a blocking API still occupies its carrier thread."
+        "Coroutines do not make blocking code non-blocking — a coroutine calling a blocking API still occupies its carrier thread."
       ],
       "answer": "A thread is an OS resource with its own kernel-managed stack of roughly 512 KB–1 MB; a coroutine is a suspended function frame plus a state machine, a few hundred bytes, that a dispatcher schedules onto an existing thread. That is why 100,000 coroutines are routine and 100,000 threads exhaust memory and time-slice overhead.\n\n#### What the dispatcher does\nThe dispatcher is the middleman: it picks a thread from its pool, runs the coroutine's block until the next suspension point, then parks the state machine and hands the thread back. One thread interleaves thousands of coroutines, which is how you get concurrency without spawning threads.\n\n#### The corollary candidates miss\nCoroutines are a scheduling abstraction, not a way to make slow work fast. `withContext(Dispatchers.IO) { someBlockingCall() }` moves the blocking call onto a worker thread — the thread is still blocked the whole time. The win is that the *other* coroutines sharing that pool keep making progress, not that the blocking call itself got any faster.",
       "code": [
@@ -44,7 +44,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0010",
@@ -60,7 +61,7 @@
       "q": "Does marking a function `suspend` make it run off the main thread?",
       "shortAnswer": [
         "No — `suspend` is a compiler contract, not a threading keyword.",
-        "It adds a hidden `Continuation` parameter; the function still runs on whatever dispatcher the caller was on.",
+        "It adds a hidden `Continuation` parameter, and the function runs on whatever dispatcher the caller was on.",
         "Main-safety is the callee's responsibility, usually via an internal `withContext(ioDispatcher)`."
       ],
       "answer": "`suspend` is purely a compile-time marker. The compiler rewrites the function to take a `Continuation<T>` and to manage a state machine, but the bytecode runs on whatever thread the caller was on when it was invoked. Call a `suspend` function from `Dispatchers.Main` and, until the first real suspension, it executes on the main thread.\n\n#### Where the confusion comes from\nThe popular suspend functions do change threads, so people infer the keyword does. `withContext(Dispatchers.IO)` switches, and Retrofit's and Room's suspend functions dispatch internally. That internal dispatch is exactly why they are safe to call from Main. But the guarantee is theirs, not the language's.\n\n#### What a candidate must say\nMain-safety is a property of the *implementation*, not of the `suspend` keyword. A library that exposes a suspend function doing CPU or IO work on the caller's thread is broken, and a ViewModel doing heavy work in a bare `suspend` function without an internal `withContext` is also broken. The contract is: suspend for the caller's benefit, dispatch inside for your own correctness.",
@@ -87,7 +88,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0011",
@@ -104,7 +106,7 @@
       "shortAnswer": [
         "`delay` suspends: it schedules a resume on the dispatcher's timer and hands the thread back.",
         "`Thread.sleep` parks the OS thread, so four sleeping coroutines on a four-core pool wedge the whole pool.",
-        "In tests, `delay` is skipped by `runTest`'s virtual clock while `Thread.sleep` genuinely sleeps."
+        "In tests, `runTest`'s virtual clock skips `delay`, while `Thread.sleep` genuinely sleeps."
       ],
       "answer": "`delay` is a suspending function: it registers the coroutine on the dispatcher's scheduling queue and returns immediately, freeing the thread for other work. When the timer fires, the coroutine is rescheduled and resumes. `Thread.sleep` blocks the OS thread it runs on — the coroutine's carrier thread stays parked, doing nothing, for the full second.\n\n#### The pool-starvation trap\nCoroutines on `Dispatchers.Default` or `.IO` share a fixed pool sized to the machine. If four coroutines each call `Thread.sleep(1000)` on a four-core device, they occupy every worker for a full second — anything else queued behind them stalls, including the very code that would have resumed them. `delay` never does this.\n\n#### The testing angle\n`kotlinx.coroutines.test`'s `runTest` replaces the dispatcher's scheduler with a virtual clock. `delay(1000)` advances that virtual clock in a millisecond of wall time; `Thread.sleep(1000)` blocks the test thread for a real second and makes the suite slow and flaky. When an interview asks how to keep tests fast, the answer is `delay`, never `sleep`.",
       "code": [
@@ -130,7 +132,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0012",
@@ -145,9 +148,9 @@
       ],
       "q": "What does a single suspension point actually cost at runtime?",
       "shortAnswer": [
-        "The fast path is nearly free: if the callee returns without suspending, it returns the value directly instead of `COROUTINE_SUSPENDED`.",
-        "The cost shows up when it really suspends — spilling locals into fields and dispatching to another thread.",
-        "That is why a `withContext` inside a hot loop is a measurable regression."
+        "The fast path is nearly free: if the callee does not suspend, it returns the value directly instead of `COROUTINE_SUSPENDED`.",
+        "The cost shows up only when it really suspends — locals spill into fields and the work dispatches to another thread.",
+        "That is why `withContext` inside a hot loop is a measurable regression."
       ],
       "answer": "A suspension point has two paths. If the called function completes synchronously — no real suspension — it returns its value directly; the caller never sees `COROUTINE_SUSPENDED` and the state machine reuses its one instance for the whole call chain. That fast path is single-digit nanoseconds, effectively free.\n\n#### The expensive path\nWhen a function genuinely suspends, the runtime must: (1) store the current continuation plus every live local into fields of the state machine object — the 'spilled locals' of the compiled state machine; (2) return `COROUTINE_SUSPENDED` to the caller, unwinding the stack; (3) when the work completes, re-enter the state machine via a `switch (label)` dispatch to resume at the right point. If the dispatcher differs, that adds a scheduling hand-off — a Handler post or a scheduler task, microseconds.\n\n#### The interview point\nCost is concentrated at real suspensions, and re-suspension per iteration compounds it. `repeat(10_000) { withContext(Dispatchers.IO) { ... } }` allocates a child coroutine, two hand-offs and a state-machine frame per iteration. Hoist the `withContext` around the loop — or restructure so one switch happens, not ten thousand.",
       "code": [
@@ -173,7 +176,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0013",
@@ -189,7 +193,7 @@
       "q": "Turn a callback-based API into a suspend function.",
       "shortAnswer": [
         "Use `suspendCancellableCoroutine { }` and register `invokeOnCancellation { call.cancel() }`.",
-        "The continuation must be resumed exactly once — a second resume throws `IllegalStateException`.",
+        "Resume the continuation exactly once — a second resume throws `IllegalStateException`.",
         "`suspendCoroutine` is the wrong tool because it has no cancellation hook."
       ],
       "answer": "The bridge is `suspendCancellableCoroutine { cont -> ... }`. Inside the lambda you register the callback; when it fires, call `cont.resume(value)` for success or `cont.resumeWithException(e)` for failure. The function then suspends until exactly one of those happens.\n\n#### Why `suspendCancellableCoroutine`, not `suspendCoroutine`\n`suspendCoroutine` gives you the continuation but no cancellation hook. If the calling coroutine is cancelled, the suspension is abandoned — the callback stays registered forever and the caller, if it ever resumes, resumes into a dead context. `suspendCancellableCoroutine` lets you register `invokeOnCancellation { call.cancel() }`, so cancellation tears the underlying work down with the coroutine. This is how the wrappers for callback APIs are supposed to behave.\n\n#### The contract\nResume exactly once. A second `resume` throws `IllegalStateException`, and resuming after cancellation drops the value. For resources — a `Response`, a `Cursor` — use the `onCancellation` overload: `cont.resume(value) { resource -> resource.close() }`, which hands you the value back on cancellation so you can release it.",
@@ -216,7 +220,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0014",
@@ -232,8 +237,8 @@
       "q": "A callback resumes your continuation from a random OkHttp thread. How does the coroutine get back onto the main thread?",
       "shortAnswer": [
         "The `ContinuationInterceptor` is a context element — the dispatcher wraps your continuation in a `DispatchedContinuation`.",
-        "`resumeWith` consults `isDispatchNeeded`/`dispatch` and re-posts onto the target thread.",
-        "`Dispatchers.Main.immediate` returns false from `isDispatchNeeded` when already on Main, skipping the round trip."
+        "On resume, `resumeWith` checks `isDispatchNeeded` and re-posts the work onto the target thread.",
+        "`Dispatchers.Main.immediate` returns false from `isDispatchNeeded` when already on Main, so it skips the round trip."
       ],
       "answer": "The dispatcher is part of the `CoroutineContext` as a `ContinuationInterceptor` element. When you launch on `Dispatchers.Main`, the interceptor wraps the coroutine's continuation in a `DispatchedContinuation` whose `resumeWith` checks `isDispatchNeeded`. When the OkHttp callback calls `resume`, that dispatches onto the Main looper via a `Handler` post, and only then does the coroutine actually continue — so the state machine resumes on main.\n\n#### The `immediate` subtlety\n`Dispatchers.Main.immediate` is the fast variant: its `isDispatchNeeded` returns `false` when the current thread already *is* main, so a resume from the main thread skips the Handler round trip entirely. This is why `withContext(Main.immediate)` from Main is cheap, and why `Unconfined` — which never re-posts — must never be used when the caller expects a particular thread.\n\n#### Tie it to coroutine starts\nThe same machinery governs `CoroutineStart`: `DEFAULT` posts the launch, `UNDISPATCHED` begins executing immediately in the caller's context and dispatches only at the first suspension, and `ATOMIC` is like `DEFAULT` but never skips starting even if cancelled before it runs. The ordering surprise interviewers probe: with `DEFAULT`, the `launch` body has *not* started when the next line after `launch` executes.",
       "code": [
@@ -259,7 +264,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0015",
@@ -275,8 +281,8 @@
       "q": "Why can't you call a suspend function directly from `onCreate()` or a click listener, and what do you do instead?",
       "shortAnswer": [
         "A suspend function needs a `Continuation`, so it can only be called from inside a coroutine.",
-        "You need a `CoroutineScope`, and Android hands you `viewModelScope` and `lifecycleScope`.",
-        "The scope binds the work's lifetime to the component, cancelling it when the component dies."
+        "So you need a `CoroutineScope`, and Android provides `viewModelScope` and `lifecycleScope`.",
+        "The scope ties the work's lifetime to the component, cancelling it when the component dies."
       ],
       "answer": "Every suspend function compiles to a function that takes a `Continuation<T>` as its last parameter. `onCreate()` and a click listener have no such parameter — they are plain, non-suspend callbacks — so there is nowhere for the continuation to come from. The compiler rejects the call.\n\n#### The two wrong fixes\nA junior offers either `runBlocking { ... }` (blocks the main thread until the work finishes — an ANR on any real IO) or making the framework callback itself suspend (the Android framework cannot suspend; nothing would ever invoke it). Both are rejected.\n\n#### The right fix\nThe call must run inside a coroutine, which means it needs a `CoroutineScope` — a holder for a `Job` plus a dispatcher. Android provides scopes with the right lifetime already attached: `lifecycleScope` is cancelled when the Activity/Fragment's lifecycle reaches `onDestroy`, and `viewModelScope` when the ViewModel is `onCleared`. You write `lifecycleScope.launch { fetch() }` and the work is automatically cancelled when the screen goes away — that lifetime binding is the entire point of structured concurrency, and it is why you never hand-roll a scope for UI work.",
       "code": [
@@ -302,7 +308,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0016",
@@ -317,8 +324,8 @@
       ],
       "q": "What is a `CoroutineContext`, and what does the `+` operator actually do?",
       "shortAnswer": [
-        "It is an immutable, type-indexed set of elements — a map from `Key` to `Element`.",
-        "The four elements you meet are `Job`, `ContinuationInterceptor` (the dispatcher), `CoroutineName` and `CoroutineExceptionHandler`.",
+        "It is an immutable set of elements keyed by type — a map from `Key` to `Element`.",
+        "The four elements you meet: `Job`, `ContinuationInterceptor` (the dispatcher), `CoroutineName`, and `CoroutineExceptionHandler`.",
         "`a + b` is right-biased: the right operand replaces any element with the same key."
       ],
       "answer": "`CoroutineContext` is an immutable, index-set collection: each element carries a `Key`, and the context is a mapping from key to element, so `coroutineContext[Job]` returns the `Job` element or null. The concrete elements are `Job`, `ContinuationInterceptor` (which is how the dispatcher lives in the context), `CoroutineName`, and `CoroutineExceptionHandler`. Access is type-keyed and unique — one element per key.\n\n#### What `+` means\n`a + b` merges the two contexts and is **right-biased**: for every key, the element from the right operand wins. So `Dispatchers.Main + CoroutineName(\"load\")` keeps both, but `Job() + Job()` keeps only the second. There is no subtraction; removing an element uses `minusKey`.\n\n#### Inheritance\nA child coroutine inherits its parent's context wholesale, then substitutes its **own new `Job`** — that is how the hierarchy works: the parent tracks children via its `Job`, and the children share the dispatcher and name. The first practical consequence candidates should name: read the dispatcher with `coroutineContext[ContinuationInterceptor]`, and never try to override the parent's `Job` from inside a child — you get a new one whether you ask for it or not.",
@@ -345,7 +352,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0017",
@@ -360,9 +368,9 @@
       ],
       "q": "What does `CoroutineScope(Dispatchers.Main + SupervisorJob())` create, and what happens to it after you call `cancel()`?",
       "shortAnswer": [
-        "A `CoroutineScope` is just a holder for a `CoroutineContext`; the factory adds a `Job` if you did not supply one.",
+        "A `CoroutineScope` is just a holder for a `CoroutineContext`. The factory adds a `Job` if you did not supply one.",
         "You own cancelling it, and a cancelled scope is dead permanently.",
-        "`launch` on a cancelled scope returns an already-cancelled Job and the block never runs — silently."
+        "`launch` on a cancelled scope returns an already-cancelled Job, and the block never runs — silently."
       ],
       "answer": "`CoroutineScope(...)` is a thin wrapper: it stores the `CoroutineContext` you give it and exposes it through `coroutineContext`. Passing `Dispatchers.Main + SupervisorJob()` gives the scope that dispatcher and that job as the root of its hierarchy. If you had passed only the dispatcher, the factory would have added a fresh `Job()` for you — a scope always has exactly one root `Job`.\n\n#### Ownership\nNothing in the library cancels this scope; you own it. Typically it lives on an application-level or repository-level object and is cancelled when that object is destroyed.\n\n#### The permanent-death trap\nThe moment you call `scope.cancel()`, the root `Job` transitions to `Cancelled`. A `Job` cannot be restarted — there is no un-cancel. From then on, `scope.launch { ... }` returns a Job that is already cancelled: the block is **never run, no exception is thrown, and nothing is logged**. Code after a cancelled scope appears to work and silently does nothing.\n\n#### Reuse without recreating\nIf the object survives and you want fresh coroutines, cancel the children, not the scope: `scope.coroutineContext.cancelChildren()`. The scope keeps its dispatcher and gains a live hierarchy again.",
       "code": [
@@ -388,7 +396,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0018",
@@ -403,8 +412,8 @@
       ],
       "q": "`Job` vs `SupervisorJob` — and why does `launch(SupervisorJob())` supervise nothing?",
       "shortAnswer": [
-        "`SupervisorJob` only changes how failures of *its own children* propagate — children fail independently.",
-        "Passing one into `launch` makes it that coroutine's own Job, so your siblings are unaffected.",
+        "`SupervisorJob` only changes how failures of its **own children** spread — each child fails on its own.",
+        "Passing one to `launch` makes it that coroutine's own Job, so your siblings are unaffected.",
         "The only correct forms are `CoroutineScope(SupervisorJob() + ...)` and `supervisorScope { }`."
       ],
       "answer": "A plain `Job` propagates failure both ways: when a child fails, the parent and every sibling are cancelled. `SupervisorJob` changes exactly one thing — a child's failure is isolated to that child; siblings keep running and the parent is not cancelled. A child that merely throws still needs its own error handling, because nothing catches it for you.\n\n#### Why `launch(SupervisorJob())` does nothing\nWhen you write `scope.launch(SupervisorJob())`, the `SupervisorJob` you passed becomes **that coroutine's own job**, not the parent of a family. The coroutines you launch from *inside* that block become children of the block's job — which is a supervisor — but they are not children of the `SupervisorJob` you handed to `launch`. Meanwhile the coroutine itself is still a child of `scope`'s root `Job`, so a failure inside it propagates to the scope as usual. Net effect: you built a supervisor, but supervised nothing.\n\n#### The correct patterns\n- `CoroutineScope(SupervisorJob() + Dispatchers.Main)` — the scope's root is a supervisor, so its direct children fail independently. This is exactly what `viewModelScope` does.\n- `supervisorScope { }` — a builder that installs a supervisor for its direct children only.",
@@ -431,7 +440,8 @@
           "checked": "2026-08-13"
         }
       ],
-      "addedIn": "2026.08.10"
+      "addedIn": "2026.08.10",
+      "updatedIn": "2026.08.17"
     }
   ]
 }
