@@ -249,6 +249,7 @@ export const Store = {
       theme: 'auto',
       interviewDate: null,
       lastSeenChangelog: null,
+      judge0ApiKey: null, // RapidAPI Judge0 CE key — candidate-supplied, never shipped by the app
     });
   },
   setSettings(s) { return write('settings', { ...this.getSettings(), ...s }); },

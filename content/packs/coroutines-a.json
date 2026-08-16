@@ -16,9 +16,9 @@
       ],
       "q": "What does the compiler actually do to a `suspend` function?",
       "shortAnswer": [
-        "It rewrites the function using CPS: a hidden `Continuation` parameter is appended to the signature.",
-        "The body becomes a state machine — each suspension point is a labelled state, and locals that survive suspension become fields on that state machine object.",
-        "Suspending does **not** block a thread: the function returns the `COROUTINE_SUSPENDED` marker and the thread is released until `resumeWith` is called."
+        "The compiler rewrites the function in CPS style, adding a hidden `Continuation` parameter to the signature.",
+        "The body turns into a state machine: each suspension point is a labelled state, and surviving locals become fields on that object.",
+        "Suspending does **not** block a thread. The function returns the `COROUTINE_SUSPENDED` marker, and the thread is free until `resumeWith` is called."
       ],
       "answer": "#### Continuation-Passing Style\n`suspend fun load(id: String): User` compiles to roughly `Object load(String id, Continuation<User> cont)`. That extra parameter is how the coroutine machinery knows where to resume.\n\n#### The state machine\nThe compiler splits the body at every suspension point and generates a class implementing `Continuation`, with:\n- an `int label` field tracking which state to run next,\n- fields for every local variable that must survive a suspension,\n- an `invokeSuspend` method containing a `switch (label)` over the states.\n\nWhen a suspension point is reached, the function stores its state, returns the sentinel `COROUTINE_SUSPENDED`, and **the thread goes back to the pool**. Later, whatever completes the work calls `continuation.resumeWith(result)`, which re-enters `invokeSuspend` at the next label.\n\n#### Why this matters in an interview\n1. **No thread is blocked.** This is the whole point — thousands of concurrent coroutines on a handful of threads. A blocking JDBC or `Thread.sleep` call inside a coroutine defeats it entirely; that's what `Dispatchers.IO` and `withContext` are for.\n2. **`suspend` alone is not concurrency.** Calling two suspend functions in sequence is sequential. `async`/`launch` create concurrency; `suspend` only marks a function as *suspendable*.\n3. **`suspend` is a compile-time contract.** A suspend function can only be called from another suspend function or a coroutine builder — the compiler enforces the presence of a `Continuation`.\n4. Only one object is allocated per coroutine invocation chain, which is why coroutines are far cheaper than threads (~1KB stack-free vs ~1MB thread stack).",
       "code": [
@@ -44,7 +44,8 @@
           "checked": "2026-08-07"
         }
       ],
-      "addedIn": "2026.08.1"
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0002",
@@ -59,9 +60,9 @@
       ],
       "q": "What is structured concurrency, and what does `coroutineScope` vs `supervisorScope` change?",
       "shortAnswer": [
-        "Every coroutine has a parent; a scope does not complete until all its children complete, and cancelling a parent cancels all children.",
-        "`coroutineScope` — one child failing cancels its siblings and rethrows to the caller.",
-        "`supervisorScope` — failures do not propagate sideways; siblings keep running and each child handles its own error."
+        "Every coroutine has a parent. A scope waits for all its children to finish, and cancelling the parent cancels the whole tree.",
+        "`coroutineScope` — one child failing cancels its siblings and rethrows the error to the caller.",
+        "`supervisorScope` — failures do not spread sideways. Siblings keep running, and each child handles its own error."
       ],
       "answer": "Structured concurrency means coroutines form a tree, not a set of orphan tasks. Three guarantees follow:\n1. A scope's `suspend` block does not return until every child has finished.\n2. Cancelling the parent cancels the whole subtree.\n3. An uncaught failure in a child propagates up (unless a supervisor stops it).\n\nThis is what makes leaks structurally impossible: when a `viewModelScope` is cleared, every request it started dies with it.\n\n#### coroutineScope vs supervisorScope\n\n| | `coroutineScope` | `supervisorScope` |\n|---|---|---|\n| Child fails | cancels all siblings, rethrows | siblings keep running |\n| Use for | work where partial results are useless | independent tasks (analytics + prefetch + refresh) |\n\nThe same distinction applies at scope-construction time: `CoroutineScope(SupervisorJob() + Dispatchers.Main)` gives you a scope whose direct children are independent. `viewModelScope` and `lifecycleScope` both use a `SupervisorJob` for exactly this reason.\n\n#### The subtlety people miss\n`supervisorScope` only stops propagation **from direct children**. If a child launches its own grandchildren with a regular `Job`, a grandchild failure still cancels that child. And `async` inside a `supervisorScope` still throws at `await()` — the supervisor stops sibling cancellation, not the exception itself.\n\n#### Cancellation is cooperative\nCancellation sets a flag and makes suspension points throw `CancellationException`. Code that never suspends never notices: a tight CPU loop keeps running. Insert `ensureActive()` or `yield()`, or check `isActive`.",
       "code": [
@@ -92,7 +93,8 @@
           "checked": "2026-08-07"
         }
       ],
-      "addedIn": "2026.08.1"
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0003",
@@ -106,9 +108,9 @@
       ],
       "q": "How do exceptions propagate differently between `launch` and `async`?",
       "shortAnswer": [
-        "`launch` throws immediately into the parent job, which cancels the tree and eventually reaches a `CoroutineExceptionHandler`.",
-        "`async` stores the exception in its `Deferred`; it is rethrown when you call `await()` — but with a non-supervisor parent it *also* cancels the parent right away.",
-        "`CoroutineExceptionHandler` only works on the scope's root coroutine, and never on `async`."
+        "`launch` sends the exception straight to the parent job, which cancels the tree and passes the error to a `CoroutineExceptionHandler`.",
+        "`async` stores the exception in its `Deferred`. `await()` rethrows it, but under a normal parent the failure also cancels the parent right away.",
+        "A `CoroutineExceptionHandler` only fires on the scope's root coroutine, and it never applies to `async`."
       ],
       "answer": "#### launch\nAn uncaught exception in `launch` is treated as an unhandled failure: it cancels the parent job, which cancels all siblings, and then travels to the nearest `CoroutineExceptionHandler` in the context (or the thread's default handler → crash).\n\n#### async\nThe exception is captured into the `Deferred`. Nothing happens until `await()`, which rethrows it. **But** if the `async`'s parent is a regular `Job`, the failure *also* propagates to the parent immediately, independent of `await()`. So `async { error(\"x\") }` inside a regular scope crashes even if you never await. Under a `SupervisorJob`/`supervisorScope`, the failure is held until `await()`.\n\n#### CoroutineExceptionHandler placement\nIt is only consulted for a coroutine that is the **root** of its scope. Putting one in the context of a nested `launch` does nothing — the exception has already been delegated to the parent. Install it on the scope, or on the top-level `launch`.\n\n#### The practical Android pattern\nDon't lean on the handler for domain errors. Model expected failures as data (`Result`, a sealed `UiState`) and reserve the handler for last-resort logging.",
       "code": [
@@ -134,7 +136,8 @@
           "checked": "2026-08-07"
         }
       ],
-      "addedIn": "2026.08.1"
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0004",
@@ -148,9 +151,9 @@
       ],
       "q": "Compare `Dispatchers.Main`, `Default`, `IO`, and `Unconfined`. When do you switch?",
       "shortAnswer": [
-        "`Main` = UI thread (`Main.immediate` avoids a re-dispatch if already there); `Default` = CPU-bound, pool sized to cores; `IO` = blocking IO, elastic to 64 threads; `Unconfined` = no confinement, test/edge use only.",
-        "`Default` and `IO` share the same underlying thread pool, so switching between them is cheap and does not create threads.",
-        "The rule: a suspend function should be **main-safe** — the caller shouldn't have to know which dispatcher to use."
+        "`Main` is the UI thread (`Main.immediate` skips re-dispatch when already there); `Default` is CPU-bound and sized to cores; `IO` is for blocking calls, elastic to 64 threads.",
+        "`Unconfined` has no confinement — for tests and edge cases only. `Default` and `IO` share one pool, so switching between them is cheap and creates no threads.",
+        "The rule: a suspend function should be **main-safe**, so the caller never has to choose a dispatcher."
       ],
       "answer": "#### The four\n- **`Main`** — the Android UI thread. `Main.immediate` executes inline when you're already on the main thread, avoiding an unnecessary post to the message queue (matters in Compose and in tight update loops).\n- **`Default`** — CPU-bound work: parsing, sorting, image processing. Parallelism = number of cores (minimum 2).\n- **`IO`** — designed for *blocking* calls: disk, network with a blocking client, SQLite, `File`. Elastic up to 64 threads by default because those threads are mostly parked in a blocking call.\n- **`Unconfined`** — starts in the caller's thread and resumes in whatever thread the continuation completes on. Almost never correct in app code.\n\n`IO` and `Default` share one pool; `withContext(Dispatchers.IO)` from `Default` just changes the parallelism limit, it doesn't spin up a thread. `limitedParallelism(n)` gives you a private slice — useful to cap concurrent network calls.\n\n#### Main safety\nA well-behaved suspend function does its own dispatching so callers can invoke it from anywhere: `suspend fun load() = withContext(ioDispatcher) { … }`. The caller in the ViewModel then just writes `val data = repo.load()` on the main dispatcher. Pushing `withContext` into the caller is a design smell.\n\n#### Injecting dispatchers\nHardcoding `Dispatchers.IO` inside a class makes it untestable. Inject a dispatcher (or a small `DispatcherProvider`) so tests can supply a `TestDispatcher`.\n\n#### Retrofit / Room note\nRetrofit `suspend` functions and Room `suspend`/`Flow` queries are already main-safe — they dispatch internally. Wrapping them in `withContext(Dispatchers.IO)` is redundant and a common thing interviewers probe.",
       "code": [
@@ -182,7 +185,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0005",
@@ -196,9 +199,9 @@
       ],
       "q": "Cold vs hot flows — what's the difference, and where does each belong?",
       "shortAnswer": [
-        "A cold flow re-runs its producer block for **every** collector; nothing happens until someone collects.",
-        "A hot flow (`StateFlow`, `SharedFlow`) emits regardless of collectors, and all collectors share one upstream.",
-        "Cold for one-shot/per-collector work (a network call, a Room query); hot for shared state and events."
+        "A cold flow runs its producer block again for **every** collector. Nothing happens until someone collects.",
+        "A hot flow (`StateFlow`, `SharedFlow`) emits even with no collectors, and all collectors share one upstream.",
+        "Use cold for per-collector work like a network call or Room query; use hot for shared state and events."
       ],
       "answer": "#### Cold\n`flow { … }`, `flowOf`, Room's `Flow` queries, Retrofit-backed flows. The builder block runs once per collector. Two collectors on the same cold flow = two network calls. This is usually what you want in a repository: each screen gets its own stream.\n\n#### Hot\n- **`StateFlow`** — a conflated flow that always has a current value. Distinct-until-changed by design (equal consecutive values are dropped). Perfect for UI state. Because it conflates, a fast producer's intermediate values can be skipped — fine for state, wrong for events.\n- **`SharedFlow`** — configurable `replay`, `extraBufferCapacity`, `onBufferOverflow`. No initial value. Use for one-shot events (navigate, show snackbar) where every emission matters.\n\n#### Turning cold into hot\n`stateIn` / `shareIn` attach a cold flow to a scope and share the upstream across collectors: `val uiState = repo.observeUser().map { it.toUiState() }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState.Loading)`.\n\n**`WhileSubscribed(5_000)` is the interview answer to know.** The upstream stays alive for 5 seconds after the last collector disappears. That survives a configuration change (rotation drops and re-adds the collector in well under 5 s) without keeping a database or socket open forever when the user actually leaves. `SharingStarted.Eagerly` never stops; `Lazily` starts on first collector and never stops.\n\n#### The event problem\nDon't model one-shot events as `StateFlow` — a re-collection after rotation replays the last value and you navigate twice. Use `SharedFlow(replay = 0)`, or better, put events in the state as a list of pending effects that the UI consumes and acknowledges.",
       "code": [
@@ -230,7 +233,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0006",
@@ -244,9 +247,9 @@
       ],
       "q": "`flatMapLatest` vs `flatMapMerge` vs `flatMapConcat` — and what do `buffer`, `conflate`, and `flowOn` do?",
       "shortAnswer": [
-        "`flatMapLatest` cancels the previous inner flow on each new value (search-as-you-type); `flatMapMerge` runs inners concurrently; `flatMapConcat` runs them strictly in order.",
-        "`buffer` decouples producer and collector with a channel; `conflate` keeps only the latest value when the collector is slow.",
-        "`flowOn` changes the context of everything **upstream** of it — it never affects downstream operators or the collector."
+        "`flatMapLatest` cancels the previous inner flow on each new value (search-as-you-type). `flatMapMerge` runs inners concurrently; `flatMapConcat` waits for each in order.",
+        "`buffer` separates producer and collector with a channel; `conflate` keeps only the newest value when the collector is slow.",
+        "`flowOn` changes the context of everything **upstream** of it. It never affects downstream operators or the collector."
       ],
       "answer": "#### The flatMap family\n| Operator | On a new upstream value | Typical use |\n|---|---|---|\n| `flatMapLatest` | cancel the in-flight inner flow, start a new one | search-as-you-type, switching users |\n| `flatMapMerge` | start a new inner flow, keep the old ones running (concurrency configurable) | fan-out fetches |\n| `flatMapConcat` | queue — wait for the current inner flow to finish | strict ordering, sequential sync |\n\n`mapLatest` and `collectLatest` follow the same cancel-the-previous rule for non-flow bodies.\n\n#### Backpressure operators\n- **`buffer(n)`** — the producer no longer waits for the collector; emissions go into a channel. Turns a sequential producer→collector pipeline into a concurrent one.\n- **`conflate()`** — a `buffer` that keeps only the newest value; the collector always processes the most recent state, skipping intermediates. Same semantics `StateFlow` has built in.\n- **`debounce(t)`** — only emit after `t` of quiet. Perfect for text input.\n- **`sample(t)`** — emit the latest value every `t`. Good for high-frequency sensors or scroll positions.\n- **`distinctUntilChanged()`** — drop consecutive equals.\n\n#### flowOn\nFlow context preservation means a flow cannot change the collector's context from inside — that would break structured concurrency. `flowOn(Dispatchers.IO)` changes the context of the operators **above** it only:\n\n- `flow { readFile() }` — runs on IO\n- `.map { parse(it) }` — runs on IO\n- `.flowOn(Dispatchers.IO)` — switches the segment above this point\n- `.map { render(it) }` — runs wherever the collector is\n- `.collect { … }` — collector's context\n\nMultiple `flowOn` calls each govern their own upstream segment.",
       "code": [
@@ -273,7 +276,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0007",
@@ -288,9 +291,9 @@
       ],
       "q": "How do you collect a Flow safely with respect to the Android lifecycle?",
       "shortAnswer": [
-        "In Views: `repeatOnLifecycle(Lifecycle.State.STARTED)` inside `viewLifecycleOwner.lifecycleScope` — it cancels collection on STOP and restarts on START.",
-        "In Compose: `collectAsStateWithLifecycle()`, not plain `collectAsState()`.",
-        "The failure mode without this: the app keeps collecting (and keeps the upstream alive) while backgrounded, wasting battery and sometimes touching destroyed views."
+        "In Views: `repeatOnLifecycle(Lifecycle.State.STARTED)` inside `viewLifecycleOwner.lifecycleScope`. Collection stops at STOP and restarts at START.",
+        "In Compose, use `collectAsStateWithLifecycle()`, not plain `collectAsState()`.",
+        "Without it, the app keeps collecting while backgrounded, keeping the upstream alive, wasting battery, and possibly touching destroyed views."
       ],
       "answer": "#### Views / Fragments\n`lifecycleScope.launch { flow.collect { } }` is **not** enough — that scope only cancels at `onDestroy`, so you keep collecting while the app is in the background.\n\n`repeatOnLifecycle(STARTED)` suspends until the lifecycle reaches STARTED, runs the block, cancels it at STOPPED, and re-runs it on the next START. Use `viewLifecycleOwner` in a Fragment (not `this`) — the fragment outlives its view across back-stack transactions, and using the wrong owner leaks the view.\n\nNote `repeatOnLifecycle` never returns until the lifecycle is destroyed, so anything you write after it in the same `launch` won't run. Launch each collector separately, or nest multiple collects inside one `repeatOnLifecycle`.\n\n#### Compose\n`collectAsState()` collects for as long as the composition is alive, including while the app is backgrounded. `collectAsStateWithLifecycle()` (from `lifecycle-runtime-compose`) ties collection to the lifecycle, which is the correct default for anything coming from a ViewModel.\n\n#### Pairing with WhileSubscribed\nThe lifecycle-aware collector plus `stateIn(..., WhileSubscribed(5_000), ...)` is the standard combination: collection stops on background, and 5 s later the upstream (database cursor, socket, location updates) stops too. A rotation reconnects well inside the window, so nothing is torn down and rebuilt needlessly.",
       "code": [
@@ -316,7 +319,8 @@
           "checked": "2026-08-07"
         }
       ],
-      "addedIn": "2026.08.1"
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "co-0008",
@@ -331,9 +335,9 @@
       ],
       "q": "How do you test coroutines and flows deterministically?",
       "shortAnswer": [
-        "`runTest { }` gives a `TestScope` with a virtual clock — `delay(10_000)` completes instantly and deterministically.",
-        "Inject dispatchers so production code uses a `StandardTestDispatcher`/`UnconfinedTestDispatcher` in tests; set `Dispatchers.setMain(...)` for `viewModelScope`.",
-        "Use Turbine (`flow.test { awaitItem() }`) for flow assertions instead of collecting into a list with a timeout."
+        "`runTest { }` gives a `TestScope` with a virtual clock, so `delay(10_000)` completes instantly and deterministically.",
+        "Inject dispatchers so tests can use `StandardTestDispatcher` or `UnconfinedTestDispatcher`. Use `Dispatchers.setMain(...)` for `viewModelScope`.",
+        "Assert flows with Turbine (`flow.test { awaitItem() }`) instead of collecting into a list with a timeout."
       ],
       "answer": "#### The virtual clock\n`runTest` runs on a `TestCoroutineScheduler`. Any `delay` is skipped by advancing virtual time, so a test involving a 30-second timeout runs in microseconds and never flakes.\n- `advanceUntilIdle()` — run everything queued until nothing is left.\n- `advanceTimeBy(ms)` — move the clock a fixed amount.\n- `runCurrent()` — execute tasks scheduled for the current instant only.\n\n#### Choosing a test dispatcher\n- **`StandardTestDispatcher`** (default in `runTest`) — coroutines queue and run only when you advance the clock. Best for asserting intermediate states, e.g. that Loading is emitted before Content.\n- **`UnconfinedTestDispatcher`** — coroutines start eagerly and run to their first real suspension. Convenient when you only care about the end result.\n\n#### ViewModels\n`viewModelScope` is hardwired to `Dispatchers.Main`, so you must replace it: `@Before fun setUp() = Dispatchers.setMain(StandardTestDispatcher())` and `@After fun tearDown() = Dispatchers.resetMain()`. A JUnit rule is the usual way to avoid repeating that.\n\n#### Flows with Turbine\nCollecting a hot flow in a test is awkward: it never completes. Turbine gives structured assertions with built-in timeouts and an unconsumed-event check at the end.\n\n#### Fakes over mocks\nFor repositories and data sources, a hand-written fake backed by a `MutableStateFlow` is more readable and less brittle than mocking suspend functions, and it lets you drive emissions from the test.",
       "code": [
@@ -365,7 +369,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     }
   ]
 }

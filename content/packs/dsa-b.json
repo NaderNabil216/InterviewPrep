@@ -16,6 +16,11 @@
         "sorting"
       ],
       "q": "3Sum — all unique triplets summing to zero",
+      "shortAnswer": [
+        "Return all unique triplets summing to zero, with no duplicate triplets in the result.",
+        "Sort, fix each anchor, break early once it turns positive, then solve the remaining two-sum with two pointers.",
+        "The dedup gotcha: skip equal anchors and advance past duplicates after a hit — no `HashSet`. Time O(n²), space O(1) beyond output."
+      ],
       "prompt": "Given an integer array, return all **unique** triplets `[a, b, c]` such that `a + b + c == 0`. The solution set must not contain duplicate triplets.\n\nThe interviewer is watching for two things: that you reduce this to a known subproblem, and that you handle deduplication without a `HashSet` of sorted triplets (which works but signals you didn't find the clean way).",
       "hints": [
         "The brute force is three nested loops, O(n³). If you fix one element, what does the remaining problem become?",
@@ -49,7 +54,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "threeSum(intArrayOf(-1, 0, 1, 2, -1, -4))"
     },
     {
       "id": "ds-0008",
@@ -63,6 +69,11 @@
         "optimization"
       ],
       "q": "Koko eating bananas — minimum speed to finish in H hours",
+      "shortAnswer": [
+        "Find the minimum eating speed `k` so Koko finishes all piles within `h` hours.",
+        "Binary search the answer space from 1 to `max(piles)`: the predicate `hoursAt(k) <= h` is monotonic, so search finds the leftmost workable speed.",
+        "The insight is searching speeds, not the array; use ceil division without floating point. Time O(n log m), space O(1)."
+      ],
       "prompt": "Koko has `piles` of bananas and `h` hours. She picks an eating speed `k` (bananas/hour); each hour she eats from one pile, and if that pile has fewer than `k` left she finishes it and waits. Return the **minimum** `k` that lets her finish all piles within `h` hours.\n\nThis is the canonical \"binary search on the answer\" problem. Recognizing that the search space is the *answer range* rather than the input array is the whole insight, and it generalizes to a large family of questions.",
       "hints": [
         "You're not searching the array — you're searching the possible values of `k`. What's the valid range for `k`?",
@@ -97,7 +108,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "minEatingSpeed(intArrayOf(3, 6, 7, 11), 8)"
     },
     {
       "id": "ds-0009",
@@ -111,6 +123,11 @@
         "array"
       ],
       "q": "Daily temperatures — days until a warmer day",
+      "shortAnswer": [
+        "For each day, report how many days you wait for a warmer temperature, or 0 if there is none.",
+        "Keep a monotonic decreasing stack of indices; when a warmer day arrives, pop every colder unresolved index and record the distance.",
+        "The amortized argument is what interviewers probe: each index pushes and pops once, so the while loop is O(n) total, not O(n²)."
+      ],
       "prompt": "Given daily temperatures, return an array where `answer[i]` is the number of days you must wait after day `i` for a warmer temperature. If there is none, put `0`.\n\nThe monotonic stack is one of the highest-leverage patterns to recognize: next-greater-element, largest rectangle in a histogram, trapping rain water, and stock spans are all the same machine.",
       "hints": [
         "Brute force is O(n²): for each day scan forward. What work is being repeated across those scans?",
@@ -144,7 +161,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "dailyTemperatures(intArrayOf(73, 74, 75, 71, 69, 72, 76, 73)).contentToString()"
     },
     {
       "id": "ds-0010",
@@ -159,6 +177,11 @@
         "sorting"
       ],
       "q": "Top K frequent elements",
+      "shortAnswer": [
+        "Return the `k` most frequent elements from an array, in any order.",
+        "Count frequencies in a map, then keep a size-`k` min-heap that evicts the smallest frequency, or bucket by frequency for O(n).",
+        "The gotcha: it's a min-heap, so the smallest count gets evicted — O(m log k). Buckets are O(n) but don't handle streams."
+      ],
       "prompt": "Given an integer array and an integer `k`, return the `k` most frequent elements, in any order.\n\nThe interviewer wants the frequency-map insight, then a considered choice between sorting, a heap, and bucket sort — and an honest complexity statement for each.",
       "hints": [
         "First step is always the same: count frequencies with a hash map. Now the question is how to pick the top k from those counts.",
@@ -169,7 +192,7 @@
         {
           "lang": "kotlin",
           "caption": "Min-heap of size k — O(m log k)",
-          "src": "fun topKFrequent(nums: IntArray, k: Int): IntArray {\n    val counts = nums.toList().groupingBy { it }.eachCount()\n\n    // Min-heap on frequency: the smallest frequency sits on top and gets evicted\n    val heap = PriorityQueue<Map.Entry<Int, Int>>(compareBy { it.value })\n    for (entry in counts.entries) {\n        heap.offer(entry)\n        if (heap.size > k) heap.poll()\n    }\n    return heap.map { it.key }.toIntArray()\n}"
+          "src": "import java.util.PriorityQueue\n\nfun topKFrequent(nums: IntArray, k: Int): IntArray {\n    val counts = nums.toList().groupingBy { it }.eachCount()\n\n    // Min-heap on frequency: the smallest frequency sits on top and gets evicted\n    val heap = PriorityQueue<Map.Entry<Int, Int>>(compareBy { it.value })\n    for (entry in counts.entries) {\n        heap.offer(entry)\n        if (heap.size > k) heap.poll()\n    }\n    return heap.map { it.key }.toIntArray()\n}"
         },
         {
           "lang": "kotlin",
@@ -197,7 +220,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "topKFrequent(intArrayOf(1, 1, 1, 2, 2, 3), 2).contentToString()"
     },
     {
       "id": "ds-0011",
@@ -212,6 +236,11 @@
         "bfs"
       ],
       "q": "Course schedule — can you finish all courses?",
+      "shortAnswer": [
+        "Return whether all courses can be finished given prerequisite pairs — cycle detection in a directed graph.",
+        "Kahn's algorithm: count in-degrees, enqueue the zero-degree nodes, pop one, and decrement neighbors; fewer than `numCourses` processed means a cycle.",
+        "The follow-up order comes free: the processed list is a valid topological order. Time O(V + E), space O(V + E)."
+      ],
       "prompt": "There are `numCourses` courses labelled `0..numCourses-1` and a list of prerequisite pairs `[a, b]` meaning you must take `b` before `a`. Return whether it's possible to finish every course.\n\nThis is cycle detection in a directed graph, dressed up. The follow-up (\"return a valid order\") is a two-line change, so be ready for it.",
       "hints": [
         "Model it as a graph. What does a prerequisite pair mean as an edge, and what makes the schedule impossible?",
@@ -245,7 +274,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "run { canFinish(2, arrayOf(intArrayOf(1, 0))).toString() + \" / \" + canFinish(2, arrayOf(intArrayOf(1, 0), intArrayOf(0, 1))).toString() }"
     },
     {
       "id": "ds-0012",
@@ -261,6 +291,11 @@
         "matrix"
       ],
       "q": "Number of islands",
+      "shortAnswer": [
+        "Count connected land regions in a grid, where land touches only horizontally or vertically.",
+        "Scan every cell; on unvisited land, increment the count and flood-fill everything reachable, marking visited by zeroing the grid.",
+        "Mark cells visited immediately on enqueue, or you double count. Iterative BFS avoids stack overflow on big grids; time O(m·n)."
+      ],
       "prompt": "Given an `m x n` grid of `'1'` (land) and `'0'` (water), count the islands. An island is land connected horizontally or vertically, surrounded by water.\n\nThe most common grid-traversal question. Solve it with DFS/BFS flood fill, then be ready to discuss union-find — the follow-up is usually a streaming variant where union-find wins.",
       "hints": [
         "Each island is a connected component. How do you count connected components in a graph?",
@@ -295,7 +330,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "numIslands(arrayOf(charArrayOf('1','1','0','0','0'), charArrayOf('1','1','0','0','0'), charArrayOf('0','0','1','0','0'), charArrayOf('0','0','0','1','1')))"
     },
     {
       "id": "ds-0013",
@@ -309,6 +345,11 @@
         "recursion"
       ],
       "q": "Subsets and combination sum — the backtracking template",
+      "shortAnswer": [
+        "Return all subsets of distinct integers, plus all combinations summing to a target with unlimited reuse — one backtracking template.",
+        "Backtracking is choose, explore, un-choose. Subsets recurse on `i + 1`; combination sum recurses on the same `i` to allow reuse.",
+        "That one-character difference is the whole distinction. The sort plus early break prunes combination sum; output size is inherently exponential."
+      ],
       "prompt": "Two problems that share one template:\n\n1. **Subsets** — return all possible subsets (the power set) of a set of distinct integers.\n2. **Combination Sum** — given distinct candidates and a target, return all unique combinations summing to the target. The same candidate may be reused unlimited times.\n\nLearn the template once and most backtracking questions become bookkeeping.",
       "hints": [
         "Backtracking is: choose → explore → un-choose. Write those three lines and the structure follows.",
@@ -343,7 +384,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "run { subsets(intArrayOf(1, 2)).toString() + \" / \" + combinationSum(intArrayOf(2, 3, 6, 7), 7).toString() }"
     },
     {
       "id": "ds-0014",
@@ -357,6 +399,11 @@
         "two-pointers"
       ],
       "q": "Linked list toolkit — reverse, detect a cycle, find the middle",
+      "shortAnswer": [
+        "Reverse a singly linked list, detect a cycle and its entry, and find the middle — three primitives, all O(n) time and O(1) space.",
+        "Reverse with prev, current, and a saved next. Floyd's slow and fast pointers detect cycles; after meeting, walk both from the head to find it.",
+        "The gotcha is saving `next` before overwriting `current.next`, and comparing nodes with `===` in Kotlin. The same slow and fast trick finds the middle."
+      ],
       "prompt": "Three linked-list primitives that compose into most list questions:\n\n1. **Reverse** a singly linked list, iteratively.\n2. **Detect a cycle** and return the node where it begins.\n3. **Find the middle** node in one pass.\n\nIf you can write all three without hesitation, you can build reorder-list, palindrome-list, and merge-k-lists from them on the spot.",
       "hints": [
         "Reversal: you need three pointers — previous, current, and a saved next. Losing `next` before you overwrite `current.next` is the classic bug.",
@@ -391,7 +438,8 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "sampleCall": "run {\n    val a = ListNode(1); val b = ListNode(2); val c = ListNode(3)\n    a.next = b; b.next = c; c.next = b          // cycle: b is the entry\n    val rev = reverse(ListNode(1).apply { next = ListNode(2).apply { next = ListNode(3) } })\n    val vals = buildList { var n = rev; while (n != null) { add(n.v); n = n.next } }\n    \"$vals / cycleAt=${detectCycle(a)?.v}\"\n}"
     }
   ]
 }

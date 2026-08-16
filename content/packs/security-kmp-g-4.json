@@ -17,9 +17,9 @@
       ],
       "q": "How do you test shared code in a KMP project, and where do build times and CI actually hurt?",
       "shortAnswer": [
-        "Common tests live in commonTest with kotlin.test — the same @Test annotation and assertions compile for every target, so the shared logic is verified once and runs on all of them.",
-        "Platform seams get their own test source sets — the Android host tests run on a local JVM, iOS tests run a native test binary on the simulator — and MockEngine lets you test Ktor clients without a network.",
-        "The real pain is compile time: every native target compiles independently, so CI runs the target matrix in parallel, leans on the Gradle build cache and configuration cache, and does not rebuild the iOS framework for pure common-code changes."
+        "Common tests live in `commonTest` with kotlin.test — the same `@Test` and assertions compile for every target, so shared logic is verified once.",
+        "Platform seams get their own tests: Android on a local JVM, iOS a native binary on the simulator, and `MockEngine` for networking without a network.",
+        "The real pain is compile time: every native target compiles separately, so CI runs them in parallel and uses Gradle's build and configuration cache."
       ],
       "answer": "#### Where tests live\n`commonTest` holds the shared suite, written against `kotlin.test` — `@Test`, `assertEquals`, and friends compile for every target, so one test set verifies the domain once. Platform seams get their own source sets: the Android host test set runs on a local JVM (Android-specific unit tests), and `iosTest` compiles a native test binary the Kotlin/Native runner executes on the simulator. Networking is covered the same everywhere with Ktor's `MockEngine` serving canned responses, and `kotlinx-coroutines-test` gives `StandardTestDispatcher` in common code. Keep platform-specific behavior — secure storage, biometrics — out of commonTest and in the per-platform suites.\n\n#### Where CI hurts\nEach native target is a full independent compilation, so a KMP module multiplies build work. The CI design is the cost center: run targets in parallel (host JVM tests and `iosSimulatorArm64Test` on macOS), use the Gradle build cache and configuration cache so the common compile is reused, and avoid compiling iOS targets you do not ship — the simulator target is usually enough for CI. Flaky simulator tests and slow link steps are the other classic sinks.\n\nThe interview point: KMP gives you one suite but multiplies the build graph, and a good answer names the testing seams and the CI economics, not just 'we test common code'.",
       "code": [
@@ -50,7 +50,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0035",
@@ -66,9 +67,9 @@
       ],
       "q": "Compose Multiplatform for iOS is stable now — what is actually stable, what still differs from Android, and when do you pick it over SwiftUI?",
       "shortAnswer": [
-        "CMP renders its own pixels through Skiko onto Metal — it does not produce UIKit views — and the core runtime, foundation, material, and layout stack are stable and production-grade in the 1.11 line.",
-        "What still differs is platform plumbing and feel: navigation and back-gesture conventions, accessibility and text-rendering edge cases, and anything UIKit-specific, which you bridge through UIKitView interop from iosMain.",
-        "Choose CMP when one Kotlin team wants maximal shared code and can accept non-native rendering; choose SwiftUI when native feel, accessibility, or iOS integrations and a Swift-first team matter more than sharing pixels."
+        "CMP draws its own pixels via Skiko onto Metal — not UIKit views — and core runtime, foundation, material, and layout are stable in 1.11.",
+        "What still differs is platform feel: back-gesture conventions, accessibility and text-rendering edge cases, and UIKit-specific parts, bridged via `UIKitView` from `iosMain`.",
+        "Choose CMP when one Kotlin team wants maximum shared code and accepts non-native rendering; SwiftUI when native feel, accessibility, or a Swift-first team matters more."
       ],
       "answer": "#### What is stable\nCompose Multiplatform for iOS is stable — the 1.11 line is current, 1.12 is in beta. The core that carries production apps is stable: runtime, foundation, material3, animation, and resources, with the modern Kotlin/Native GC so there is no freeze ceremony. The KMP Jetpack layer (ViewModel, Lifecycle, Navigation) works in common code, and Compose previews are now fully multiplatform. Do not undersell it: teams ship whole apps on this stack.\n\n#### What still differs\nThe honest list: CMP draws every pixel itself via Skiko onto Metal, so there is no native UIKit text, layout, or accessibility stack underneath. That means platform feel, font metrics, and VoiceOver integration need deliberate work and testing. iOS conventions are emulated rather than inherited — the back gesture is CMP's own, and pull-to-refresh, sheets, haptics, and system surfaces need interop (`UIKitView` for views, `UIViewController` interop for screens) in `iosMain`. Hot reload and preview tooling are younger than SwiftUI's, and complex text or long lists should be profiled before you trust them.\n\n#### When vs SwiftUI\nPick CMP when you have one Kotlin team and the shared logic dominates — one UI implementation and one language beat pixel-native fidelity. Pick SwiftUI when the iOS experience is a product surface (media, social, navigation), accessibility is a hard requirement, or the iOS team is Swift-first: hiring and review culture usually outweigh the code-sharing win.",
       "code": [
@@ -99,7 +100,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0036",
@@ -115,9 +117,9 @@
       ],
       "q": "Your team has a real choice: share business logic only, or share the UI too with Compose Multiplatform. How do you frame that decision?",
       "shortAnswer": [
-        "Sharing logic is the low-risk slice with a fast payoff — one domain layer, one test suite — while each platform team keeps full control of experience and platform APIs.",
-        "Sharing UI multiplies the blast radius of every design and framework decision and puts iOS engineers on a JetBrains-rendered toolkit, so it is an organizational bet, not just an engineering one.",
-        "Decide on three axes: the size and velocity of the shared domain, the iOS team's willingness to work in Kotlin, and how much a pixel-native feel matters to the product."
+        "Sharing logic is the low-risk move: one domain layer, one test suite, while each platform team keeps control of the experience and platform APIs.",
+        "Sharing UI multiplies the blast radius of every framework decision and puts iOS engineers on a JetBrains-rendered toolkit — an organizational bet.",
+        "Decide on three axes: shared-domain size, the iOS team's willingness to work in Kotlin, and how much native feel the product needs."
       ],
       "answer": "#### The two levels\nLogic sharing is commonMain domain models, repositories, and use cases with native UIs on each side. It is cheap, reversible, and threatening to nobody's craft — the Jetpack KMP layer (Room, DataStore, ViewModel, Paging) makes it the default first move. UI sharing via CMP moves the design system, navigation, gestures, and localization into common code too. Now iOS engineers either learn Kotlin or stop owning the UI they ship; every Compose release is a cross-platform release, and every UIKit capability gap becomes a workaround in `iosMain`.\n\n#### The three axes\n1. **Shared domain substance** — is there a real brain (pricing rules, a sync engine, an offline mutation queue) worth one implementation? A thin CRUD client earns little sharing.\n2. **Team shape** — a single Kotlin-first mobile team makes CMP natural; a strong SwiftUI iOS team with a distinct design culture makes it an uphill sale no matter the technology.\n3. **Product feel** — content-heavy, media, and navigation apps pay more for native feel; forms, utilities, and back-office surfaces tolerate shared UI well.\n\n#### The framing interviewers want\nShare logic first, always. Add shared UI per screen where the product and the team both tolerate it — not as an all-or-nothing fork. The decision is a people decision wearing an engineering hat, and the candidate who says so is the one who gets the hire.",
       "code": [
@@ -148,7 +150,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0037",
@@ -164,9 +167,9 @@
       ],
       "q": "Compare KMP, Flutter, React Native, and fully native for a new mobile app — what are the real trade-offs, and how would you actually decide?",
       "shortAnswer": [
-        "KMP is incremental and native-true: it shares Kotlin logic, and optionally CMP UI, while keeping both platforms' native apps, UIs, and APIs — at the cost of two front ends and Kotlin hiring.",
-        "Flutter and React Native share the UI too but impose a whole runtime and language, trading pixel fidelity and platform depth for one codebase and one hiring pool — Flutter renders its own widgets, RN maps to native views.",
-        "Native wins on platform depth and feel and each platform's ecosystem — Apple's HealthKit, Android's widgets and foldables — and the real decision is how much shared code you need versus how much platform depth you give up."
+        "KMP is incremental and native-true: it shares Kotlin logic (and optionally CMP UI) while both apps stay native — the cost is two front ends.",
+        "Flutter draws its own widgets, while RN maps to native views — both add a whole runtime and language, trading fidelity and depth for one codebase.",
+        "Native wins on platform depth, feel, and ecosystem — HealthKit on Apple, widgets and foldables on Android. The real decision is sharing versus depth."
       ],
       "answer": "#### The axes that matter\nThe comparison only makes sense on how much code is shared, how much platform depth you surrender, and who is available to write it.\n\n#### KMP\nNative apps and UIs with a shared Kotlin logic layer, plus optional shared CMP UI. You keep every platform API — HealthKit on iOS, foldables on Android — and adoption is incremental. Costs: two UIs to maintain, Kotlin hiring, and a Swift boundary needing deliberate design (SKIE softens it). Best when you run both native apps and are tired of duplicating the domain.\n\n#### Flutter\nOne Dart codebase and one custom-rendered UI. Fast to build, consistent visual identity, strong tooling. Costs: the Dart ecosystem, a plugin layer, and UI that is not truly native in feel or accessibility; iOS integrations often lag Android. Best when visual consistency across platforms is the product.\n\n#### React Native\nOne JavaScript/TypeScript codebase mapping onto native views via the New Architecture. Huge ecosystem, fast iteration, native modules for depth. Costs: bridge-quality pitfalls, dependency churn, and an escape-hatch failure mode where you end up writing Swift and Kotlin anyway.\n\n#### Native\nMaximum depth, feel, and ecosystem per platform — two teams and two codebases; duplicated logic is the tax.\n\n#### Deciding\nScore against the company: shared-code fraction, platform depth, hiring pool, time-to-market. Deep domain and two native apps already shipped? KMP. One visual identity is the product? Flutter. A web-shaped team and speed dominate? RN. Each platform is a strategic surface? Native. There is no universal winner — it's a product and team argument.",
       "code": [
@@ -192,7 +195,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0038",
@@ -208,9 +212,9 @@
       ],
       "q": "Your company ships large native Android and iOS apps. How do you start adopting KMP in a shipping product, and how do you sell it to an iOS team?",
       "shortAnswer": [
-        "Start with one isolated, high-value module both apps already duplicate — networking, validation, or sync — extract it into a shared module, and wire it in as an ordinary dependency without touching either app's UI.",
-        "Keep the iOS engineers in control: they consume the shared code as a framework from Swift, with a reviewed generated-API boundary and SKIE-exported async signatures, and nobody is asked to write Kotlin before they choose to.",
-        "Sell it as 'stop maintaining the same logic twice' with a specific measured case — one bug fixed once instead of in two codebases — and let the first module's CI evidence argue for the next one."
+        "Start with one isolated, high-value module both apps duplicate — networking, validation, or sync — wired in as a normal dependency, leaving both UIs untouched.",
+        "Keep iOS engineers in control: they consume the framework from Swift behind a reviewed, SKIE-exported API — nobody writes Kotlin before they choose to.",
+        "Sell it as 'stop maintaining the same logic twice': one bug fixed once instead of twice. The first module's CI evidence argues for the next."
       ],
       "answer": "#### The entry point\nPick the module where duplication hurts most and the API surface is stable: a repository layer, a pricing or eligibility engine, an offline mutation queue. Create a KMP shared module from the Android Studio template, move that domain code in with its tests, and have the Android app depend on it like any Gradle module. On iOS the shared module compiles to a framework the existing app already consumes — nothing about the app's architecture changes. You have not adopted KMP globally; you have refactored one module into a language that happens to compile to two.\n\n#### The iOS-team sell\nThe objection is never whether it works — it is 'you are taking our code, our language, our culture.' Answer by not taking any of it. iOS engineers consume the framework from Swift; their review gate is the generated API surface, which SKIE makes async/await-native; they get veto power over what the boundary exports. Keep the hybrid model: the iOS team still owns its app, and the shared module is a dependency they can push back on. Bring the concrete duplicate-bug list — 'this crash was fixed on Android; you have been carrying it for six months.'\n\n#### Sequencing\nDo not migrate the biggest thing first. Land one low-risk module, prove CI on both platforms, then a second. Only after the logic-sharing muscle exists do you discuss shared UI. Keep the shared public API small and reviewable — a bad boundary is the only real way to lose.",
       "code": [
@@ -241,7 +245,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0039",
@@ -257,9 +262,9 @@
       ],
       "q": "You want an on-device AI feature. Compare the ML Kit GenAI APIs, Gemini Nano via AICore, and a cloud model — what actually differs in practice?",
       "shortAnswer": [
-        "ML Kit GenAI APIs are the easiest path: a high-level, task-focused interface — summarization, rewriting, proofreading, image understanding — built on Gemini Nano and tuned for those jobs.",
-        "AICore is the lower-level Android system service: you drive it through the AI Edge SDK's GenerativeModel for custom prompts and streaming, with availability gated to specific devices and models that AICore downloads and updates.",
-        "Cloud models beat on-device on capability and model size but cost per call, need connectivity, and send data off the device — so the trade-off is capability and latency against privacy, offline use, and cost."
+        "ML Kit GenAI APIs are the easiest path: high-level, task-focused interfaces for summarization, rewriting, proofreading, and image understanding, built on Gemini Nano.",
+        "AICore is the lower-level Android system service: the AI Edge SDK's `GenerativeModel` drives custom prompts and streaming, and AICore manages model downloads and updates.",
+        "Cloud models are more capable but cost per call, need connectivity, and send data off-device — the trade is capability versus privacy and offline use."
       ],
       "answer": "#### The three options\n**ML Kit GenAI APIs** build on AICore and give you task-scoped clients — summarization, rewriting, proofreading, image understanding — fed by natural-language requests. Google tunes quality and safety for each task, which makes this the fastest route to production with the smallest surface.\n\n**Gemini Nano via AICore** is the Android system service that manages the on-device model: it downloads and updates the model, runs inference on device hardware, and isolates prompts. You access it through the Google AI Edge SDK — build a `GenerativeModel`, call `generateContent()` or `generateContentStream()`, and you own the prompts and streaming. The cost is more moving parts and a heavier availability story.\n\n**Cloud (Gemini API / Firebase AI Logic)** gives you the strongest model and arbitrary task complexity, but every call costs money, needs a network, and ships data off the device.\n\n#### The deciding factors\nPrivacy and cost push you on-device: no network, no per-call fee, data never leaves the phone. Capability and task complexity push you to cloud, because on-device models are smaller and device-gated. Availability is the hard reality — Gemini Nano exists only on capable devices, so check support up front and design a fallback: hide the feature, degrade gracefully, or route to cloud. AICore manages model updates for you, so your app never downloads gigabytes.\n\n#### Product framing\nDesign for uncertainty: first-inference latency, a busy model, an offline device, and a model that can be wrong. The interview answer is the fallback UX and the availability gate more than the API call itself.",
       "code": [
@@ -290,7 +295,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0040",
@@ -305,9 +311,9 @@
       ],
       "q": "Credential Manager is the current sign-in API. What are passkeys, how does Credential Manager work, and how do you migrate off Smart Lock and one-tap sign-in?",
       "shortAnswer": [
-        "A passkey is a FIDO2/WebAuthn credential tied to device hardware: a key pair whose private key never leaves secure hardware and whose signing is gated by biometrics or the device lock.",
-        "Credential Manager unifies passkeys, saved passwords, and federated sign-in behind one API and one system bottom sheet — a GetCredentialRequest bundling GetPublicKeyCredentialOption and GetPasswordOption.",
-        "Smart Lock for Passwords and One Tap are deprecated and removed from the Google Play services auth SDK, so migration is swapping those client calls for Credential Manager and adding the server-side WebAuthn ceremony for passkeys."
+        "A passkey is a FIDO2/WebAuthn credential: a key pair whose private key never leaves secure hardware, with signing gated by biometrics or the device lock.",
+        "Credential Manager unifies passkeys, saved passwords, and federated sign-in behind one API and one system bottom sheet — one `GetCredentialRequest` bundling passkey and password options.",
+        "Smart Lock for Passwords and One Tap are gone from the auth SDK; migration swaps those calls for Credential Manager and adds server-side WebAuthn."
       ],
       "answer": "#### Passkeys in one minute\nA passkey is an asymmetric FIDO2 credential. The private key is generated in platform secure hardware and never exported; the public key goes to your server (your Relying Party). Sign-in is: your server issues a challenge, the device signs it with the private key after a user-presence check (biometric or PIN), and you verify the signature server-side. Because the challenge is bound to your origin, a fake site cannot replay a sign-in — that is the phishing-resistance, and it is why passkeys beat passwords plus MFA. Passkeys roam across devices through the user's password manager or Google account.\n\n#### Credential Manager mechanics\n`CredentialManager.create(context)` then `getCredential(activity, request)`. The request bundles options: `GetPublicKeyCredentialOption` for passkeys, `GetPasswordOption` for saved passwords, and you can add `GetGoogleIdTokenOption` for Sign in with Google — the system renders one bottom sheet and returns whichever credential type matches (`PublicKeyCredential` or `PasswordCredential`). Registration uses `CreatePublicKeyCredentialRequest` with your server's creation options. Since Android 14, third-party password and passkey providers are supported. `NoCredentialException` is the normal 'nothing saved yet' path, not a failure — route it to sign-up.\n\n#### The migration\nSmart Lock for Passwords was removed from `com.google.android.gms:play-services-auth`; One Tap and Google Sign-In now route through Credential Manager. Migration: replace the `CredentialsClient`/`IdSignInClient` calls with `CredentialManager`, keep your password backend, and add the WebAuthn registration and assertion endpoints server-side. Saved passwords remain visible because Credential Manager reads the same password store, and the Digital Asset Links you already shipped keep working.",
       "code": [
@@ -338,7 +344,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0041",
@@ -353,9 +360,9 @@
       ],
       "q": "You need to read a user's health and fitness data. What is Health Connect, how does its permission model work, and what does a basic integration look like?",
       "shortAnswer": [
-        "Health Connect is the on-device health and fitness data layer: a central store plus a Jetpack SDK that lets apps read and write structured records — steps, heart rate, sleep — with the user in control.",
-        "Access is per data type, not a blanket grant: you declare the exact record types in the manifest and Play Console, and the user approves each one through the Health Connect permission screen.",
-        "A basic flow is check availability with getSdkStatus, create a HealthConnectClient with getOrCreate, request permissions, then readRecords or insertRecords against typed record classes."
+        "Health Connect is the on-device health and fitness layer: a central store plus a Jetpack SDK for typed records, with the user in control.",
+        "Access is per data type, not a blanket grant: you declare the types in the manifest and Play Console, and the user approves each one.",
+        "Basic flow: check availability with `getSdkStatus`, create a client with `getOrCreate`, request permissions, then `readRecords` or `insertRecords` on typed record classes."
       ],
       "answer": "#### What it is\nHealth Connect is Android's health and fitness platform — a system-provided store plus the Jetpack `androidx.health.connect` SDK. Records are typed and structured: `StepsRecord`, `HeartRateRecord`, `SleepSessionRecord`, and more, each with metadata for source attribution. The point is one shared store so fitness apps, wearables, and the OS exchange data without every app owning a silo — and users get one place to manage who sees what.\n\n#### The permission model\nThis is the part to get right. You declare which data types you need in the manifest (`android.permission.health.READ_STEPS`, etc.) and in the Play Console policy, and the user grants per data type through the Health Connect permission screen — never a single broad grant. You check what is granted with `getGrantedPermissions` and request with `createRequestPermissionResultContract`. Two extras matter: `PERMISSION_READ_HEALTH_DATA_HISTORY` to read older than the default 30-day pre-grant window, and `PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND` for background sync.\n\n#### The basic integration\n1. `HealthConnectClient.getSdkStatus(context, providerPackage)` — on older devices Health Connect may not be installed; handle that surface.\n2. `HealthConnectClient.getOrCreate(...)`.\n3. Request permissions, then `readRecords(ReadRecordsRequest(...))` for raw records, `aggregate(...)` for totals, and `insertRecords(...)` to write. Catch the exceptions the methods document — `SecurityException` when a permission is missing is the common one, and permissions can be revoked later in Health Connect settings, so sync must pause and resume accordingly.",
       "code": [
@@ -386,7 +393,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0042",
@@ -402,9 +410,9 @@
       ],
       "q": "Walk me through Media3's architecture — how does ExoPlayer do adaptive streaming, DRM, and background playback with a MediaSession?",
       "shortAnswer": [
-        "Media3 is the current home of ExoPlayer: a Player interface with ExoPlayer as the default implementation, built from injected MediaSource, Renderer, TrackSelector, and LoadControl components.",
-        "Adaptive streaming means HLS or DASH manifests advertise multiple representations; the TrackSelector picks them and a BandwidthMeter feeds the LoadControl, so quality switches live without restarting playback.",
-        "For background playback the Player and MediaSession live in a MediaSessionService foreground service that system controls, Bluetooth, and Auto connect to, while your UI binds through a MediaController."
+        "Media3 is where ExoPlayer lives now: a `Player` interface with `ExoPlayer` as the default implementation, built from injected `MediaSource`, `Renderer`, `TrackSelector`, and `LoadControl` components.",
+        "Adaptive streaming means HLS or DASH manifests advertise several representations; the `TrackSelector` picks them and a `BandwidthMeter` feeds the `LoadControl`.",
+        "For background playback, the `Player` and `MediaSession` live in a `MediaSessionService` that system controls, Bluetooth, and Auto connect to; your UI binds via `MediaController`."
       ],
       "answer": "#### The component architecture\nExoPlayer is extensible by design. A `MediaItem` becomes a `MediaSource` via a `MediaSource.Factory` (DASH, HLS, progressive); `Renderer`s decode and present each track type — video, audio, text, metadata; the `TrackSelector` chooses which tracks; the `LoadControl` decides buffering. All are injected through `ExoPlayer.Builder`, so you can replace any of them without forking the player.\n\n#### Adaptive streaming\nWith HLS or DASH, the manifest describes several bitrate representations. ExoPlayer starts at a conservative rendition and adapts on the measured throughput from the `BandwidthMeter`, stepping up or down at segment boundaries via the adaptive `TrackSelector`. The player never restarts — it switches representations seamlessly. This is what makes video usable on mobile networks, and the honest trade-off is buffer size versus responsiveness.\n\n#### DRM\nProtected content: the `MediaItem` carries a DRM configuration — the UUID (Widevine CENC for most streaming), a license server URI, and license request properties. `DefaultDrmSessionManagerProvider` builds a `DrmSessionManager` that acquires and caches licenses, with `FrameworkMediaDrm` speaking to the platform's Widevine. Offline playback then means downloading media plus a license via `DownloadManager`/`DownloadService` — and handling license expiry.\n\n#### Background playback\nFor audio that must outlive the Activity, the `Player` and `MediaSession` live in a `MediaSessionService` — a foreground service declared with `FOREGROUND_SERVICE_MEDIA_PLAYBACK`. The session advertises state and accepts commands, so System UI, Bluetooth headsets, Wear, and Android Auto connect as `MediaController`s; the in-app UI binds through a `MediaController` too. Media3 syncs player state to the session and publishes the `MediaStyle` notification automatically.",
       "code": [
@@ -435,7 +443,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sk-0043",
@@ -451,9 +460,9 @@
       ],
       "q": "How does CameraX model a camera app with use cases, how do you do frame-by-frame image analysis, and when do you need Camera2 interop?",
       "shortAnswer": [
-        "CameraX abstracts the camera into four composable use cases — Preview, ImageCapture, VideoCapture, ImageAnalysis — bound to a lifecycle, with the library handling device compatibility and rotation.",
-        "ImageAnalysis runs your Analyzer on each frame under a backpressure strategy — KEEP_ONLY_LATEST drops stale frames, BLOCK_PRODUCER throttles the camera — and you must close every ImageProxy or the frame queue stalls.",
-        "Camera2 interop — Camera2Interop.Extender, Camera2CameraControl, Camera2CameraInfo — reaches the underlying CaptureRequest keys, characteristics, and stream use cases when CameraX's high-level API lacks a control."
+        "CameraX turns the camera into four composable use cases — Preview, ImageCapture, VideoCapture, ImageAnalysis — bound to a lifecycle, handling compatibility and rotation.",
+        "`ImageAnalysis` runs your `Analyzer` per frame with backpressure — `KEEP_ONLY_LATEST` drops stale frames, `BLOCK_PRODUCER` throttles the camera — and a leaked `ImageProxy` stalls the pipeline.",
+        "Camera2 interop — `Camera2Interop.Extender`, `Camera2CameraControl`, `Camera2CameraInfo` — reaches the underlying `CaptureRequest` keys, characteristics, and stream use cases when the high-level API lacks a control."
       ],
       "answer": "#### The use-case model\nCameraX turns the messy camera1/camera2 surface into four declarative use cases: `Preview` (a surface to show), `ImageCapture` (a photo), `VideoCapture` (video and audio), `ImageAnalysis` (CPU frames for computer vision or ML). You build each with a builder, pick a `CameraSelector` (back or front), and bind them to a `LifecycleOwner` with `cameraProvider.bindToLifecycle()` — CameraX handles device selection, rotation, and lifecycle. Two entry points exist: `CameraController` with a `PreviewView` for the common case, and `ProcessCameraProvider` for more control. Simultaneous use is limited by device capability — not every combination is supported on every camera.\n\n#### Image analysis\n`ImageAnalysis.Analyzer.analyze(imageProxy)` fires per frame. Two real concerns: **backpressure** — `STRATEGY_KEEP_ONLY_LATEST` drops stale frames when analysis lags the sensor, `STRATEGY_BLOCK_PRODUCER` throttles the camera instead — and **lifetime** — you must close the `ImageProxy` in a `finally`, or frames stall and the camera pipeline backs up. Run analysis off the main thread on a background executor, and only one analyzer is active at a time.\n\n#### Camera2 interop\nCameraX is built on Camera2 and deliberately exposes the layer below. `Camera2Interop.Extender(useCaseBuilder).setCaptureRequestOption(key, value)` sets underlying CaptureRequest keys per use case; `Camera2CameraControl.from(camera)` applies session-wide options; `Camera2CameraInfo.from(cameraInfo).getCameraCharacteristic(...)` reads characteristics; and `setStreamUseCase` tunes the stream for something like a video call. It is experimental and can fight CameraX's own 3A or flash management — use it only for controls the high-level API genuinely lacks.",
       "code": [
@@ -484,7 +493,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

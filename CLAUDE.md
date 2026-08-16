@@ -46,17 +46,27 @@ the snapshot in IndexedDB, the learning state in localStorage under the `aip.v1.
   `free`) and `done`, keyed by **material signature** `[...itemIds].sort().join('+')` — never by
   `dayIdx:taskIdx`, which silently marked unread material as done when a plan was re-authored.
 
-Everything renders from the snapshot, so the site works offline and instantly. New content on disk is
-**invisible** until the user presses **Update**:
+Everything renders from the snapshot, so the site works offline and instantly. New content on disk
+reaches a device **automatically** — there is no Update button, no "Up to date" label and no What's
+New view; the candidate is told what changed by a toast, never asked to approve it:
 
-1. `content.js#boot()` returns the stored snapshot if present, otherwise fetches and stores one.
-   Both `boot()` and `applyUpdate()` are async — `Store.getSnapshot()`/`setSnapshot()` hit IndexedDB.
-2. `app.js#initUpdateButton()` runs a silent background `checkForUpdates()` — badge only, no re-render.
+1. Boot is two phases. `content.js#bootShell()` returns the stored snapshot instantly if present;
+   on a cold cache it fetches only `content/manifest.json` and returns a minimal, **not persisted**
+   placeholder so nav + dashboard render before any pack lands. `bootContent(manifest)` then fetches
+   every pack and plan with `Promise.all`, builds the snapshot, persists it, and `app.js` re-renders
+   the mounted view in place. Both are async — `Store.getSnapshot()`/`setSnapshot()` hit IndexedDB.
+2. `app.js#initAutoSync()` runs `checkForUpdates()` after the shell-phase render, on
+   `visibilitychange`/`focus`, and on the browser's `online` event.
 3. `checkForUpdates()` **short-circuits when `diskManifest.version === snapshot.version`.** Content
-   edits without a manifest version bump are literally unreachable by the app.
-4. Pressing Update shows an item-level diff modal — including every plan tick that will be cleared —
-   then re-anchors ticks via `store.js#migrateTicks()` **before** `applyUpdate(diff)` swaps the
-   snapshot, because the outgoing plan exists only inside the snapshot being replaced.
+   edits without a manifest version bump are literally unreachable by the app. Because the check now
+   runs on every focus, a regression here turns one wasted fetch into a recurring one.
+4. A found diff is held as `App.pendingDiff` until `App.sessionActive` is false — a sync never lands
+   mid-Drill or mid-Mock. Applying it re-anchors ticks via `store.js#migrateTicks()` **before**
+   `applyUpdate(diff)` swaps the snapshot, because the outgoing plan exists only inside the snapshot
+   being replaced.
+5. The apply is all-or-nothing: `checkForUpdates()` fetches the complete content set before anything
+   mutates, so one failed pack abandons the attempt silently — nothing persisted, no toast, no error
+   shown — and the device retries at the next trigger.
 
 Because progress is keyed by id and lives in its own namespace, updates cannot disturb it — **provided
 item ids are never reused or renumbered.** Reusing an id silently corrupts a user's drill schedule.
@@ -80,14 +90,15 @@ Item schema, id prefixes per track, and the full refresh procedure live in
 **`tools/REFRESH.md`** — read it before touching content. Highlights:
 
 - Id prefixes in use: `kt- co- cmp- pf- ar- dn- pe- bt- sk- ds- sd- bh- cs-`.
-- `level` is 1–4; labels come from `assets/js/levels.js` (Basics / Mid-Level / Senior / Staff-Monster)
+- `level` is 1–4; labels come from `assets/js/levels.js` (Basics / Mid-Level / Senior / Lead)
   — never hardcode a difficulty word in a view.
 - `type` is `qa | concept | dsa | design | behavioral`; `dsa` and `design` items carry extra required
   fields (see REFRESH.md).
 - Every version- or date-bearing claim needs a `refs` entry with a `checked` date; `validate.mjs`
   errors on a ref without one.
 - `addedIn` on new items, `updatedIn` on changed ones, both set to the new manifest version. An
-  `addedIn` with no matching `releases[]` entry is a warning and the item won't show in What's New.
+  `addedIn` with no matching `releases[]` entry is a warning — the release note the sync toast
+  summarises comes from `releases[]`.
 - Voice: `shortAnswer` is what you'd say out loud; `answer` is the depth behind it; `traps` are what
   gets candidates rejected.
 
@@ -105,7 +116,8 @@ highlighter (`highlightCode` only colorizes `kotlin`/`kt`/unset; everything else
 ## App code structure
 
 `app.js` is the shell: a hash router (`#/view/param?k=v` → `parseHash`), the `routes` map, theme
-cycling (dark → light → auto), the search overlay, the update flow, and `toast()` / `showModal()`.
+cycling (dark → light → auto), the search overlay, the automatic content sync, and `toast()` /
+`showModal()`.
 
 Every view is `renderView(el, { param, query, snapshot })`, exported from `assets/js/views/<name>.js`
 and registered in `routes` in `app.js`. Views build HTML strings, assign `el.innerHTML`, then attach
@@ -117,30 +129,20 @@ Shared modules: `store.js` (localStorage), `content.js` (fetch/diff/merge), `srs
 scheduling, `rate`/`buildQueue`/`masteryByTrack`), `search.js` (in-memory index, rebuilt after every
 snapshot swap), `md.js`, `levels.js`.
 
-`assets/css/app.css` is versioned by query string in `index.html` (`app.css?v=4`) — bump `v` when a
+`assets/css/app.css` is versioned by query string in `index.html` (`app.css?v=5`) — bump `v` when a
 stale cache would matter. It carries the light/dark token sets and the print styles the cheat sheets
 depend on.
-
-## Bulk content generation
-
-`.claude/workflows/fill-content-gap.js` (surfaced as the `fill-content-gap` skill) is a Workflow
-script that closes the gap between built and planned per-track item counts: one outline → author →
-adversarial-review agent group per track, writing new pack files directly. Its `WAVES` config holds
-the per-track gap table, `startId` values (highest existing id + 1), and the authoritative scope
-prose per track; `.claude/workflows/outlines/*.json` caches reusable outlines. It only ever *adds*
-pack files — registering them and bumping the release is still `sync-manifest.mjs`.
 
 ## Notes
 
 - `README.md` is user-facing and its item counts drift; `node tools/validate.mjs` prints the truth
-  (629 items across 89 registered packs as of manifest 2026.08.16).
+  (629 items across 89 registered packs as of manifest 2026.08.17).
 - `validate.mjs` carries 15 gates and a `--final` flag. Gates 4, 5, 8, 9, 12 are warnings during a
   staged expansion and errors at `--final`; gates 2, 3 and 14 are **release-scoped** — an error on
   an item the current release ships, a warning on untouched remediation backlog, an error at
   `--final`. Gate 15 errors on any ` ``` ` in a prose field (`q`, `answer`, `shortAnswer`,
   `prompt`, `referenceAnswer`, `framework`, `followUps`, `traps`, `hints`, `summary`, `label`,
   `description`) — `md.js` has no fenced-code support, so prose must never carry one.
-- `.claude/workflows/fill-content-gap.js` is **not in use**; content is authored directly.
 - `InterviewPrep/` (a nested subdirectory of the same name) is an unused Spec Kit scaffold — its
   `.specify/` templates and `speckit-*` skills have nothing to do with this app. Ignore it unless
   explicitly asked about Spec Kit.

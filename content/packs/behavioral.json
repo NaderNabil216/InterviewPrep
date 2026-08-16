@@ -16,9 +16,9 @@
       ],
       "q": "Build your STAR story bank — which six stories cover almost every behavioral question?",
       "shortAnswer": [
-        "Prepare **six** stories, not thirty. Nearly every behavioral prompt is a re-skin of one of: a hard technical problem, a failure, a conflict, leading/mentoring, ambiguity, and measurable impact.",
-        "STAR: **Situation** (2 sentences), **Task** (1), **Action** (the bulk — what *you* did, first person), **Result** (quantified, plus what you learned).",
-        "The most common failure is spending 80% on context and 20% on your actions. Invert that."
+        "Prepare **six** stories, not thirty. Most questions re-skin one of these: a hard problem, a failure, a conflict, leadership, ambiguity, or measurable impact.",
+        "STAR: **Situation** (2 sentences), **Task** (1), **Action** (the bulk — what *you* did, in first person), **Result** (with numbers, plus a lesson).",
+        "The most common failure is spending 80% on background and 20% on your own actions. Invert that."
       ],
       "answer": "#### The six stories\n1. **Hardest technical problem** — ideally a real diagnostic journey: a production crash, a memory leak, a race. Interviewers love debugging narratives because they cannot be faked.\n2. **A failure you owned** — something that went wrong because of your decision, including what you changed afterward. \"I care too much\" wastes the question.\n3. **Conflict** — with a peer, manager or PM. The good version ends in a decision made on evidence, and you supporting it even when it was not your preference.\n4. **Leadership** — bringing someone up, running a migration, setting a standard. No title required.\n5. **Ambiguity** — vague requirements, shifting priorities. Show how you created clarity: prototypes, written proposals, narrowed scope.\n6. **Measurable impact** — a number. Crash rate, startup time, conversion, build time, on-call load.\n\nOne story can serve two slots, but rehearse which one you will reach for so you are not deciding live.\n\n#### Writing them well\nKeep Situation and Task short. **Action is 60-70% of the airtime**, in first person singular; \"we\" hides your contribution. **Quantify the result**: \"cold start 4.2 s to 2.6 s p90, moving D1 retention 1.8%.\" With no number, give a proxy: \"that on-call page stopped firing.\" Close with one sentence on what you would do differently — that separates a rehearsed answer from a mature one.\n\n#### Practice\nSay each out loud, timed, targeting **2-3 minutes**. Past four you are losing the room. Record yourself once: uncomfortable, unusually effective.",
       "followUps": [
@@ -41,7 +41,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bh-0002",
@@ -55,9 +55,9 @@
       ],
       "q": "How do you run a live coding round well, independent of whether you solve it?",
       "shortAnswer": [
-        "**Clarify → state the approach → get buy-in → code → test → optimize.** Never start typing on the first sentence of the problem.",
-        "Narrate continuously. A silent candidate who solves it can score worse than a talking candidate who nearly solves it, because the interviewer can't assess reasoning they never heard.",
-        "Test your own code by hand on a small input before saying you're done. Finding your own bug is a strong positive signal; the interviewer finding it is not."
+        "Follow the order: **clarify, state the approach, get buy-in, code, test, optimize.** Don't start typing the moment you hear the problem.",
+        "Keep talking. A silent solve can score worse than a noisy near-solve — the interviewer can't score reasoning they never heard.",
+        "Test your code by hand on a small example before you say you're done. Finding your own bug helps you; the interviewer finding it doesn't."
       ],
       "answer": "#### The sequence\n1. **Restate the problem** in your own words — it catches misunderstandings while they are free.\n2. **Ask about constraints**: input size, duplicates, empty or null, sorted, memory, may I mutate it? Two or three sharp questions, not twenty.\n3. **Work one small example by hand.** It often reveals the pattern and always demonstrates rigor.\n4. **State the brute force** with its complexity — a working baseline that shows you understand the problem.\n5. **Propose the improvement and its complexity, then pause for buy-in**: \"a hash map gets this to O(n) — does that seem right?\" A good interviewer redirects you here, saving ten minutes.\n6. **Code it**, narrating decisions rather than syntax: \"I'm using a deque so I can pop from both ends\", not \"now I type a for loop\".\n7. **Trace your code** on the example, out loud.\n8. **Discuss edge cases and improvements** unprompted.\n\n#### When you are stuck\nSay so, and say *where*: \"I know this is DP but I'm not landing the state definition — let me define what `dp[i]` means precisely.\" That is what a real colleague does. Silence with growing panic is the worst outcome. Take a hint gracefully and build on it; interviewers expect to give hints and score how you use them.\n\n#### Android-flavoured rounds\nMany Android loops replace LeetCode with \"implement a debounced search\", \"build an LRU image cache\", or \"write this screen's ViewModel\". Same structure, plus: mention threading, lifecycle, cancellation and error states unprompted. Those are what is being tested.",
       "followUps": [
@@ -78,7 +78,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bh-0003",
@@ -92,9 +92,9 @@
       ],
       "q": "What should you ask your interviewer, and what does it signal?",
       "shortAnswer": [
-        "Ask questions that only *that* person can answer. Generic questions ('what's the culture like?') waste the slot and signal no preparation.",
-        "The best questions reveal how the team actually works: release cadence, on-call, tech debt, how decisions get made, what the last hard trade-off was.",
-        "Always ask something. \"No questions\" reads as disinterest, and it's the easiest signal to get right."
+        "Ask things only that person can answer. Generic ones — like \"what's the culture like?\" — waste the slot and show no preparation.",
+        "Best questions show how the team really works: release cadence, on-call load, tech debt, and how decisions get made.",
+        "Always ask something. Saying you have no questions reads as disinterest, and it's the easiest signal to get right."
       ],
       "answer": "#### Tailor by interviewer\n**Engineer / peer**\n- What does the release process look like — cadence, staged rollout, who owns the go/no-go?\n- How much of the codebase is Compose vs Views, and what's the migration story?\n- What's the on-call load actually like? What paged you most recently?\n- Where's the tech debt you'd fix first with a free month?\n- How long does CI take, and does that bother anyone?\n\n**Engineering manager**\n- How do you decide what the team works on next quarter?\n- What does growth look like for someone joining at this level?\n- What's a recent decision the team got wrong, and what changed afterward?\n- How do you handle disagreement between engineering and product?\n\n**Skip-level / director**\n- What's the biggest risk to this team's roadmap in the next year?\n- How does mobile influence product decisions here, versus receiving them?\n\n#### Signals your questions send\n- Asking about **testing, CI, and rollout** signals you've shipped and maintained real software.\n- Asking **\"what would make someone unsuccessful in this role?\"** is unusually informative.\n\n#### Questions to avoid\n- Anything answerable from the careers page.\n- Compensation with an engineer who has no say in it — save it for the recruiter.\n- \"What's the culture like?\" — you'll get a rehearsed answer with zero information.\n\n#### Remember you're evaluating them\nIt's genuinely bidirectional: does on-call sound sustainable? Do they measure anything? Can they describe a decision they reversed? Vague or defensive answers to concrete questions are data.",
       "followUps": [
@@ -114,7 +114,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.13"
+      "updatedIn": "2026.08.17"
     }
   ]
 }

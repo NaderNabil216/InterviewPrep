@@ -16,9 +16,9 @@
       ],
       "q": "What actually happens during recomposition, and what is the slot table?",
       "shortAnswer": [
-        "Composable functions don't return UI — they *emit* into a slot table, a gap-buffer the Composer reads and writes as it walks the tree.",
-        "Each call site gets a stable identity from its position in the source (positional memoization), which is how `remember` knows which slot is yours.",
-        "Recomposition re-runs only the composables that read a changed state value — Compose skips the rest, and can run them out of order, in parallel, or discard them entirely."
+        "Composables don't return UI. They write into the slot table — a gap buffer the Composer reads and updates as it walks the tree.",
+        "Each call site gets a stable identity from its place in the source (positional memoization), so `remember` knows which slot belongs to it.",
+        "Recomposition re-runs only the composables that read a changed value; the rest are skipped, and runs may be out of order, in parallel, or discarded."
       ],
       "answer": "#### The mental model\nA `@Composable` function is not a constructor — the compiler plugin rewrites it to take a `Composer` parameter plus a `$changed` bitmask. Calling it writes into the **slot table**, a flat gap buffer holding the composition's state: groups, remembered values, and node references.\n\n#### Positional memoization\nEach call site gets a compiler-generated key from its position in the source, which is why `remember { }` needs no explicit name and why conditional structure matters: emitting the same composable from two branches of an `if` gives different keys, and state is lost when the branch flips. `key(id) { }` supplies identity explicitly, which is what lazy lists need.\n\n#### Snapshot state\n`mutableStateOf` creates an observable value inside a MVCC-style **snapshot** system. While a composable runs, every state read is recorded against its scope. On a write, Compose invalidates precisely the scopes that read it and schedules recomposition on the next frame — no manual `invalidate()`.\n\n#### Properties you must not violate\nComposables must be **side-effect free and idempotent**, because Compose may run them in any order, in parallel, on every frame, or **discard** an optimistic recomposition before it commits. Mutating external state or launching a coroutine in the body is a bug — that's what the effect APIs are for.\n\n#### Recomposition scopes\nThe unit of restart is the nearest enclosing *restartable* scope, not the tree. Reading state inside a lambda confines invalidation to that lambda's scope — the basis of 'defer your reads'.",
       "code": [
@@ -50,7 +50,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.10"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0002",
@@ -65,9 +65,9 @@
       ],
       "q": "What makes a composable skippable, and what changed with strong skipping mode?",
       "shortAnswer": [
-        "A composable is skippable when all its parameters are **stable** and compare equal to the previous composition — then Compose reuses the last result and doesn't re-execute it.",
-        "Stable means: Compose can be told when the value changes, and `equals` is consistent. Primitives, `String`, function types, and `@Immutable`/`@Stable` types qualify. `List` does **not**, because the interface could be a `MutableList`.",
-        "Strong skipping mode (default since Compose 1.7) makes composables with unstable parameters skippable using *instance* equality, and auto-memoizes lambdas — removing most of the old manual `remember` boilerplate."
+        "A composable is skippable when all its parameters are **stable** and unchanged since the last composition — Compose then reuses the old result.",
+        "Stable means Compose can detect changes and `equals` is consistent. Primitives, `String`, function types, and `@Immutable`/`@Stable` types qualify; `List` doesn't, because it could be a `MutableList`.",
+        "Strong skipping (default since Compose 1.7) compares unstable parameters by *instance* equality and auto-memoizes lambdas, dropping most manual `remember` boilerplate."
       ],
       "answer": "#### The skipping rule\nAt each call the compiler compares parameters against the previous composition. If every parameter is stable and unchanged, the call is skipped; one unstable parameter historically made the whole composable non-skippable, so it re-ran on every parent recomposition.\n\n#### What is stable\nPrimitives, `String`, enums, function types; classes whose public properties are all `val` of stable types; anything annotated `@Immutable` (never changes) or `@Stable` (mutations observable by Compose, e.g. backed by `mutableStateOf`); and `State<T>`. Not stable: `List`, `Map`, `Set` — read-only *interfaces*, not immutable types — classes with `var` properties of unstable types, and classes from modules not compiled with the Compose compiler, a common cause when your domain model lives in a pure-Kotlin module.\n\nFixes: `kotlinx.collections.immutable`'s `ImmutableList`/`PersistentList`, `@Immutable` on data holders, or a stability configuration file.\n\n#### Strong skipping mode\nDefault since Compose compiler 1.7, it made composables with unstable parameters skippable by comparing those parameters with **instance equality** (`===`), and auto-remembers lambdas so `{ viewModel.onClick(item.id) }` no longer breaks skipping. The underlying model still matters: recreate your unstable `List` every emission and instance equality fails — stability work is now about *not reallocating* rather than annotations.\n\n#### Measuring, not guessing\nCompose compiler metrics reports (`reportsDestination`) list exactly which composables are skippable and which params are unstable; Layout Inspector shows live recomposition counts; composition tracing puts composable names on the Perfetto timeline.",
       "code": [
@@ -99,7 +99,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.10"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0003",
@@ -114,9 +114,9 @@
       ],
       "q": "`remember` vs `rememberSaveable` vs ViewModel — where does each piece of state belong?",
       "shortAnswer": [
-        "`remember` survives recomposition only — lost on rotation and on process death.",
-        "`rememberSaveable` also survives configuration change and process death (it writes into the saved-instance-state Bundle, so values must be Bundle-able or need a `Saver`).",
-        "ViewModel survives configuration change but **not** process death on its own — pair it with `SavedStateHandle` for that."
+        "`remember` survives recomposition only — values are lost on rotation and process death.",
+        "`rememberSaveable` also survives rotation and process death: values go in the saved-state Bundle, so they must be Bundle-able or use a `Saver`.",
+        "ViewModel survives rotation but **not** process death on its own — add `SavedStateHandle` for that."
       ],
       "answer": "#### The three tiers\n\n| | recomposition | config change | process death |\n|---|---|---|---|\n| `remember` | ✅ | ❌ | ❌ |\n| `rememberSaveable` | ✅ | ✅ | ✅ |\n| ViewModel | ✅ | ✅ | ❌ |\n| ViewModel + `SavedStateHandle` | ✅ | ✅ | ✅ |\n\n#### Choosing\n- **`remember`** — pure UI ephemera: animation state, whether a dropdown is expanded *and you don't care if rotation closes it*, derived caches.\n- **`rememberSaveable`** — small UI state the user would be annoyed to lose: scroll position, text field contents, selected tab.\n- **ViewModel** — screen state that comes from or goes to the data layer, anything involving coroutines, anything that must outlive the composition.\n- **`SavedStateHandle`** — the identifiers needed to rebuild state after the process is killed: the item id, the search query. Not the whole payload — that gets refetched.\n\n#### The Bundle limit\n`rememberSaveable` and `SavedStateHandle` both go through the saved-instance-state Bundle, which is delivered over a Binder transaction. Exceeding roughly 500 KB–1 MB throws `TransactionTooLargeException`. Store keys, not blobs.\n\n#### Custom Savers\nFor non-primitive types, supply a `Saver`:\n- `listSaver` / `mapSaver` for simple decomposition,\n- `Saver(save = { … }, restore = { … })` for full control.\n\n#### State hoisting\nThe convention: a composable that takes `value: T` and `onValueChange: (T) -> Unit` is stateless and reusable; the state lives with the lowest common ancestor that needs it. Hoist until the composable is testable and previewable without a ViewModel.",
       "code": [
@@ -147,7 +147,8 @@
           "checked": "2026-08-07"
         }
       ],
-      "addedIn": "2026.08.1"
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0004",
@@ -162,9 +163,9 @@
       ],
       "q": "Walk through the side-effect APIs. When is each one correct?",
       "shortAnswer": [
-        "`LaunchedEffect(key)` for coroutine work tied to the composition; changing the key cancels and restarts it.",
-        "`DisposableEffect(key)` when you must clean up (listeners, callbacks); `SideEffect { }` to publish Compose state to non-Compose objects after every successful composition.",
-        "`rememberUpdatedState` captures a fresh value inside a long-running effect without restarting it; `derivedStateOf` collapses a frequently-changing state into a rarely-changing one."
+        "`LaunchedEffect(key)` runs coroutine work tied to the composition. Changing the key cancels the old coroutine and starts a new one.",
+        "`DisposableEffect(key)` is for work that needs cleanup, like listeners. `SideEffect { }` pushes Compose state into non-Compose objects after each successful composition.",
+        "`rememberUpdatedState` gives a long-running effect the latest value without restarting it. `derivedStateOf` turns a fast-changing state into one that changes rarely."
       ],
       "answer": "Composables must be side-effect free, so anything touching the outside world goes through one of these.\n\n- **`LaunchedEffect(key)`** — launches a coroutine when the composable enters composition; cancelled on leaving, and **cancelled and relaunched when any key changes**. `LaunchedEffect(Unit)` runs once per entry.\n- **`DisposableEffect(key)`** — setup with teardown; must end with `onDispose { }`. Use for listeners, observers, sensors.\n- **`SideEffect { }`** — runs after every successful composition; push Compose state into a non-Compose object. Not for coroutines.\n- **`rememberCoroutineScope()`** — a scope to launch from **event callbacks** like `onClick`; cancelled when the composable leaves.\n- **`rememberUpdatedState(value)`** — wrap a value a long-lived effect reads so it sees the latest without restarting; classic for a timeout effect calling the newest `onTimeout`.\n- **`produceState(initial) { }`** — bridge a callback or suspend source into `State<T>`.\n- **`snapshotFlow { }`** — the inverse: turn Compose state reads into a cold `Flow` you can `debounce`/`filter`.\n- **`derivedStateOf { }`** — collapse a high-frequency input into a low-frequency output (`firstVisibleItemIndex > 0` → `showScrollToTop`). Not for cheap 1:1 transforms — it adds overhead for nothing.\n\n#### The decision rule\nNeeds a coroutine? `LaunchedEffect` or `rememberCoroutineScope`. Needs cleanup? `DisposableEffect`. Just publishing a value? `SideEffect`.",
       "code": [
@@ -191,7 +192,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.10"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0005",
@@ -206,9 +207,9 @@
       ],
       "q": "Explain the three Compose phases and how deferred state reads improve performance.",
       "shortAnswer": [
-        "Composition (what to show) → Layout (measure & place) → Drawing (render). Each frame may run only some of them.",
-        "If a state value is read during composition, changing it recomposes. If it's read only in a layout or draw lambda, changing it skips composition entirely.",
-        "Deferring reads via lambda-taking modifiers (`Modifier.offset { }`, `graphicsLayer { }`, `drawBehind { }`) turns an expensive recomposition into a cheap re-layout or re-draw."
+        "The three phases: Composition (what to show), Layout (measure and place), Drawing (render). A frame may run only some of them.",
+        "A state value read during composition recomposes when it changes. Read only in a layout or draw lambda, it changes without any recomposition.",
+        "Deferring reads with lambda modifiers (`Modifier.offset { }`, `graphicsLayer { }`, `drawBehind { }`) turns recomposition into a cheap re-layout or re-draw."
       ],
       "answer": "#### The phases\n1. **Composition** — run `@Composable` functions to determine *what* UI exists; output is the tree in the slot table.\n2. **Layout** — measure children, decide size, place children. **Single pass**: Compose forbids multi-pass measurement, which is what keeps layout O(n) unlike nested `LinearLayout` weights. `SubcomposeLayout` and intrinsics are the escape hatches, and they cost.\n3. **Drawing** — issue draw commands onto the canvas.\n\n#### Why read placement decides cost\nCompose records *where* a state value is read. Changing it invalidates only that phase and later ones: read during composition → recompose + relayout + redraw; during layout → relayout + redraw; during draw → redraw only. So `Modifier.offset(x = scrollX.dp)` (read at composition) recomposes every frame, while `Modifier.offset { IntOffset(scrollX, 0) }` (lambda read at layout) does not.\n\n#### The standard wins\n`Modifier.offset { }` over `Modifier.offset()`; `graphicsLayer { alpha = ... }` over `Modifier.alpha()` for animated values; `drawBehind { }` for animated backgrounds; and pass lambdas (`() -> Int`) rather than values that change rapidly.\n\n#### Other frame-cost rules\nLazy list keys; wrap heavy computation in `remember(input)`; avoid `SubcomposeLayout`-based components (`BoxWithConstraints`, `LazyLayout`) in hot paths. Measure in a **release build with R8** — debug Compose is 5–10x slower — using Macrobenchmark `FrameTimingMetric`, Layout Inspector recomposition counts, and composition tracing.",
       "code": [
@@ -240,7 +241,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.10"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0006",
@@ -255,9 +256,9 @@
       ],
       "q": "What is Navigation 3 and how does it differ from Navigation Compose (Nav2)?",
       "shortAnswer": [
-        "Nav3 makes the back stack **plain observable state that you own** — a `SnapshotStateList` of keys — instead of hiding it inside a `NavController`.",
-        "Because the whole stack is readable, a layout can render *multiple* destinations at once, which is what makes adaptive list-detail natural rather than bolted on.",
-        "It went stable in Nov 2025; the Apr 2026 release shipped Nav3 1.1.1 alongside `navigationevent` 1.1.0 for predictive back."
+        "Nav3 makes the back stack **observable state that you own** — a `SnapshotStateList` of keys — instead of hiding it inside a `NavController`.",
+        "The whole stack is readable, so one layout can render several destinations at once. Adaptive list-detail becomes natural, not bolted on.",
+        "Nav3 went stable in Nov 2025. The Apr 2026 release shipped Nav3 1.1.1 with `navigationevent` 1.1.0 for predictive back."
       ],
       "answer": "#### The core change\nIn Nav2 the back stack lives inside `NavController` and you manipulate it through commands (`navigate`, `popBackStack`). Nav3 inverts this: **you** hold the back stack as ordinary Compose state — `val backStack = rememberNavBackStack(HomeKey)` passed to `NavDisplay(backStack, onBack = { backStack.removeLastOrNull() }, entryProvider = …)`. Navigating is `backStack.add(DetailKey(id))`. Popping is `backStack.removeLastOrNull()`. There is no separate navigation DSL state to keep in sync with app state.\n\n#### What this unlocks\n- **Adaptive layouts.** A scene strategy can read the last *two* entries and render them side by side on a wide screen, collapsing to one on a phone. In Nav2 this needed a parallel mechanism.\n- **Type-safe keys** — destinations are data classes/objects, so arguments are just constructor parameters. No string routes, no manual argument encoding.\n- **Testability** — the back stack is a list; assert on it directly.\n- **Custom transitions and predictive back** via `navigationevent`.\n\n#### Migration reality\nNav2 remains supported and is still the majority of production code. In an interview, the strong answer is: know the model difference, know that Nav3 is stable, and be able to say *why* the ownership inversion matters (adaptive UI + state consistency) rather than just naming the API.\n\n#### Scoping\nEach entry can own a `ViewModel` scoped to it. The Nav3 model makes the scope explicit rather than tied to an opaque `NavBackStackEntry` lookup.",
       "code": [
@@ -294,7 +295,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     }
   ]
 }

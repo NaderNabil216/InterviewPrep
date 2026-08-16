@@ -46,6 +46,12 @@ function renderDetail(el, snapshot, item) {
   const scratch = Store.getScratch(item.id) || { checked: {}, timeLeft: (item.timerMinutes || 45) * 60, running: false };
   let timerInterval = null;
 
+  // US8 (FR-027): two-step render. Step 1 shows the clarifying questions and nothing else of the
+  // solution; an explicit proceed action reveals the plan-phase content. Old snapshots whose items
+  // predate clarifyingQuestions fall straight through to the legacy single-phase view.
+  const clarifying = item.clarifyingQuestions || [];
+  const needsClarify = clarifying.length > 0;
+
   el.innerHTML = `
     <button class="btn btn--ghost" id="back" style="margin-bottom:10px;">← All scenarios</button>
     <div class="row" style="margin-bottom:6px;">
@@ -61,37 +67,54 @@ function renderDetail(el, snapshot, item) {
           <div class="answer-body">${renderMarkdown(item.prompt || '')}</div>
         </div>
 
-        ${item.framework ? `
-        <div class="card">
-          <h3>Approach framework</h3>
-          <div class="answer-body">${renderMarkdown(item.framework)}</div>
-        </div>` : ''}
-
-        <div class="card">
-          <h3>Requirements checklist — tick as you cover them out loud</h3>
-          <div class="checklist">
-            ${(item.requirements || []).map((r, idx) => `
-              <label><input type="checkbox" data-req="${idx}" ${scratch.checked[idx] ? 'checked' : ''}> ${renderInline(r)}</label>
-            `).join('')}
-          </div>
-        </div>
-
+        ${needsClarify ? `
         <div class="card">
           <div class="row" style="justify-content:space-between;">
-            <h3 style="margin:0;">Reference architecture &amp; deep dives</h3>
-            <button class="btn" id="toggle-ref">${scratch.revealed ? 'Hide' : 'Reveal'}</button>
+            <h3 style="margin:0;">Phase 1 — Clarify</h3>
+            <span class="chip chip--new">Ask before proposing anything</span>
           </div>
-          <div id="ref-body" class="answer-body" style="${scratch.revealed ? '' : 'display:none;'} margin-top:10px;">
-            ${item.diagram ? `<div class="diagram">${item.diagram}</div>` : ''}
-            ${renderMarkdown(item.referenceAnswer || '')}
+          <p class="faint" style="margin-top:8px;">Ask these out loud, then tick each one. The plan content stays hidden until you proceed.</p>
+          <div class="checklist">
+            ${clarifying.map((q, idx) => `
+              <label><input type="checkbox" data-clarify="${idx}"> ${renderInline(q)}</label>
+            `).join('')}
           </div>
-        </div>
-
-        ${item.staffAdds?.length ? `
-        <div class="card">
-          <h3>What a staff-level answer adds</h3>
-          <ul>${item.staffAdds.map(s => `<li>${renderInline(s)}</li>`).join('')}</ul>
+          <button class="btn btn--primary" id="proceed-plan" style="margin-top:14px;">Proceed to plan →</button>
         </div>` : ''}
+
+        <div id="plan-phase" ${needsClarify ? 'hidden' : ''}>
+          ${item.framework ? `
+          <div class="card">
+            <h3>Phase 2 — Approach framework</h3>
+            <div class="answer-body">${renderMarkdown(item.framework)}</div>
+          </div>` : ''}
+
+          <div class="card">
+            <h3>Requirements checklist — tick as you cover them out loud</h3>
+            <div class="checklist">
+              ${(item.requirements || []).map((r, idx) => `
+                <label><input type="checkbox" data-req="${idx}" ${scratch.checked[idx] ? 'checked' : ''}> ${renderInline(r)}</label>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="row" style="justify-content:space-between;">
+              <h3 style="margin:0;">Reference architecture &amp; deep dives</h3>
+              <button class="btn" id="toggle-ref">${scratch.revealed ? 'Hide' : 'Reveal'}</button>
+            </div>
+            <div id="ref-body" class="answer-body" style="${scratch.revealed ? '' : 'display:none;'} margin-top:10px;">
+              ${item.diagram ? `<div class="diagram">${item.diagram}</div>` : ''}
+              ${renderMarkdown(item.referenceAnswer || '')}
+            </div>
+          </div>
+
+          ${item.staffAdds?.length ? `
+          <div class="card">
+            <h3>What a staff-level answer adds</h3>
+            <ul>${item.staffAdds.map(s => `<li>${renderInline(s)}</li>`).join('')}</ul>
+          </div>` : ''}
+        </div>
       </div>
 
       <div class="stack">
@@ -104,19 +127,18 @@ function renderDetail(el, snapshot, item) {
           </div>
         </div>
 
-        ${item.rubric?.length ? `
-        <div class="card">
-          <h3>Self-score rubric</h3>
-          <div class="checklist">
-            ${item.rubric.map((r, idx) => `<label><input type="checkbox" data-rub="${idx}" ${scratch.rubric?.[idx] ? 'checked' : ''}> ${renderInline(r)}</label>`).join('')}
-          </div>
-        </div>` : ''}
+        <div id="plan-side" ${needsClarify ? 'hidden' : ''}>
+          ${item.rubric?.length ? `
+          <div class="card">
+            <h3>Self-score rubric</h3>
+            <div class="checklist">
+              ${item.rubric.map((r, idx) => `<label><input type="checkbox" data-rub="${idx}" ${scratch.rubric?.[idx] ? 'checked' : ''}> ${renderInline(r)}</label>`).join('')}
+            </div>
+          </div>` : ''}
 
-        <div class="rate-row">
-          <button class="rate-btn" data-rate="again">Again</button>
-          <button class="rate-btn" data-rate="hard">Hard</button>
-          <button class="rate-btn" data-rate="good">Good</button>
-          <button class="rate-btn" data-rate="easy">Easy</button>
+          <div class="rate-row">
+            <button class="rate-btn rate-btn--complete" id="mark-complete">Mark complete</button>
+          </div>
         </div>
       </div>
     </div>
@@ -128,6 +150,14 @@ function renderDetail(el, snapshot, item) {
   }
 
   el.querySelector('#back').addEventListener('click', () => { clearInterval(timerInterval); navigate('design'); });
+  const proceedBtn = el.querySelector('#proceed-plan');
+  if (proceedBtn) proceedBtn.addEventListener('click', () => {
+    // Step 2 gate (FR-028): reveal the plan-phase content in place. The clarify checklist stays
+    // visible as the candidate's scratch notes; only the proceed affordance is consumed.
+    el.querySelector('#plan-phase').hidden = false;
+    el.querySelector('#plan-side').hidden = false;
+    proceedBtn.hidden = true;
+  });
   el.querySelectorAll('[data-req]').forEach(cb => cb.addEventListener('change', () => {
     const cur = Store.getScratch(item.id) || scratch;
     cur.checked = cur.checked || {};
@@ -175,7 +205,10 @@ function renderDetail(el, snapshot, item) {
     timerEl.className = 'timer';
     toggleBtn.textContent = 'Start';
   });
-  el.querySelectorAll('.rate-btn').forEach(b => b.addEventListener('click', () => { rate(item.id, b.dataset.rate); toast(`Marked "${b.dataset.rate}".`); }));
+  el.querySelector('#mark-complete').addEventListener('click', () => {
+    const res = rate(item.id, 'good');
+    toast(`Marked complete — next review ${res.due}.`);
+  });
 }
 
 export function renderDesign(el, { snapshot, param }) {

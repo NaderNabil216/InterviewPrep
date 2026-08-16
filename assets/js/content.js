@@ -9,16 +9,21 @@ async function fetchJSON(url) {
   return res.json();
 }
 
+// Fetch every pack and plan in parallel (Promise.all — a single slow pack no longer serializes the
+// whole content phase). Rejects as a whole if any single fetch fails, which is the all-or-nothing
+// behavior both boot and the sync path rely on.
+function fetchPacksAndPlans(manifest) {
+  return Promise.all([
+    Promise.all((manifest.packs || []).map(async (meta) => [meta.id, await fetchJSON('content/' + meta.file)]))
+      .then(Object.fromEntries),
+    Promise.all((manifest.plans || []).map(async (meta) => [meta.id, await fetchJSON('content/' + meta.file)]))
+      .then(Object.fromEntries),
+  ]);
+}
+
 async function loadManifestAndPacks(manifestUrl = 'content/manifest.json') {
   const manifest = await fetchJSON(manifestUrl);
-  const packs = {};
-  for (const p of manifest.packs) {
-    packs[p.id] = await fetchJSON('content/' + p.file);
-  }
-  const plans = {};
-  for (const planMeta of manifest.plans || []) {
-    plans[planMeta.id] = await fetchJSON('content/' + planMeta.file);
-  }
+  const [packs, plans] = await fetchPacksAndPlans(manifest);
   return { manifest, packs, plans };
 }
 
@@ -47,19 +52,40 @@ function buildSnapshot(manifest, packs, plans) {
   });
 }
 
-// Boot: render from stored snapshot instantly if present; otherwise do the first fetch.
-export async function boot(onStorageFailure) {
-  let snapshot = await Store.getSnapshot();
-  if (!snapshot) {
-    const { manifest, packs, plans } = await loadManifestAndPacks();
-    snapshot = buildSnapshot(manifest, packs, plans);
-    // A first-boot storage failure must not end the session — the in-memory copy still works for
-    // this tab, so report it and carry on rather than throwing the candidate out of the app.
-    try {
-      await Store.setSnapshot(snapshot);
-    } catch (e) {
-      if (onStorageFailure) onStorageFailure(e); else throw e;
-    }
+// Boot phase 1 (shell): render from the stored snapshot instantly if present; otherwise fetch only
+// the manifest and return a minimal, NOT-persisted placeholder alongside it, so nav + dashboard can
+// render before every pack has finished fetching. Returns { snapshot, manifest } — manifest is null
+// on the warm-cache path, where there is nothing further to fetch.
+export async function bootShell() {
+  const stored = await Store.getSnapshot();
+  if (stored) return { snapshot: stored, manifest: null };
+  const manifest = await fetchJSON('content/manifest.json');
+  return {
+    snapshot: {
+      version: manifest.version,
+      generatedAt: manifest.generatedAt,
+      stackSnapshot: manifest.stackSnapshot || {},
+      packMeta: manifest.packs,
+      releases: manifest.releases || [],
+      packs: {},
+      plans: {},
+      items: [],
+      byId: {},
+    },
+    manifest,
+  };
+}
+
+// Boot phase 2 (content): fetch every pack and plan, build the full snapshot, and persist it. A
+// first-boot storage failure must not end the session — the in-memory copy still works for this
+// tab, so report it and carry on rather than throwing the candidate out of the app.
+export async function bootContent(manifest, onStorageFailure) {
+  const [packs, plans] = await fetchPacksAndPlans(manifest);
+  const snapshot = buildSnapshot(manifest, packs, plans);
+  try {
+    await Store.setSnapshot(snapshot);
+  } catch (e) {
+    if (onStorageFailure) onStorageFailure(e); else throw e;
   }
   return snapshot;
 }

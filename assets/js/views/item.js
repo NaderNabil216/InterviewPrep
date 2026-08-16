@@ -67,10 +67,7 @@ export function renderItem(el, { snapshot, param }) {
       </div>
 
       <div class="rate-row">
-        <button class="rate-btn" data-rate="again">Again</button>
-        <button class="rate-btn" data-rate="hard">Hard</button>
-        <button class="rate-btn" data-rate="good">Good</button>
-        <button class="rate-btn" data-rate="easy">Easy</button>
+        <button class="rate-btn rate-btn--complete" id="mark-complete">Mark complete</button>
       </div>
       <p class="faint" style="margin-top:8px;">Status: <strong>${statusOf(item.id)}</strong>${progress?.due ? ` · next review ${progress.due}` : ''}</p>
     </div>
@@ -82,11 +79,11 @@ export function renderItem(el, { snapshot, param }) {
   `;
 
   el.querySelector('[data-nav="topics"]').addEventListener('click', () => navigate('topics'));
-  el.querySelectorAll('.rate-btn').forEach(b => b.addEventListener('click', () => {
-    const res = rate(item.id, b.dataset.rate);
-    toast(`Marked "${b.dataset.rate}" — next review ${res.due}.`);
+  el.querySelector('#mark-complete').addEventListener('click', () => {
+    const res = rate(item.id, 'good');
+    toast(`Marked complete — next review ${res.due}.`);
     renderItem(el, { snapshot, param });
-  }));
+  });
   el.querySelector('#notes').addEventListener('change', (e) => {
     Store.setItemProgress(item.id, { notes: e.target.value });
   });

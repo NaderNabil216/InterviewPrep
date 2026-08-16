@@ -1,5 +1,5 @@
 import { Store } from '../store.js';
-import { navigate, toast } from '../app.js';
+import { navigate, toast, App } from '../app.js';
 import { renderMarkdown, renderCodeBlock, renderInline } from '../md.js';
 import { rate } from '../srs.js';
 
@@ -10,14 +10,22 @@ const MODES = {
   full: { label: 'Full loop', minutes: 135, desc: 'Android screen → System design → Coding, back to back, like the real day.', composite: ['android', 'design', 'coding'] },
 };
 
-const RATE_SCORE = { again: 1, hard: 2, good: 3, easy: 4 };
+// Per-item score metric retired with the 4-button rate row (US4): every rating is a fixed 'good',
+// so the session metric is now completedCount/completedPct. Legacy rows still carry avgScore and are
+// displayed read-only via a fallback (FR-014b) — never back-filled.
 
 function sparkline(results) {
   if (!results.length) return '<span class="faint">No attempts yet</span>';
-  const scores = results.slice(0, 10).reverse().map(r => r.avgScore);
-  const max = 4;
+  const rows = results.slice(0, 10).reverse();
   return `<div class="row" style="gap:3px; align-items:flex-end; height:36px;">
-    ${scores.map(s => `<div style="width:8px;background:var(--accent);border-radius:2px;height:${Math.max(4, (s/max)*36)}px;" title="${s.toFixed(1)}"></div>`).join('')}
+    ${rows.map(r => {
+      const isNew = typeof r.completedPct === 'number';
+      // New rows are 0..1 completion; legacy rows are avgScore 1..4 — normalized to the same 0..1
+      // bar scale so a mixed history renders comparably.
+      const val = isNew ? Math.max(0, Math.min(1, r.completedPct)) : Math.max(0, Math.min(1, (r.avgScore || 0) / 4));
+      const label = isNew ? `${Math.round(r.completedPct * 100)}% complete` : `avg self-score ${(r.avgScore || 0).toFixed(1)}/4`;
+      return `<div style="width:8px;background:var(--accent);border-radius:2px;height:${Math.max(4, val * 36)}px;" title="${label}"></div>`;
+    }).join('')}
   </div>`;
 }
 
@@ -46,9 +54,15 @@ function renderLanding(el, snapshot) {
           ${sparkline(results)}
         </div>
         <table style="width:100%; font-size:13px; border-collapse:collapse;">
-          <thead><tr class="faint"><td>Mode</td><td>Score</td><td>Items</td><td>Date</td></tr></thead>
+          <thead><tr class="faint"><td>Mode</td><td>Result</td><td>Items</td><td>Date</td></tr></thead>
           <tbody>
-            ${results.slice(0,8).map(r => `<tr><td>${MODES[r.mode]?.label || r.mode}</td><td>${r.avgScore.toFixed(1)}/4</td><td>${r.itemCount}</td><td class="faint">${new Date(r.date).toLocaleDateString()}</td></tr>`).join('')}
+            ${results.slice(0,8).map(r => {
+              const isNew = typeof r.completedPct === 'number';
+              const result = isNew
+                ? `${r.completedCount}/${r.itemCount} complete`
+                : `${(r.avgScore || 0).toFixed(1)}/4 avg score`;
+              return `<tr><td>${MODES[r.mode]?.label || r.mode}</td><td>${result}</td><td>${r.itemCount}</td><td class="faint">${new Date(r.date).toLocaleDateString()}</td></tr>`;
+            }).join('')}
           </tbody>
         </table>` : '<p class="faint">No mock interviews taken yet.</p>'}
     </div>
@@ -73,14 +87,19 @@ function runSession(el, snapshot, modeKey, itemCount) {
     items = pickRandom(snapshot.items.filter(mode.pool), itemCount || (modeKey === 'coding' ? 3 : 12));
   }
   if (!items.length) {
+    App.sessionActive = false;
     el.innerHTML = `<div class="empty-state">No items available for this mode yet.</div>`;
     return;
   }
+  App.sessionActive = true;
 
   let idx = 0, revealed = false, timeLeft = mode.minutes * 60;
-  const ratings = [];
+  let completedCount = 0;
+  // US5: the interval keeps running, but the per-second decrement is skipped while an answer is
+  // revealed — so timeLeft (the overall session budget, FR-017) is provably untouched by how long
+  // the candidate leaves a model answer open.
   const timerHandle = setInterval(() => {
-    timeLeft--;
+    if (!revealed) timeLeft--;
     const t = el.querySelector('#session-timer');
     if (t) { t.textContent = fmtTime(Math.max(0, timeLeft)); t.className = 'timer' + (timeLeft < 60 ? ' danger' : timeLeft < 300 ? ' warn' : ''); }
     if (timeLeft <= 0) { clearInterval(timerHandle); toast("Time's up — wrap up your last answer."); }
@@ -89,12 +108,18 @@ function runSession(el, snapshot, modeKey, itemCount) {
   function draw() {
     if (idx >= items.length) {
       clearInterval(timerHandle);
-      const avg = ratings.length ? ratings.reduce((a,b) => a+b, 0) / ratings.length : 0;
-      Store.addMockResult({ mode: modeKey, avgScore: avg, itemCount: items.length, date: new Date().toISOString() });
+      App.sessionActive = false;
+      Store.addMockResult({
+        mode: modeKey,
+        completedCount,
+        completedPct: completedCount / items.length,
+        itemCount: items.length,
+        date: new Date().toISOString(),
+      });
       el.innerHTML = `
         <div class="empty-state">
           <h2>${mode.label} complete</h2>
-          <p>Average self-score: <strong>${avg.toFixed(1)} / 4</strong> across ${items.length} items.</p>
+          <p>${completedCount} of ${items.length} items marked complete.</p>
           <div class="btn-row" style="justify-content:center;">
             <button class="btn btn--primary" data-nav="mock">Back to mock modes</button>
           </div>
@@ -122,10 +147,7 @@ function runSession(el, snapshot, modeKey, itemCount) {
           <button class="btn" id="reveal-btn">Reveal model answer</button>
         </div>
         <div class="rate-row" id="rate-row" style="display:none;">
-          <button class="rate-btn" data-rate="again">Weak</button>
-          <button class="rate-btn" data-rate="hard">Shaky</button>
-          <button class="rate-btn" data-rate="good">Solid</button>
-          <button class="rate-btn" data-rate="easy">Nailed it</button>
+          <button class="rate-btn rate-btn--complete" id="mark-complete">Mark complete</button>
         </div>
       </div>
     `;
@@ -135,12 +157,12 @@ function runSession(el, snapshot, modeKey, itemCount) {
       el.querySelector('#rate-row').style.display = 'flex';
       el.querySelector('#reveal-btn').style.display = 'none';
     });
-    el.querySelectorAll('.rate-btn').forEach(b => b.addEventListener('click', () => {
-      ratings.push(RATE_SCORE[b.dataset.rate]);
-      rate(item.id, b.dataset.rate);
+    el.querySelector('#mark-complete').addEventListener('click', () => {
+      rate(item.id, 'good');
+      completedCount++;
       idx++;
       draw();
-    }));
+    });
   }
   draw();
 }

@@ -17,7 +17,7 @@
       ],
       "q": "How do you test Room DAOs, and how do you test a schema migration?",
       "shortAnswer": [
-        "For DAOs use an in-memory database built with `Room.inMemoryDatabaseBuilder` — real generated SQL, no mocking — driven from `runTest` on one test dispatcher.",
+        "For DAOs, use an in-memory database built with `Room.inMemoryDatabaseBuilder` — real generated SQL, no mocking — driven from `runTest` on one test dispatcher.",
         "Migrations get `MigrationTestHelper`, which needs the exported schema JSON: `exportSchema = true` on `@Database` plus `room.schemaLocation` on the Room KSP processor.",
         "A migration test starts at the old version, inserts representative rows, applies each `Migration`, then asserts the schema and that the data still reads back."
       ],
@@ -56,7 +56,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bt-0034",
@@ -72,8 +73,8 @@
       "q": "How do you test WorkManager — both a worker's `doWork()` and the scheduling itself?",
       "shortAnswer": [
         "Test the worker in isolation with `TestListenableWorkerBuilder<Worker>`, call `doWork()`, and assert on the `Result` — no scheduling involved.",
-        "Test scheduling with `WorkManagerTestInitHelper` plus its `TestDriver`, which fires constraints, initial delays and periodic ticks manually instead of waiting on the real system.",
-        "Assert final state via `getWorkInfoById` or `getWorkInfosByTag`, and never wait on real backoff or the periodic cadence — the TestDriver makes that time virtual."
+        "Test scheduling with `WorkManagerTestInitHelper` plus its `TestDriver`, which fires constraints, initial delays, and periodic ticks manually instead of waiting on the real system.",
+        "Assert the final state via `getWorkInfoById` or `getWorkInfosByTag`, and never wait on real backoff or the periodic cadence — the `TestDriver` makes that time virtual."
       ],
       "answer": "WorkManager splits into two testable layers, and `androidx.work:work-testing` covers both.\n\n#### The worker in isolation\n`TestListenableWorkerBuilder<SyncWorker>(context)` constructs the worker directly with your `inputData`, so `doWork()` runs in-process and returns `Result`. No scheduler, no constraints — this is where you test the upload/retry logic itself inside `runTest`.\n\n#### The scheduler\n`WorkManagerTestInitHelper.initializeTestWorkManager(context, config)` installs a real WorkManager whose conditions you drive with the `TestDriver`. Enqueue a `OneTimeWorkRequest` or `PeriodicWorkRequest`, then fire it: `setAllConstraintsMet(id)`, `setInitialDelayMet(id)`, `setPeriodDelayMet(id)`. Assert the end state with `getWorkInfoById(id)` or `getWorkInfosByTag(...)`.\n\n#### What to assert\n`Result.success()` versus `Result.retry()` outcomes, that a retry actually re-enqueues, that unique-work chains via `beginUniqueWork` don't run twice, and that output data flows through. The TestDriver exists so a test never waits on real constraints, backoff, or the periodic cadence — that is precisely where a naive test sleeps for seconds and still flakes.\n\n#### Setup\nInit in `@Before` with `ApplicationProvider` and `Configuration.Builder().setMinimumLoggingLevel(Log.DEBUG)`; pull the driver from `WorkManagerTestInitHelper.getTestDriver(context)`.",
       "code": [
@@ -100,7 +101,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bt-0035",
@@ -117,8 +119,8 @@
       "q": "How do you test a Retrofit service, and what can MockWebServer catch that a mock of Retrofit cannot?",
       "shortAnswer": [
         "Point Retrofit's base URL at `server.url(\"/\")` from a real `MockWebServer` and `enqueue` canned `MockResponse`s — the whole OkHttp stack runs for real.",
-        "Because it is a real HTTP server, `takeRequest()` lets you assert the exact path, method, headers and request body, so a wrong `@Path` template or converter bug cannot pass silently.",
-        "It also simulates what a mock never shows: 500s with error bodies, socket timeouts, delayed responses and queued responses for retry logic."
+        "Because it's a real HTTP server, `takeRequest()` lets you assert the exact path, method, headers, and request body. A wrong `@Path` template or converter bug can't pass silently.",
+        "It also simulates what a mock never shows: 500s with error bodies, socket timeouts, delayed responses, and queued responses for retry logic."
       ],
       "answer": "MockWebServer is a real local HTTP server, so the code under test runs the entire OkHttp and Retrofit pipeline — interceptors, converters, error handling — rather than a hand-rolled fake client.\n\n#### Setup\nBuild Retrofit with `baseUrl(server.url(\"/\"))`, then `enqueue` responses in order: `MockResponse().setBody(\"...\")` for 200s, `setResponseCode(500).setBody(\"{...}\")` for errors. Assert the request side with `server.takeRequest()`, which exposes `path`, `method`, `headers` and a UTF-8 `body` — this validates `@Path` interpolation, `@Query` and `@Header` serialization.\n\n#### What to test\n- **Serialization failure**: an enqueued body that is not valid JSON for the declared model — the converter throws `MalformedJsonException`; assert your repository maps it to a domain error.\n- **Timeouts**: `setBodyDelay(1, TimeUnit.SECONDS)` against a short OkHttp timeout yields `SocketTimeoutException`.\n- **Retries**: `setSocketPolicy(SocketPolicy.DISCONNECT_AT_START)` then a healthy response, and assert the retry path.\n- **Order and concurrency**: responses dequeue in order per test; use `Dispatcher` when routing depends on the request.\n\n#### Hygiene\nShut the server down in `@After`, and reset the dispatcher between tests or enqueued responses leak into the next case. These are plain JVM tests — OkHttp and Retrofit run without an emulator.",
       "code": [
@@ -150,7 +152,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bt-0036",
@@ -165,9 +168,9 @@
       ],
       "q": "How do you replace Hilt bindings in tests, and what are test components for?",
       "shortAnswer": [
-        "`@HiltAndroidTest` gives each test its own component; `@UninstallModules(NetworkModule::class)` removes a real module and a `@TestInstallIn` module in the test source set supplies the replacement.",
+        "`@HiltAndroidTest` gives each test its own component. `@UninstallModules(NetworkModule::class)` removes a real module, and a `@TestInstallIn` module in the test source set supplies the replacement.",
         "For a single binding, `@BindValue @JvmField val api = FakeGitHubApi()` overrides it directly — no module needed.",
-        "Replacement bindings must carry the same scope as the originals — re-provide a `@Singleton` binding without `@Singleton` and the Dagger compiler rejects it."
+        "Replacement bindings must carry the same scope as the originals. Re-provide a `@Singleton` binding without `@Singleton`, and the Dagger compiler rejects it."
       ],
       "answer": "#### The isolated graph\n`@HiltAndroidTest` with the `HiltAndroidRule` builds a fresh component per test and runs under `HiltTestApplication`, so you can rewire dependencies without touching production modules.\n\n#### Swapping whole modules\n`@UninstallModules(NetworkModule::class)` removes the production module, and a test-source-set module provides the fakes — a `@Module @TestInstallIn(SINGLETON_COMPONENT::class)` object whose `@Provides` returns the fake. `@TestInstallIn` only wires in test builds — production never sees it — and the pair installs into the same component the original used.\n\n#### Replacing one binding\n`@BindValue` turns a test field into a binding: `@BindValue @JvmField val api: GitHubApi = FakeGitHubApi()`. Hilt generates the module for it; no `@UninstallModules` needed. Prefer this when you only want to swap a single object.\n\n#### Scopes must match\nA replacement is a binding of the same key, so its scope must match the original. Re-provide a `@Singleton`-scoped binding unscoped and Dagger errors at compile time — the mismatch is the compiler telling you the graphs disagree.\n\n#### Injecting\n`@Inject lateinit var repository: FeedRepository` in the test, populated by `hiltRule.inject()` in `@Before`. Forget that and the field stays null.",
       "code": [
@@ -199,7 +202,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bt-0037",
@@ -214,9 +218,9 @@
       ],
       "q": "Walk me through a Compose UI test: semantics, finders, and how it stays synchronized.",
       "shortAnswer": [
-        "`createComposeRule()` hosts the composable and mirrors the tree as a semantics graph; every test queries that graph with finders like `onNodeWithTag` and `onNodeWithText`.",
-        "`onNodeWithTag` with a stable `testTag` is the robust choice — text finders break on copy changes and need `useUnmergedTree = true` when merged semantics hide a child node.",
-        "Synchronization is automatic through Compose's idling, but for async conditions you call `waitUntil(timeoutMillis) { predicate }` — never `Thread.sleep` — and `mainClock` drives animation time."
+        "`createComposeRule()` hosts the composable and mirrors the tree as a semantics graph. Every test queries that graph with finders like `onNodeWithTag` and `onNodeWithText`.",
+        "`onNodeWithTag` with a stable `testTag` is the robust choice. Text finders break on copy changes, and you need `useUnmergedTree = true` when merged semantics hide a child node.",
+        "Synchronization is automatic through Compose's idling. For async conditions, call `waitUntil(timeoutMillis) { predicate }` — never `Thread.sleep` — and `mainClock` drives animation time."
       ],
       "answer": "Compose tests do not look at pixels or Views; they walk the semantics tree Compose publishes for accessibility and testing.\n\n#### The rule and finders\n`createComposeRule()` plus `setContent { ProfileScreen(...) }` (or `createAndroidComposeRule<Activity>()` for a full activity). Find nodes with `onNodeWithTag`, `onNodeWithText`, `onNodeWithContentDescription`, or `onNode(matcher)`; assert with `assertIsDisplayed`/`assertExists`, act with `performClick`, `performTextInput`, `performScrollTo`. Debug an empty match with `onRoot().printToString()`.\n\n#### Merged semantics\nA clickable parent merges its children's semantics, so a targeted child can be invisible — pass `useUnmergedTree = true` to the finder to look underneath. This is the classic \"matched 0 nodes\" failure.\n\n#### Synchronization\nThe rule idles until recomposition finishes, then assertions are safe. For conditions gated on async work use `waitUntil(timeoutMillis) { predicate }` — never sleep. An infinite animation would never idle, so pause it: `mainClock.autoAdvance = false`, then `mainClock.advanceTimeBy(...)` steps the frame clock deterministically.\n\nPrefer `testTag` over text: tags are stable under copy and string changes, and a failing test names the exact node you meant to hit.",
       "code": [
@@ -248,7 +252,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bt-0038",
@@ -263,7 +268,7 @@
       ],
       "q": "When do you still use Espresso, and how does it coexist with Compose tests?",
       "shortAnswer": [
-        "Espresso drives legacy `View` hierarchies — `onView(withId(...)).perform(click())` inside an `ActivityScenario` — and its `IdlingResource`s make async activity wait until idle.",
+        "Espresso drives legacy `View` hierarchies — `onView(withId(...)).perform(click())` inside an `ActivityScenario`. Its `IdlingResource`s make async activity wait until idle.",
         "In a Compose test you can use both: `Espresso.onView` for `AndroidView`-hosted Views and the Compose finders for composables, because `createAndroidComposeRule` sits on the same idle infrastructure.",
         "You also reach for Espresso's `Intents` and `web` APIs — stubbing `startActivityForResult` and driving WebViews — which the semantics tree cannot reach."
       ],
@@ -297,7 +302,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bt-0039",
@@ -312,9 +318,9 @@
       ],
       "q": "How do you do screenshot tests, and how do you keep a golden set from rotting?",
       "shortAnswer": [
-        "Paparazzi renders View layouts on the JVM with no device, Roborazzi captures Compose under Robolectric, and Compose screenshot tests capture `onRoot().captureToImage()` on a real device — each is a different cost/faithfulness tradeoff.",
-        "Goldens rot through fonts, emoji and rendering-engine drift, so pin the device config, font scale and locale per test and never capture dynamic content like a wall clock or network images.",
-        "CI runs `verify`; a PR updates goldens via `record`, and every regenerated image gets a human review — a golden change you cannot explain is a visual bug."
+        "Paparazzi renders View layouts on the JVM with no device; Roborazzi captures Compose under Robolectric; Compose screenshot tests capture `onRoot().captureToImage()` on a real device. Each is a different cost/faithfulness tradeoff.",
+        "Goldens rot through fonts, emoji, and rendering-engine drift. Pin the device config, font scale, and locale per test, and never capture dynamic content like a wall clock or network images.",
+        "CI runs `verify`; a PR updates goldens via `record`; and every regenerated image gets a human review. A golden change you can't explain is a visual bug."
       ],
       "answer": "#### The three tools\n- **Paparazzi** — JVM-only, renders layouts through Layoutlib and Compose through its own scene; `paparazzi.snapshot { HomeScreen(...) }`. Fast, no emulator, fully deterministic config.\n- **Roborazzi** — runs under Robolectric, records `captureRoboImage()` from a Compose rule or View, and ships `record`/`compare`/`verify` Gradle tasks with tolerance-based comparison for anti-aliasing.\n- **Compose screenshot tests** — the platform `androidx.compose.ui:ui-test` API captures `onRoot().captureToImage()` on a real device and diffs against a stored golden. Pixel-perfect, so you pin the emulator image.\n\n#### Keeping goldens sane\nA golden is only as stable as what it renders. Pin `deviceConfig` (device, locale, font scale), disable animations, and feed deterministic data — inject a `FixedClock`, fixed names, no network or random content. Mask or replace dynamic regions rather than excluding them.\n\n#### The workflow\n`record` regenerates goldens on a deliberate change; `verify` compares in CI. Never auto-update on failure in CI — that ships the regression. Require a human to review each diff; the failure output shows baseline, actual and the difference. Prune goldens when a screen dies, or the set becomes dead weight nobody defends.",
       "code": [
@@ -346,7 +352,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bt-0040",
@@ -361,8 +368,8 @@
       ],
       "q": "When do you use UI Automator, and how do you keep end-to-end tests stable?",
       "shortAnswer": [
-        "UI Automator drives the device from outside your app — `UiDevice` with `UiSelector`/`By` — so it is the tool for cross-app flows, System UI and full journeys through a real backend.",
-        "It has no idle-sync or semantics tree, so use explicit `waitForExists(timeout)` and locate by content-description or stable resource names, not wall-clock sleeps.",
+        "UI Automator drives the device from outside your app — `UiDevice` with `UiSelector`/`By`. It's the tool for cross-app flows, System UI, and full journeys through a real backend.",
+        "It has no idle-sync and no semantics tree, so use explicit `waitForExists(timeout)` and locate by content-description or stable resource names — not wall-clock sleeps.",
         "Keep E2E stable with seeded test accounts, idempotent setup, animations off, a pinned device image, and `takeScreenshot` on failure so a flake is debuggable."
       ],
       "answer": "#### What it is for\n`UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())` plus `device.findObject(By.text(\"Sign out\"))` drives the whole device — not just your process. Use it when a journey leaves the app: system permission dialogs, Settings, another app, or a full purchase flow against a real backend.\n\n#### The synchronization gap\nEspresso and Compose tests auto-idle; UI Automator does not. Replace implicit waiting with explicit `waitForExists(timeoutMillis)` and `device.wait(Until.hasObject(By.text(...)), 10_000)`. Locate by `By.res(\"com.example.app\", \"id\")` or content-description rather than localized strings.\n\n#### Keeping it stable\n- Disable animations in `@Before`: `device.executeShellCommand(\"settings put global window_animation_scale 0\")` (transition and animator scales too).\n- Use a deterministic backend with seeded accounts; clear app data so each run starts identical (`adb shell pm clear` via shell command).\n- Pin the emulator image in CI; a floating system image silently changes timing and rendering.\n- Capture `device.takeScreenshot(file)` inside a `TestWatcher` on failure so a flake has evidence.\n- Prefer in-app Compose/Espresso for anything that stays inside your process — UI Automator's value is precisely the part that leaves it.",
@@ -390,7 +397,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bt-0041",
@@ -406,9 +414,9 @@
       ],
       "q": "Code reads `System.currentTimeMillis()` and the global `Random`. How do you make it testable and deterministic?",
       "shortAnswer": [
-        "Inject a clock instead of reading wall time at the call site — `kotlin.time.Clock` or `java.time.Clock` — and in tests hand it a fixed instant so expiry and recency become assertable.",
+        "Inject a clock instead of reading wall time at the call site — `kotlin.time.Clock` or `java.time.Clock`. In tests, hand it a fixed instant so expiry and recency become assertable.",
         "For coroutine time, `runTest` provides virtual time: `advanceTimeBy(...)` and `delay` jump instantly instead of sleeping.",
-        "Inject `kotlin.random.Random` and seed it — `Random(42)` — so a property-style test is reproducible; a seeded run turns a flaky 'sometimes' into a failure you can fix."
+        "Inject `kotlin.random.Random` and seed it — `Random(42)` — so a property-style test is reproducible. A seeded run turns a flaky 'sometimes' into a failure you can fix."
       ],
       "answer": "#### The clock\n`System.currentTimeMillis()` read inside a function is a hidden input: the outcome depends on when the test happens to run. Inject `kotlin.time.Clock` (or `java.time.Clock` on the JVM), with production using `Clock.System`, and tests a fixed instant. Model time as `Instant` in the domain, not a wall-clock read at the call site.\n\n#### Coroutine time\n`runTest` swaps the dispatcher's scheduler for virtual time: `advanceTimeBy(30.seconds)` makes a `delay(30.seconds)` return instantly, and `currentTime` is the scheduler's own clock. This is how you test timeouts and rate limits without sleeping. For code that hops off the test dispatcher, pass an explicit dispatcher (e.g. `StandardTestDispatcher`) instead of `Dispatchers.Default`.\n\n#### Randomness\nDefault `Random` is a global source of nondeterminism. Inject `kotlin.random.Random`; production passes `Random.Default` (or `SecureRandom` where the output must be unpredictable), tests pass a seeded `Random(42)`. Same seed, same sequence — assertable. When you need repeatability across many cases, keep the seed per test class and shrink inputs on failure. Statistically-shaped behavior (e.g. sampling) is tested over many iterations with an explicit seeded instance.",
       "code": [
@@ -440,7 +448,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bt-0042",
@@ -455,8 +464,8 @@
       ],
       "q": "How do you write parameterized tests, and what makes a test suite readable?",
       "shortAnswer": [
-        "JUnit 5's `@ParameterizedTest` with `@ValueSource`, `@CsvSource` or `@MethodSource` runs one set of assertions across many inputs — the fix for an N-test-per-branch explosion.",
-        "Name tests as expectations — backtick sentences in Kotlin like `` `returns an empty list when nothing matches` `` — and keep one behavior per test so a failure names the contract broken.",
+        "JUnit 5's `@ParameterizedTest` with `@ValueSource`, `@CsvSource`, or `@MethodSource` runs one set of assertions across many inputs — the fix for an N-test-per-branch explosion.",
+        "Name tests as expectations — backtick sentences in Kotlin like `` `returns an empty list when nothing matches` `` — and keep one behavior per test, so a failure names the contract broken.",
         "A readable suite uses named constants instead of magic numbers, an arrange-act-assert shape, and no shared mutable state leaking between tests."
       ],
       "answer": "#### Parameterized tests\n`@ParameterizedTest` + `@CsvSource` runs the same body over a table of inputs; `@ValueSource` covers a single column, `@MethodSource` covers complex objects via `Stream<Arguments>`. Each row is an isolated test case — when one fails, the report names the exact inputs. This is the alternative to twenty copy-pasted `@Test` methods that only differ in their literals.\n\n#### Naming\nIn Kotlin, backtick names turn tests into sentences: `` fun `classifies a score of 59 as PASS`() ``. The name states the expectation, so the reader understands intent without reading the body. JUnit 5 also offers `@DisplayName` for the same purpose on JVM tests.\n\n#### Shape\nOne behavior per test, asserted once — use `assertAll` for a group of related invariants rather than five unrelated `assertTrue`s. Arrange-act-assert with a blank line between the phases. Replace magic numbers with named constants (`MIN_VALID_SCORE`), avoid tests that depend on run order or shared mutable state, and keep setup in `@Before`/factory helpers so each test reads top to bottom.\n\nA readable suite doubles as documentation: it describes the contract the code promises, and a failing test name tells you exactly which promise broke.",
@@ -489,7 +498,8 @@
           "checked": "2026-08-12"
         }
       ],
-      "addedIn": "2026.08.12"
+      "addedIn": "2026.08.12",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

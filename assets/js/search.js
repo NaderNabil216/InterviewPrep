@@ -1,6 +1,16 @@
 // search.js — tiny in-memory fuzzy-ish search over question text, tags, and topic.
 let index = [];
 
+// Trailing debounce: the wrapped fn runs only after `ms` of silence. No shared module needed —
+// this is the only debounced surface besides the Topics filter, which imports it from here.
+export function debounce(fn, ms) {
+  let handle = null;
+  return (...args) => {
+    clearTimeout(handle);
+    handle = setTimeout(() => fn(...args), ms);
+  };
+}
+
 export function buildIndex(items) {
   index = items.map(it => ({
     id: it.id,

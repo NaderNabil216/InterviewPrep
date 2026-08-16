@@ -9,12 +9,17 @@
       "topic": "ANR & main thread",
       "level": 2,
       "type": "qa",
-      "tags": ["handler", "handlerthread", "looper", "main-thread"],
+      "tags": [
+        "handler",
+        "handlerthread",
+        "looper",
+        "main-thread"
+      ],
       "q": "How do `Handler`, `Looper`, and `HandlerThread` work together, and when would you build your own?",
       "shortAnswer": [
-        "A `Looper` runs a message loop on one thread; `Handler` posts `Message`/`Runnable`s to that loop and processes them on the Looper's thread — so `Handler` is your way to jump onto a specific thread.",
-        "`HandlerThread` is a Thread with a Looper already set up — the standard way to give a background worker a serial queue.",
-        "The main thread is just the thread with the main `Looper`; `new Handler(Looper.getMainLooper())` posts to the UI thread, and doing slow work in its callbacks is an ANR."
+        "A `Looper` runs a message loop on one thread. `Handler` posts `Message`s or `Runnable`s to that loop and runs them on the Looper's thread, so it is how you jump onto a specific thread.",
+        "`HandlerThread` is a `Thread` with a `Looper` already set up — the standard way to give a background worker a serial queue.",
+        "The main thread is just the thread with the main `Looper`. `new Handler(Looper.getMainLooper())` posts to the UI thread, and slow work in its callbacks is an ANR."
       ],
       "answer": "#### The trio\n`Looper.prepare()` + `Looper.loop()` turn any thread into a message loop: a queue plus a loop that pulls the next message and runs it. `Handler` is the object you post to: `handler.post(runnable)` enqueues a task that `loop()` will execute on that Looper's thread, in order, FIFO (with `delay` and `postAtTime` for scheduling). `HandlerThread` packages this — `start()` it and you have a ready-made background queue with `getLooper()`.\n\n#### Why this matters on the main thread\nThe UI thread is just the process's main Looper. `new Handler(Looper.getMainLooper()).post { ... }` is the canonical way to hop back to the UI from a worker (or `HandlerCompat.post` from a different thread's looper). Because every frame, input event, and lifecycle callback is a message on this loop, a single slow callback blocks everything — the classic ANR. That is why `android:mainLooper` debounce/`removeCallbacks` patterns exist: `removeCallbacks` cancels pending posts.\n\n#### HandlerThread in practice\nFor a worker that must process one task at a time (a writer queue, a single-file serializer), `HandlerThread` gives you serial execution for free: create it, start it, and `Handler(thread.looper)` posts serialize naturally — no locks needed, since everything runs on one thread. `quitSafely()` stops the loop after pending messages drain. The modern alternative is `CoroutineScope(Dispatchers.IO)` + a `Mutex`, but HandlerThread is still the right answer when you need *the same OS thread* (e.g. a `TextureView` renderer or a legacy callback API).",
       "code": [
@@ -34,9 +39,14 @@
         "Assuming `postDelayed` work on a dead thread runs — it silently never fires."
       ],
       "refs": [
-        { "title": "HandlerThread", "url": "https://developer.android.com/reference/android/os/HandlerThread", "checked": "2026-08-13" }
+        {
+          "title": "HandlerThread",
+          "url": "https://developer.android.com/reference/android/os/HandlerThread",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0052",
@@ -44,12 +54,17 @@
       "topic": "Components & navigation",
       "level": 2,
       "type": "qa",
-      "tags": ["intents", "explicit", "implicit", "intent-filters"],
+      "tags": [
+        "intents",
+        "explicit",
+        "implicit",
+        "intent-filters"
+      ],
       "q": "What is the difference between an explicit and an implicit Intent, and how does resolution work?",
       "shortAnswer": [
-        "An explicit Intent names a component (`componentName`) and always resolves to it; an implicit Intent declares an action/data/category and the system finds a matching component from its `intent-filter`.",
-        "Resolution is `startActivity`-style matching against every installed `intent-filter` — action and category must match exactly, data URI/mime/type must match one of the `data` tags.",
-        "If an implicit Intent matches nothing you get `ActivityNotFoundException` — always guard with `resolveActivity`, and an ambiguous match asks the user via a chooser."
+        "An explicit `Intent` names a component, so it always resolves to it. An implicit `Intent` declares an action, data, and category, and the system finds a matching component from `intent-filter`s.",
+        "Resolution matches against every installed `intent-filter`: the action and categories must match, and the data URI or MIME type must match one `data` tag.",
+        "If nothing matches, `startActivity` throws `ActivityNotFoundException` — guard with `resolveActivity`. Multiple matches show the user a chooser."
       ],
       "answer": "#### Explicit\n`Intent(context, TargetActivity::class.java)` — the component is named, so the system starts exactly that class (same app or another package). Explicit intents are for your own screens, and they are also the safe way to send intents across apps when you know the target. They ignore intent-filters — the component exists or it crashes with `ActivityNotFoundException` if not installed/exported.\n\n#### Implicit\n`Intent(Intent.ACTION_VIEW).setData(uri)` describes *what* you want, not *who*. The system scores it against every installed `intent-filter`: the `action` must match one `android:action`, every declared `category` must be present (and `DEFAULT` is implicit for any component that can be started via implicit intent), and the URI/`mimeType` must be compatible with one `data` element. A filter matches if action + all categories + data all pass.\n\n#### Resolution outcomes\n- **One match**: it starts directly.\n- **Multiple matches**: Android shows a chooser (or the user's default if set).\n- **Zero matches**: `ActivityNotFoundException` on `startActivity`.\n\n#### The discipline\nBefore firing an implicit intent, call `packageManager.resolveActivity(intent, MATCH_DEFAULT_ONLY)` to check for a handler and degrade to a download/error state. Match `data` carefully: a `content://` Uri plus an explicit `mimeType` (e.g. `image/*`) is usually more reliable than hoping a filter guesses. And if the target is your own code, prefer explicit — implicit resolution across apps is for open ecosystems, and it is exactly what deep links and app links are built on.",
       "code": [
@@ -69,9 +84,14 @@
         "Forgetting the `DEFAULT` category, which silently makes a filter uncallable implicitly."
       ],
       "refs": [
-        { "title": "Intents and intent filters", "url": "https://developer.android.com/guide/components/intents-filters", "checked": "2026-08-13" }
+        {
+          "title": "Intents and intent filters",
+          "url": "https://developer.android.com/guide/components/intents-filters",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0053",
@@ -79,12 +99,17 @@
       "topic": "ANR & main thread",
       "level": 3,
       "type": "qa",
-      "tags": ["anr", "traces", "strictmode", "main-thread"],
+      "tags": [
+        "anr",
+        "traces",
+        "strictmode",
+        "main-thread"
+      ],
       "q": "How do you diagnose an ANR? What does the trace file actually tell you?",
       "shortAnswer": [
-        "An ANR fires when the input dispatch, broadcast, or service timeout lapses — input usually 5 s, key 5 s, broadcast 10 s (parcelable) — because the main thread is blocked.",
-        "The actionable artifact is the ANR trace in `/data/anr/` (via `dumpsys`/Dev Studio, `adb shell am dumpheap` for the live process): every thread's stack at the moment of the block.",
-        "Read the main thread's stack first — the last frame on the call stack is where it is stuck; then check for a lock your code holds (a `binder`, a `Mutex`, an IO call on the main thread)."
+        "An ANR fires when a timeout lapses — about 5 s for input, 10 s for a broadcast — because the main thread was blocked and did not finish the event.",
+        "The actionable artifact is the ANR trace in `/data/anr/`: every thread's stack at the moment of the block. Android Studio and `adb bugreport` expose it.",
+        "Read the main thread's stack first — the last frame is where it is stuck. Then check for what it waits on: a `binder` call, a `Mutex`, or IO on the main thread."
       ],
       "answer": "#### What triggers an ANR\nThe system posts a timeout per input dispatch (5 s), key input, and broadcast (10 s by default). If the main thread has not finished processing by the deadline, the ANR dialog shows and the process may be killed. StrictMode's `detect*OnMainThread` flags catch the *causes* at runtime before the system does.\n\n#### The trace\nWhen an ANR happens, the system dumps every thread's Java/native stack to `/data/anr/` (visible via Android Studio's App Inspection / `adb bugreport`). The reading order:\n1. **Main thread** (the `main` thread, `tid=1`): the last Java frame is where it is stuck — `binder.transact` (a synchronous system call), `MessageQueue.next` (idle, *not* stuck), or your own heavy frame.\n2. **Repeated frames**: the same frame across multiple dumps (or the frame count climbing) means genuine blockage, not a transient.\n3. **Sibling threads**: a background thread holding a `Mutex`/`monitor` that the main thread waits on is the classic hidden cause — the trace shows `waiting to lock <0x...>` with the holder's thread right below.\n4. **Binder stalls**: `BinderProxy.transact` in the main stack means waiting on a *remote* process (e.g. a provider query); check the target's trace too.\n\n#### The fix loop\nEnable StrictMode, reproduce, read the main-thread frame, move the blocking call off the main thread (IO/`Room` → `Dispatchers.IO`, binder calls → `withContext`), and re-run. The trace tells you *where*, StrictMode tells you *what API*.",
       "code": [
@@ -104,10 +129,19 @@
         "Fixing the visible frame without checking who holds the lock it waits on."
       ],
       "refs": [
-        { "title": "ANR", "url": "https://developer.android.com/topic/performance/vitals/anr", "checked": "2026-08-13" },
-        { "title": "StrictMode", "url": "https://developer.android.com/reference/android/os/StrictMode", "checked": "2026-08-13" }
+        {
+          "title": "ANR",
+          "url": "https://developer.android.com/topic/performance/vitals/anr",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "StrictMode",
+          "url": "https://developer.android.com/reference/android/os/StrictMode",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0054",
@@ -115,12 +149,16 @@
       "topic": "UI & configuration",
       "level": 2,
       "type": "qa",
-      "tags": ["resources", "qualifiers", "configuration"],
+      "tags": [
+        "resources",
+        "qualifiers",
+        "configuration"
+      ],
       "q": "How does Android resource resolution work, and what actually causes a resource to be picked?",
       "shortAnswer": [
-        "Resources are looked up in directories qualified by configuration axes — `values`, `values-en`, `values-night`, `values-land` — and the system picks the best set for the current `Configuration`.",
-        "Resolution iterates qualifiers with precedence: `MCC/MNC`, locale, layout direction, `smallestWidth`, width, height, orientation, `uiMode` (night), screen size, version, ...",
-        "The algorithm is 'best match by specificity': at each step a directory wins if it matches exactly; ties fall to the more specific qualifier, and a miss falls back to the base `values`/`drawable`."
+        "Resources live in qualified directories — `values`, `values-en`, `values-night`, `values-land` — and the system picks the best set for the current `Configuration`.",
+        "Resolution checks qualifiers in a fixed order: MCC/MNC, locale, layout direction, smallest width, width, height, orientation, `uiMode` (night), screen size, version, and more.",
+        "The rule is best match by specificity: a directory wins at each step if it matches exactly, ties go to the more specific qualifier, and misses fall back to the base `values` or `drawable`."
       ],
       "answer": "#### The mechanism\nEvery `values-*`/`drawable-*`/`layout-*` directory corresponds to a configuration axis: `values-en` matches an English locale, `values-night` matches dark mode, `values-land` matches landscape, `values-sw600dp` matches a screen of at least 600 dp *shortest* side, `values-w<N>dp` matches width. When the system resolves `@string/foo`, it computes the current `Configuration` and scans the resource table for the directory that is the best match, using the qualifier precedence list in the docs.\n\n#### How it picks\nQualifiers have a strict order of evaluation (MCC, MNC, locale, layout direction, smallest width, width, height, orientation, night mode, density, version). For each qualifier, a resource set either matches the current config or it does not; the candidate set is narrowed at each step, and at the end the *most specific* full match wins. The critical consequences:\n- **Exact beats generic**: `values-en-rUS` beats `values-en` for a US device.\n- **Density is separate**: `drawable-xxhdpi` is chosen for an xxhdpi screen; missing densities fall back (with scaling) up the density chain.\n- **Missing qualifier = universal**: a `values/foo` with no qualifier matches everything — it is the fallback when no qualified directory applies.\n\n#### The real-world traps\n`sp`/`dp` and density buckets interact with `xxhdpi`/`xxxhdpi` scaling; `values-night` overriding a subset of colors breaks when a new color is added to only one set; and locale qualifiers (since API 24 `values-b+es`) must match the whole `LocaleList`. A resource the user can never see is usually a qualifier ordering bug, not a missing file.",
       "code": [
@@ -140,9 +178,14 @@
         "Using `values-land` for a change that should be density- or width-driven."
       ],
       "refs": [
-        { "title": "Providing resources", "url": "https://developer.android.com/guide/topics/resources/providing-resources", "checked": "2026-08-13" }
+        {
+          "title": "Providing resources",
+          "url": "https://developer.android.com/guide/topics/resources/providing-resources",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0055",
@@ -150,12 +193,18 @@
       "topic": "Components & navigation",
       "level": 2,
       "type": "qa",
-      "tags": ["app-components", "activity", "service", "receiver", "provider"],
+      "tags": [
+        "app-components",
+        "activity",
+        "service",
+        "receiver",
+        "provider"
+      ],
       "q": "What are the four Android app components, and what distinguishes them?",
       "shortAnswer": [
-        "Activity (a screen with a UI), Service (background work with no UI), BroadcastReceiver (handles system/app broadcasts), and ContentProvider (exposes structured data to other apps).",
-        "They differ in how they are started — `startActivity`/`startService`/`bindService`, `sendBroadcast`, and `ContentResolver` queries — and each has a lifecycle the system manages.",
-        "They must be declared in the manifest, and only the ones other apps may trigger need `android:exported` — which is mandatory to set explicitly on Android 12+."
+        "`Activity` is a screen with a UI, `Service` does background work with no UI, `BroadcastReceiver` handles system or app broadcasts, and `ContentProvider` exposes structured data to other apps.",
+        "They differ in how they start — `startActivity`, `startService`/`bindService`, `sendBroadcast`, and `ContentResolver` queries — and each has a system-managed lifecycle.",
+        "All four must be declared in the manifest, and any that other apps may trigger need `android:exported`, which is mandatory to set explicitly on Android 12+."
       ],
       "answer": "#### Activity\nA single screen with a window. Started via `startActivity` (or an intent that resolves to it); its lifecycle (`onCreate`→`onStart`→`onResume`→`onPause`→`onStop`→`onDestroy`) is driven by the system, and it is the only component users interact with directly.\n\n#### Service\nBackground work without a UI: `startService` (job-style, runs until stopped) or `bindService` (client-style, runs while bound). It runs on the main thread unless you move work off it, so the real pattern is a worker thread/`CoroutineScope` inside. Foreground services are the bounded variant that must post a notification.\n\n#### BroadcastReceiver\nReceives events — system broadcasts (`BOOT_COMPLETED`, connectivity, package installs) and your own `sendBroadcast`. `onReceive` runs on the main thread for a few seconds, then the receiver is gone; long work belongs in a Service or WorkManager (`goAsync` is the escape hatch, but the window is still short). Manifest-registered receivers get implicit-broadcast restrictions since Android 8; most use runtime registration now.\n\n#### ContentProvider\nExposes a structured dataset (rows/columns) through `ContentResolver` URIs — the mechanism behind Contacts, MediaStore, and cross-app sharing. It is the only component with a distinct lifecycle (`onCreate`) and is instantiated on first query.\n\n#### The manifest contract\nAll four must be declared with `android:name` (+ `android:exported` on 12+ for any that are externally reachable). The `exported` flag is the single most common security bug — an exported component without permissions is a public API.",
       "code": [
@@ -175,9 +224,14 @@
         "Doing long work inside `onReceive` — the receiver is killed when it returns."
       ],
       "refs": [
-        { "title": "Application fundamentals", "url": "https://developer.android.com/guide/components/fundamentals", "checked": "2026-08-13" }
+        {
+          "title": "Application fundamentals",
+          "url": "https://developer.android.com/guide/components/fundamentals",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0056",
@@ -185,12 +239,17 @@
       "topic": "Components & navigation",
       "level": 3,
       "type": "qa",
-      "tags": ["contentprovider", "contentresolver", "uri", "cursor"],
+      "tags": [
+        "contentprovider",
+        "contentresolver",
+        "uri",
+        "cursor"
+      ],
       "q": "Walk through implementing a ContentProvider. What is an authority, and how do URIs map to queries?",
       "shortAnswer": [
-        "A ContentProvider exposes a dataset via `content://<authority>/<path>` URIs; the authority is a unique global name (the manifest `android:authorities`), and the path identifies the collection or row.",
-        "`ContentResolver` dispatches `query/insert/update/delete` to your provider; you parse the URI (`UriMatcher`) and return a `Cursor` backed by your data source.",
-        "The pitfalls are a blocked main thread (binder calls can come from anywhere), not using `setNotificationUri`/`ContentObserver` for change signals, and authorization — the provider must enforce `permission`/`grantUriPermission`."
+        "A `ContentProvider` exposes data via `content://<authority>/<path>` URIs. The authority is a unique global name (manifest `android:authorities`); the path names a collection or a row.",
+        "`ContentResolver` dispatches `query`/`insert`/`update`/`delete` to your provider. You parse the URI with `UriMatcher` and return a `Cursor` backed by your data source.",
+        "The pitfalls: blocking the caller (binder calls can come from any thread), missing `setNotificationUri`/`ContentObserver` change signals, and weak authorization — enforce `permission` and `grantUriPermission`."
       ],
       "answer": "#### The shape\nA provider is a component exposed as `content://com.example.app.provider/items`. `com.example.app.provider` is the **authority** (declared once, globally unique), `/items` the collection, `/items/5` the row. Because it is a content URI, any app can talk to it through `ContentResolver` without holding a direct reference.\n\n#### Implementation\nDeclare `ContentProvider` in the manifest with `android:authorities` and `android:exported`. In the class: `onCreate` opens the data source (a Room/SQLite DB or in-memory store); `UriMatcher` maps URI patterns to numeric codes (`ITEMS`, `ITEM_ID`); `query()` parses `selection`, `selectionArgs`, `sortOrder` and returns a `Cursor`; `insert/update/delete` mutate and call `getContext().contentResolver.notifyChange(uri, null)` so `ContentObserver`s elsewhere see the change.\n\n#### The two contracts\n- **Threading**: binder calls arrive on whatever thread the caller has — your methods must be thread-safe and non-blocking on the caller's path (the *caller* decides; you must not assume main thread).\n- **Permissions**: `exported` + `android:readPermission`/`writePermission` (a custom `signature` permission for your own apps) gate whole-provider access; `grantUriPermission` grants per-URI access (e.g. a photo picker handing one URI to a viewer).\n\n#### When you need one vs Room\nRoom alone is *internal* storage — no cross-app access. A ContentProvider adds the content-URI contract: the reason you implement one is exposing data to other apps, the system (Contacts/MediaStore integration), or the `OpenDocument`/SAF flows.",
       "code": [
@@ -210,9 +269,14 @@
         "Leaving the provider exported with no permission — a public, writable database."
       ],
       "refs": [
-        { "title": "Content provider basics", "url": "https://developer.android.com/guide/topics/providers/content-provider-basics", "checked": "2026-08-13" }
+        {
+          "title": "Content provider basics",
+          "url": "https://developer.android.com/guide/topics/providers/content-provider-basics",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0057",
@@ -220,12 +284,16 @@
       "topic": "Components & navigation",
       "level": 2,
       "type": "qa",
-      "tags": ["activity-result", "registerforactivityresult", "contracts"],
+      "tags": [
+        "activity-result",
+        "registerforactivityresult",
+        "contracts"
+      ],
       "q": "How does the Activity Result API replace `startActivityForResult`, and what are the contracts?",
       "shortAnswer": [
-        "You `registerForActivityResult(contract, callback)` once at construction time, then launch with `launch(input)` — the callback fires when the result arrives, with `RESULT_OK`/`RESULT_CANCELED` checked against the contract's `ActivityResult`.",
+        "Register once with `registerForActivityResult(contract, callback)` at construction time, then `launch(input)`. The callback fires with an `ActivityResult`, whose `RESULT_OK`/`RESULT_CANCELED` you check.",
         "Contracts bundle intent-building and result-parsing: `StartActivityForResult`, `TakePicture`, `PickVisualMedia` (Photo Picker), `RequestPermission`, `OpenDocument`.",
-        "The rule that trips people: the launch must happen after the activity is `STARTED` and the registration before the fragment/activity is created — registering in a late callback or launching before the lifecycle is ready throws."
+        "The rule that trips people: launch only after the `Activity` reaches `STARTED`, and register before it is created. Registering late or launching early throws."
       ],
       "answer": "#### The shape\nDeclare once: `val launcher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result -> ... }`. Then `launcher.launch(intent)` anytime the UI is started (not in `onCreate`-early for fragments — the contract is registered lazily and the launch is deferred to `STARTED`). The callback receives an `ActivityResult` with `resultCode` (`RESULT_OK`/`RESULT_CANCELED`/custom) and the `data` Intent; the contract already parsed extras for the built-in ones.\n\n#### Why it replaced the old API\n`startActivityForResult` scattered `onActivityResult(requestCode, resultCode, intent)` handling across a screen, conflated multiple requests via request codes, and made callers lifecycle-unaware. The new API is typed, scoped to a component, and `Fragment`-safe: the launcher survives configuration changes because it is keyed to the Fragment/Activity, and the callback is guaranteed on the main thread.\n\n#### The contracts you will actually use\n- `StartActivityForResult` — raw start, you parse the result intent.\n- `TakePicture`/`TakePicturePreview` — camera capture to a `content://` Uri you supply (no permission needed — the camera app is a separate app).\n- `PickVisualMedia` — Photo Picker with zero storage permission on Android 13+; degrades automatically.\n- `OpenDocument`/`CreateDocument` — SAF pickers, returns a persistable content Uri.\n- `RequestPermission`/`RequestMultiplePermissions` — the modern way to request dangerous permissions.\n\n#### The traps\n- Registering the launcher inside a callback or after the screen is destroyed — `IllegalStateException`.\n- Launching before the Fragment/Activity reaches `STARTED` (e.g. from `onCreate` in a Fragment) — the platform defers, but repeated launches queue.\n- Ignoring `RESULT_CANCELED` — most flow bugs are really the user cancelling a picker you assumed succeeded.",
       "code": [
@@ -245,9 +313,14 @@
         "Checking only `RESULT_OK` and missing the user's cancel path."
       ],
       "refs": [
-        { "title": "Get a result from an activity", "url": "https://developer.android.com/training/basics/intents/result", "checked": "2026-08-13" }
+        {
+          "title": "Get a result from an activity",
+          "url": "https://developer.android.com/training/basics/intents/result",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0058",
@@ -255,12 +328,16 @@
       "topic": "UI & configuration",
       "level": 2,
       "type": "qa",
-      "tags": ["motionevent", "input-events", "touch"],
+      "tags": [
+        "motionevent",
+        "input-events",
+        "touch"
+      ],
       "q": "How do touch events reach a View, and what is a `MotionEvent`?",
       "shortAnswer": [
-        "A finger produces a stream of `MotionEvent`s (`ACTION_DOWN`, `ACTION_MOVE`, `ACTION_UP`, plus multitouch `ACTION_POINTER_DOWN/UP`) dispatched from the system to the window, down the `ViewGroup.dispatchTouchEvent` chain.",
-        "`dispatchTouchEvent` → `onInterceptTouchEvent` → `onTouchEvent` is the pipeline: the parent decides whether to intercept, then the target decides whether to consume.",
-        "A consumed event stops propagating; an unconsumed `ACTION_DOWN` means the whole gesture is cancelled (there is no 'second chance' mid-gesture)."
+        "A finger produces a stream of `MotionEvent`s — `ACTION_DOWN`, `ACTION_MOVE`, `ACTION_UP`, plus multitouch `ACTION_POINTER_DOWN/UP` — dispatched from the system down the `ViewGroup.dispatchTouchEvent` chain.",
+        "The pipeline is `dispatchTouchEvent` → `onInterceptTouchEvent` → `onTouchEvent`: the parent decides whether to intercept, then the target decides whether to consume.",
+        "A consumed event stops propagating. If a view does not consume `ACTION_DOWN`, the whole gesture goes to its parent — there is no joining mid-gesture."
       ],
       "answer": "#### The event stream\nEach touch is a `MotionEvent` with an action (`DOWN`, `MOVE`, `UP`, `CANCEL`, and pointer variants for multi-touch), coordinates in the view's space, and timing (`eventTime`). The system delivers them to the focused window; the window dispatches to the root `ViewGroup`, which walks the tree.\n\n#### The dispatch pipeline\nFor every event the chain is:\n1. `dispatchTouchEvent(event)` — the entry point on each `ViewGroup`.\n2. `onInterceptTouchEvent(event)` — the parent's chance to hijack the gesture (e.g. a scroll container stealing a swipe). Returning `true` means the rest of this gesture goes to the parent.\n3. `onTouchEvent(event)` — the target handles it; returning `true` marks it *consumed* and the parent will not see `MOVE`/`UP` of this gesture.\n\nThe contract: `ACTION_DOWN` decides the target. If a View does not return `true` for `ACTION_DOWN`, the system sends the subsequent moves to its parent instead — it can never 'join' mid-gesture. And when the parent intercepts after `DOWN`, the child receives `ACTION_CANCEL`, which is how scroll containers tell children 'stop what you are doing'.\n\n#### Consume or not\nThe practical question in interviews is the interaction: a scrollable parent + a swipeable child (a `RecyclerView` with a swipe-to-dismiss, a `ViewPager` with a draw). `requestDisallowInterceptTouchEvent(true)` on the child prevents the parent's `onInterceptTouchEvent` from firing for the rest of the gesture — the standard solution when a child must win. And custom `GestureDetector`/`ScaleGestureDetector` wrap `MotionEvent`s so you rarely parse raw actions yourself.",
       "code": [
@@ -280,9 +357,14 @@
         "Forgetting `requestDisallowInterceptTouchEvent` resets after each `DOWN`, so the child must re-claim per gesture."
       ],
       "refs": [
-        { "title": "MotionEvent", "url": "https://developer.android.com/reference/android/view/MotionEvent", "checked": "2026-08-13" }
+        {
+          "title": "MotionEvent",
+          "url": "https://developer.android.com/reference/android/view/MotionEvent",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0059",
@@ -290,12 +372,17 @@
       "topic": "UI & configuration",
       "level": 2,
       "type": "qa",
-      "tags": ["window-token", "dialog", "context", "overlay"],
+      "tags": [
+        "window-token",
+        "dialog",
+        "context",
+        "overlay"
+      ],
       "q": "What is a window token, and why does showing a dialog require the right Context?",
       "shortAnswer": [
-        "A window token is an `IBinder` the window manager uses to identify a window and tie a new window to it — dialogs and popups must attach to the Activity's token to be allowed to display.",
-        "`show()` on a `Dialog` uses the context you passed; an Activity context carries its window token, but an Application context has none, so the system throws `BadTokenException` (or needs a `TYPE_APPLICATION` overlay).",
-        "The rule: `AlertDialog.Builder(activity)` and `LayoutInflater.from(activity)` — never the application context — for anything that needs a window."
+        "A window token is an `IBinder` the window manager uses to identify a window and attach new windows to it. Dialogs and popups must attach to the `Activity`'s token to display.",
+        "`Dialog.show()` uses the context you passed in. An `Activity` context carries its window token; an `Application` context has none, so the system throws `BadTokenException`.",
+        "The rule: use an `Activity` context for `AlertDialog.Builder` and `LayoutInflater` — never the application context — for anything that needs a window."
       ],
       "answer": "#### The token\nEvery window has a `IBinder` token managed by the WindowManager (`WindowManager.addView` takes a `WindowManager.LayoutParams` whose `token` field is that binder). When your app calls `startActivity`, the system uses the Activity's token; when a dialog shows, the dialog's window is *attached* to the owner's token. That attachment is how the window manager keeps dialogs above their activity and scoped to their task.\n\n#### Why context matters\n`Dialog.show()` → `WindowManager.addView(view, params)` uses the `Context` you constructed it with. An Activity's `ContextThemeWrapper` carries the window token in its `baseContext`; an `Application` context does **not** have a token — the window manager cannot place the dialog, and you get `BadTokenException: Unable to add window -- token null is not valid`.\n\n#### The workarounds\n- Correct: pass an Activity (or themed Activity) context; dialogs attach to its token and die with it.\n- `TYPE_APPLICATION` overlays can appear with an application context, but need `SYSTEM_ALERT_WINDOW` special access — not a dialog substitute.\n- `Toast` is exempt (the system owns its token), which is why `Toast.makeText(applicationContext, ...)` works fine.\n- The leak twin: a dialog shown with a *dead* Activity token also throws, and keeping an Activity alive just to hold a dialog token is the classic context leak — use the `DialogFragment` lifecycle to tie them together.",
       "code": [
@@ -315,9 +402,14 @@
         "Sharing one dialog instance across Activities and getting a stale token."
       ],
       "refs": [
-        { "title": "WindowManager", "url": "https://developer.android.com/reference/android/view/WindowManager", "checked": "2026-08-13" }
+        {
+          "title": "WindowManager",
+          "url": "https://developer.android.com/reference/android/view/WindowManager",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0060",
@@ -325,12 +417,16 @@
       "topic": "Background work",
       "level": 2,
       "type": "qa",
-      "tags": ["battery-optimization", "doze", "whitelist"],
+      "tags": [
+        "battery-optimization",
+        "doze",
+        "whitelist"
+      ],
       "q": "How does battery optimization work, and what is the exemption whitelist for?",
       "shortAnswer": [
-        "Battery optimization applies Doze and App Standby: Doze defers network/jobs/alarms while the device is idle, and App Standby buckets apps by usage, applying `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`-granted exemptions only where the core function needs it.",
-        "The whitelist (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) exempts an app from Doze's network/alarm limits; it is a special access the user grants, and Play rejects apps that request it without a genuinely exempt reason.",
-        "The model to remember: exempting is the exception, not the default — schedule with WorkManager, and only push an exemption when user-critical behavior (messaging, alarms) would otherwise break."
+        "Battery optimization is Doze plus App Standby: Doze defers network, jobs, and alarms while the device is idle, and App Standby buckets apps by usage.",
+        "The whitelist — `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` — exempts an app from Doze's limits. It is a special access the user grants, and Play rejects apps without a genuine reason.",
+        "The model to remember: exemption is the exception, not the default. Schedule with WorkManager, and only ask for an exemption when user-critical behavior — messaging, alarms — would break."
       ],
       "answer": "#### What battery optimization actually does\nAndroid puts the device into **Doze** when it is stationary and screen-off for a while: network access, wake locks, jobs, and alarms get deferred, with maintenance windows and a handful of `*AndAllowWhileIdle` exceptions. **App Standby** then buckets each app by usage (active/working/rare), throttling background execution for rarely used apps. The battery-optimization whitelist is the list of apps exempt from those constraints — `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` opens the Settings page, and `isIgnoringBatteryOptimizations(packageName)` tells you the current state.\n\n#### The permission trap\nBeing whitelisted is not a runtime permission you can request once: it is a special access toggle, Play *restricts* it (apps must justify that Doze would break their core function — instant messaging, alarms, navigation), and apps that request it gratuitously get rejected. The user can also revoke it. So the practical posture is: build for Doze (batch with WorkManager, use `setExactAndAllowWhileIdle` for user-critical alarms, cache for offline), and treat the exemption as a last resort, not a convenience.\n\n#### What still works without an exemption\nThe system guarantees a minimum level of execution for real user intent: foreground services with visible notifications run normally, `setAlarmClock` works, and user-triggered actions (opening the app) always run. That is the reminder the interview question is probing: Doze defers *background* work, it does not stop *user-initiated* work.",
       "code": [
@@ -350,9 +446,14 @@
         "Assuming a foreground service is exempt — it runs, but its network/job calls still hit the same Doze windows."
       ],
       "refs": [
-        { "title": "Doze and App Standby", "url": "https://developer.android.com/training/monitoring-device-state/doze-standby", "checked": "2026-08-13" }
+        {
+          "title": "Doze and App Standby",
+          "url": "https://developer.android.com/training/monitoring-device-state/doze-standby",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

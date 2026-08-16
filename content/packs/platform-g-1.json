@@ -9,12 +9,16 @@
       "topic": "Lifecycle",
       "level": 1,
       "type": "qa",
-      "tags": ["service", "lifecycle", "android-component"],
+      "tags": [
+        "service",
+        "lifecycle",
+        "android-component"
+      ],
       "q": "Walk through the Service lifecycle. What are the two kinds of services, and what are the real traps?",
       "shortAnswer": [
-        "A started service runs until it calls `stopSelf()` or something calls `stopService()`; a bound service lives while at least one `ServiceConnection` is connected.",
+        "A started service runs until it calls `stopSelf()` or someone calls `stopService()`. A bound service lives while at least one `ServiceConnection` is connected.",
         "`onStartCommand` returns `START_STICKY`, `START_NOT_STICKY`, or `START_REDELIVER_INTENT`, which decides what the system does if it kills your process.",
-        "The classic trap is that a Service does not run on its own thread — callbacks land on the main thread, and forgetting `stopSelf` leaks the service until the process is killed."
+        "The classic trap: a Service does not run on its own thread — callbacks land on the main thread. Forgetting `stopSelf` leaks the service until the process is killed."
       ],
       "answer": "#### Two flavors, two lifetimes\nA **started service** is launched with `startService()` (or `startForegroundService()`) and keeps running until it calls `stopSelf()` or an outside caller calls `stopService()`. A **bound service** is created with `bindService()` and is destroyed when the last `ServiceConnection` disconnects (`onUnbind` then `onDestroy`). A service can be both at once.\n\n#### The callbacks\n`onCreate` runs once, then `onStartCommand(intent, flags, startId)` runs per start, `onBind` serves binding, `onDestroy` is final cleanup. Every callback runs on the **main thread**, so real work needs a coroutine, a thread, or WorkManager.\n\n#### The return values\n`START_STICKY` restarts the service with a null intent after a kill; `START_NOT_STICKY` does not restart; `START_REDELIVER_INTENT` restarts with the same intent. Pick based on whether the work must survive a process kill.\n\n#### The traps\n- A started service that never calls `stopSelf(startId)` leaks until the system kills the process — a `start` without a matching stop is the standard bug.\n- `startForegroundService()` without a `startForeground()` call inside ~10 seconds throws `ForegroundServiceDidNotStartInTimeException`.\n- Saying \"services run in the background\" is the classic wrong answer — they run on your process's main thread.",
       "code": [
@@ -34,9 +38,14 @@
         "Forgetting `stopSelf` — the service keeps running (and its process stays alive) long after the user is done."
       ],
       "refs": [
-        { "title": "Services overview", "url": "https://developer.android.com/guide/components/services", "checked": "2026-08-13" }
+        {
+          "title": "Services overview",
+          "url": "https://developer.android.com/guide/components/services",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0012",
@@ -44,12 +53,16 @@
       "topic": "Components & navigation",
       "level": 3,
       "type": "qa",
-      "tags": ["content-provider", "startup", "lifecycle"],
+      "tags": [
+        "content-provider",
+        "startup",
+        "lifecycle"
+      ],
       "q": "Explain the ContentProvider lifecycle and why it matters for app startup.",
       "shortAnswer": [
-        "A provider is instantiated before `Application.onCreate` — the system calls `Application.attachBaseContext`, then every declared provider's `onCreate`, and only then your `Application.onCreate`.",
-        "That ordering is why libraries use a dummy provider to auto-initialize: they run ahead of your app code and can't be ordered.",
-        "Provider methods (`query`, `insert`, `update`, `delete`) run on the calling binder thread, not the main thread, which trips people who assume callbacks are main-thread."
+        "A provider starts before `Application.onCreate`: the system calls `Application.attachBaseContext`, then every declared provider's `onCreate`, and only then your `Application.onCreate`.",
+        "That ordering is why libraries use a dummy provider to auto-initialize: their code runs ahead of your app, and you cannot reorder it.",
+        "Provider methods (`query`, `insert`, `update`, `delete`) run on the calling binder thread, not the main thread — a common wrong assumption."
       ],
       "answer": "#### When it starts\nThe system instantiates every manifest-declared `ContentProvider` in the process's start sequence: `Application.attachBaseContext()` runs, then each provider's `onCreate()`, then `Application.onCreate()`. So a provider's `onCreate` runs *before* your app's own initialization. That is why `androidx.startup` exists — libraries register a single `Initializer` provider and you declare dependencies and ordering instead of guessing.\n\n#### The trap that causes crashes\nA library that self-installs via a provider does its work before `Application.onCreate`. You cannot set up logging or a crash handler and expect it to catch that provider's failures, and you cannot easily defer it (though `androidx.startup` lets you disable individual initializers). The `onCreate` of a provider runs on the main thread, so anything slow there delays every cold start.\n\n#### The callbacks\n`query`, `insert`, `update`, `delete`, `getType`, `openFile`, `applyBatch` are the data API. They execute on the **binder thread** that delivered the call — not the main thread — so a slow query blocks the caller's thread, not your main thread, but your provider must still be thread-safe.\n\n#### Versioning\n`onCreate` and the data methods never restart for a configuration change; the provider lives for the process. Version and notify: `getContext().getContentResolver().notifyChange(...)` and `getType` matter for correct `ContentObserver` behaviour.",
       "code": [
@@ -69,10 +82,19 @@
         "Doing heavy work in the provider's `onCreate` and not realizing it runs before `Application.onCreate`, inflating cold start."
       ],
       "refs": [
-        { "title": "Content provider fundamentals", "url": "https://developer.android.com/guide/topics/providers/content-provider-basics", "checked": "2026-08-13" },
-        { "title": "Content providers overview", "url": "https://developer.android.com/guide/topics/providers/content-providers", "checked": "2026-08-13" }
+        {
+          "title": "Content provider fundamentals",
+          "url": "https://developer.android.com/guide/topics/providers/content-provider-basics",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Content providers overview",
+          "url": "https://developer.android.com/guide/topics/providers/content-providers",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0013",
@@ -80,12 +102,16 @@
       "topic": "Components & navigation",
       "level": 1,
       "type": "qa",
-      "tags": ["broadcast", "receiver", "lifecycle"],
+      "tags": [
+        "broadcast",
+        "receiver",
+        "lifecycle"
+      ],
       "q": "How does a BroadcastReceiver work, and where do people misuse it?",
       "shortAnswer": [
-        "`onReceive` runs on the main thread and the receiver is only considered alive for that call — roughly 10 seconds in the foreground and 60 in the background before the system flags it.",
-        "Manifest-registered receivers can receive implicit broadcasts but must declare `android:exported`; since Android 8, most implicit broadcasts are banned for manifest receivers anyway.",
-        "The classic misuse is starting an Activity or doing real work from `onReceive` — that is an ANR, a trampoline violation, and often both."
+        "`onReceive` runs on the main thread, and the receiver only lives for that call. Take too long — about 10 s in the foreground, 60 s in the background — and the system flags it.",
+        "Manifest-registered receivers can receive implicit broadcasts but must declare `android:exported`. Since Android 8, most implicit broadcasts are banned for manifest receivers anyway.",
+        "The classic misuse is starting an `Activity` or doing real work in `onReceive` — that is an ANR, a trampoline violation, and often both."
       ],
       "answer": "#### The contract\nA `BroadcastReceiver` has one meaningful callback: `onReceive(context, intent)`. It runs on the **main thread**, and the receiver instance is only guaranteed alive for the duration of that call. Do heavy work past it and the system assumes you hung: ~10 s (foreground) or ~60 s (background) is the ANR window.\n\n#### Two registration types\n- **Manifest-registered** — declared in the manifest, delivered even when the app is dead, must set `android:exported`. Since Android 8.0 most implicit broadcasts (system-wide intents without an explicit package) are no longer delivered to manifest receivers, so this type is mostly for `BOOT_COMPLETED`, custom explicit broadcasts, and alarms.\n- **Context-registered** (`registerReceiver` in `onStart`, unregister in `onStop`) — only live while registered, gets all broadcasts including explicit ones, and you choose `RECEIVER_EXPORTED`/`RECEIVER_NOT_EXPORTED` on Android 14+.\n\n#### goAsync\nFor work that must outlive `onReceive`, call `goAsync()` to get a `PendingResult`, run off-main, and finish with `pendingResult.finish()`. The window still applies — finish within the timeout or the system kills you.\n\n#### The classic misuses\n- Starting an Activity from `onReceive` — blocked for trampolines since Android 12, and background-activity-start limits apply.\n- Blocking inside `onReceive` on a network call — main thread, so an ANR.\n- Registering a receiver but never unregistering — a leak.",
       "code": [
@@ -105,9 +131,14 @@
         "Starting an Activity from a receiver — blocked as a notification trampoline and by background-activity-start rules."
       ],
       "refs": [
-        { "title": "Broadcasts overview", "url": "https://developer.android.com/guide/components/broadcasts", "checked": "2026-08-13" }
+        {
+          "title": "Broadcasts overview",
+          "url": "https://developer.android.com/guide/components/broadcasts",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0014",
@@ -115,12 +146,16 @@
       "topic": "Lifecycle",
       "level": 3,
       "type": "qa",
-      "tags": ["fragment", "view-lifecycle", "viewlifecycleowner"],
+      "tags": [
+        "fragment",
+        "view-lifecycle",
+        "viewlifecycleowner"
+      ],
       "q": "What is the difference between the Fragment lifecycle and the Fragment view lifecycle, and why does it keep causing bugs?",
       "shortAnswer": [
-        "The Fragment instance survives being put on the back stack, but its View is destroyed — so the view has its own lifecycle ending at `onDestroyView` while the Fragment lives on.",
-        "Observing with `this` instead of `viewLifecycleOwner` binds your observer to the Fragment, not the view, so it outlives a destroyed view and re-registers on return.",
-        "The fix is to do everything view-related against `viewLifecycleOwner` and to null out your `ViewBinding` in `onDestroyView`."
+        "On the back stack, the Fragment instance survives but its View is destroyed. The View has its own lifecycle that ends at `onDestroyView`, while the Fragment lives on.",
+        "Observing with `this` instead of `viewLifecycleOwner` binds the observer to the Fragment, not the view. It outlives the destroyed view and re-registers when you return.",
+        "The fix: do everything view-related against `viewLifecycleOwner`, and null out `ViewBinding` in `onDestroyView`."
       ],
       "answer": "#### Two lifecycles, deliberately out of sync\nWhen a Fragment is popped onto the back stack, the transaction **destroys its View** but keeps the Fragment instance. The instance lifecycle (`onAttach` → `onCreate` → `onDestroy` → `onDetach`) and the view lifecycle (`onCreateView` → `onViewCreated` → `onDestroyView`) diverge. Navigating away destroys the view; the Fragment, its ViewModel, and its saved state survive. Navigating back recreates the view.\n\n#### The bug this causes\nObserving a `LiveData`/`Flow` with `this` as the owner binds the observer to the Fragment, not the view. The observer stays subscribed after `onDestroyView`, and when the Fragment returns you re-subscribe — two live observers, one rendering into the now-recreated view, plus a leaked reference to the old view. That is the classic \"I see double updates\" or \"my screen updates from the back stack\" bug.\n\n#### The rules\n- Use `viewLifecycleOwner` for anything touching the view: observers, `lifecycleScope`, `repeatOnLifecycle(STARTED)`, listeners.\n- Null out `ViewBinding` in `onDestroyView` so you don't keep a destroyed hierarchy alive.\n- Keep Fragment-scoped things (the ViewModel is fine to fetch with `by viewModels()`) on the Fragment; they legitimately outlive the view.\n- `viewLifecycleOwner` is only available after `onCreateView` — code running before that must not touch it.",
       "code": [
@@ -140,9 +175,14 @@
         "Using `this` as the lifecycle owner for view work — duplicate observers and a leaked view hierarchy."
       ],
       "refs": [
-        { "title": "Fragment lifecycle", "url": "https://developer.android.com/guide/fragments/lifecycle", "checked": "2026-08-13" }
+        {
+          "title": "Fragment lifecycle",
+          "url": "https://developer.android.com/guide/fragments/lifecycle",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0015",
@@ -150,12 +190,16 @@
       "topic": "Lifecycle",
       "level": 2,
       "type": "qa",
-      "tags": ["configuration-change", "viewmodel", "savedstate"],
+      "tags": [
+        "configuration-change",
+        "viewmodel",
+        "savedstate"
+      ],
       "q": "What happens on a configuration change, and what actually survives it?",
       "shortAnswer": [
-        "A configuration change destroys and recreates the Activity, but the process stays alive, so everything in memory can survive if you keep it somewhere the framework retains.",
-        "`ViewModel` survives because it lives in a `ViewModelStore` retained across the recreation; plain statics, singletons, and `Application` also survive because they are process-scoped.",
-        "View state you care about goes in `SavedStateHandle` or `rememberSaveable`, and the trick is to persist identifiers, not payloads."
+        "A configuration change destroys and recreates the `Activity`, but the process stays alive. Anything in memory can survive if the framework keeps it across the recreation.",
+        "`ViewModel` survives because it lives in a `ViewModelStore` the framework retains across the recreation. Statics, singletons, and `Application` also survive — they are process-scoped.",
+        "Put view state you care about in `SavedStateHandle` or `rememberSaveable`. The trick is to persist identifiers, not payloads."
       ],
       "answer": "#### What happens\nA config change (rotation, dark mode, locale, window resize, keyboard) makes the system destroy the Activity and recreate it. The **process is untouched** — so anything process-scoped survives: static fields, singletons, `Application`, thread pools, disk cache. The Activity itself is rebuilt from scratch and `onSaveInstanceState`'s `Bundle` is handed to the new instance.\n\n#### What survives and how\n- **`ViewModel`**: survives, because the framework retains its `ViewModelStore` in a `NonConfigurationInstance` between the old and new Activity. That is why repositories and `MutableStateFlow` in a ViewModel survive rotation.\n- **`SavedStateHandle`**: part of the ViewModel, backed by the saved-instance-state `Bundle`, so it survives config change *and* process death.\n- **`rememberSaveable` / `onSaveInstanceState`**: Compose/View UI state, keyed into the same Bundle.\n- **Nothing else on the Activity side**: views, listeners, `Dialog`s, and Fragment *views* are rebuilt.\n\n#### The traps\n- `android:configChanges` on the manifest suppresses the recreate and lets you handle it yourself — but you must then re-read resources, re-apply dark mode, and resize manually. It is almost always the wrong answer.\n- A config change is **not** process death. Saying \"the system saves and restores everything\" is wrong on both counts — statics survive the first and not the second.\n- Locale, `uiMode`, `fontScale`, `screenSize`, and `density` all trigger recreation; apps that only handle rotation get burned by `uiMode` when the user flips dark mode.",
       "code": [
@@ -175,9 +219,14 @@
         "Handling only rotation. `uiMode`, `locale`, `fontScale`, and `screenSize` all recreate the Activity too."
       ],
       "refs": [
-        { "title": "Handle configuration changes", "url": "https://developer.android.com/guide/topics/resources/runtime-changes", "checked": "2026-08-13" }
+        {
+          "title": "Handle configuration changes",
+          "url": "https://developer.android.com/guide/topics/resources/runtime-changes",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0016",
@@ -185,12 +234,16 @@
       "topic": "Components & navigation",
       "level": 3,
       "type": "qa",
-      "tags": ["predictive-back", "onbackpresseddispatcher", "navigation"],
+      "tags": [
+        "predictive-back",
+        "onbackpresseddispatcher",
+        "navigation"
+      ],
       "q": "Predictive back is on by default at current targetSdk levels. How does `OnBackPressedDispatcher` work, and what changes with the new gesture?",
       "shortAnswer": [
-        "`OnBackPressedDispatcher` runs callbacks last-registered-first, so the most recent `OnBackPressedCallback` wins — the pattern is to `addCallback` on entry and `remove` on exit.",
-        "Predictive back turns the instantaneous pop into a swipe-driven animation: the system asks *in advance* whether a callback will handle the gesture, so your app must enable `enableOnBackInvokedCallback` and use a seekable/observable callback model.",
-        "The traps are the opposite of the old `onBackPressed`: never react *after* the event, and a callback enabled at the wrong time breaks the back-to-home animation."
+        "`OnBackPressedDispatcher` runs callbacks last-registered-first, so the newest `OnBackPressedCallback` wins — `addCallback` on entry, `remove` on exit.",
+        "Predictive back turns the instant pop into a swipe animation: the system asks *in advance* whether a callback will handle the gesture, so register callbacks early and enable `enableOnBackInvokedCallback`.",
+        "The traps are the opposite of old `onBackPressed`: never react *after* the event, and a callback enabled at the wrong time breaks the back-to-home animation."
       ],
       "answer": "#### The dispatcher\n`OnBackPressedDispatcher` is the single point that receives the back event and fans it out. Callbacks are invoked in reverse registration order (LIFO): register the most specific one last so it wins. `addCallback(lifecycleOwner, enabled) { ... }` ties it to a lifecycle — the callback is dropped automatically when the owner leaves `STARTED`. You must `remove()` a callback when the screen exits or it stays and eats back presses.\n\n#### Predictive back changes the model\nThe old model was **post-hoc**: the system finishes, you handle the aftermath. Predictive back is **ahead-of-time**: the system must know before the gesture completes whether you will intercept, so it can run the exit animation as the user swipes. That means:\n- Set `android:enableOnBackInvokedCallback=\"true\"` (default for apps targeting 36 on current releases; explicit earlier).\n- Register callbacks before the user can gesture, and keep them enabled exactly while the condition holds — toggling `enabled` is the signal.\n- For animated control use `PredictiveBackHandler`/`OnBackAnimationCallback` receiving a `BackEventCompat` with `progress` and `swipeEdge`.\n\n#### What breaks\nA callback registered after the gesture started, or one that logs/acts after the event, silently breaks the animation or the pop. Intercepting back at the root Activity kills the back-to-home animation entirely.",
       "code": [
@@ -210,10 +263,19 @@
         "Forgetting `remove()` on a callback, so a stale screen eats every subsequent back press."
       ],
       "refs": [
-        { "title": "Add support for the predictive back gesture", "url": "https://developer.android.com/guide/navigation/custom-back/predictive-back-gesture", "checked": "2026-08-13" },
-        { "title": "Predictive back gesture (Android 13)", "url": "https://developer.android.com/about/versions/13/features/predictive-back-gesture", "checked": "2026-08-13" }
+        {
+          "title": "Add support for the predictive back gesture",
+          "url": "https://developer.android.com/guide/navigation/custom-back/predictive-back-gesture",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Predictive back gesture (Android 13)",
+          "url": "https://developer.android.com/about/versions/13/features/predictive-back-gesture",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0017",
@@ -221,12 +283,16 @@
       "topic": "App startup & performance",
       "level": 3,
       "type": "qa",
-      "tags": ["startup", "zygote", "cold-start"],
+      "tags": [
+        "startup",
+        "zygote",
+        "cold-start"
+      ],
       "q": "Walk through the startup sequence from the launcher tap to the first frame. Where do the costs live?",
       "shortAnswer": [
-        "The launcher asks the system to start your app; if the process is dead the system asks `zygote` to fork a new process with your package's uid.",
-        "Inside the fork: `Application.attachBaseContext` → every manifest `ContentProvider.onCreate` → `Application.onCreate` → the first Activity is created, measured, laid out, and drawn on the first `Choreographer` frame.",
-        "Every one of those stages is a tax on cold start — providers and `Application.onCreate` run before the first frame, so anything lazy that can move out of them should."
+        "The launcher asks the system to start your app. If the process is dead, the system asks `zygote` to fork a new process with your package's uid.",
+        "Inside the fork: `Application.attachBaseContext` → every manifest `ContentProvider.onCreate` → `Application.onCreate` → then the first `Activity` is created, measured, laid out, and drawn on the first `Choreographer` frame.",
+        "Every stage is a tax on cold start. Providers and `Application.onCreate` run before the first frame, so any work that can move out of them should."
       ],
       "answer": "#### The fork\n`zygote` is the template process: it preloads the ART runtime and framework classes so every app process is a fork of it. For a cold start, the system `ActivityManager` asks zygote to fork a process with your app's uid and main entry — the fork is why class loading is already warm even though your code is not. Then the process runs its `ActivityThread.main`, which instantiates `Application`.\n\n#### The ordering that matters\n`Application.attachBaseContext` runs first (before any `onCreate` — this is where your `Context` is set up). Then every manifest-declared `ContentProvider` is instantiated and its `onCreate` called — this is before `Application.onCreate`, and it is why `androidx.startup` exists. Only then does `Application.onCreate` run, followed by the launch `Activity`: `onCreate`/`onStart`/`onResume`, layout inflation or composition, and finally the first drawn frame.\n\n#### Where the cost hides\n- Anything synchronous in `Application.onCreate` or a provider's `onCreate` delays the first frame directly.\n- Class verification and loading: interpreted then JIT-compiled on first use — the cold-start tax baseline profiles exist to remove.\n- The first frame also waits for the display: `Choreographer` draws when the next vsync arrives, so a heavy first composition pushes the frame past it and the launcher holds your splash screen visibly longer.\n\n#### The lever\nMove work out of the pre-frame path: defer library init (App Startup), avoid disk and network before the first frame, and ship baseline profiles so the startup path is AOT-compiled.",
       "code": [
@@ -246,10 +312,19 @@
         "Treating a splash screen as a startup fix — it makes startup *feel* faster, it does not make it faster."
       ],
       "refs": [
-        { "title": "App startup time", "url": "https://developer.android.com/topic/performance/vitals/launch-time", "checked": "2026-08-13" },
-        { "title": "Android runtime (ART)", "url": "https://source.android.com/docs/core/runtime", "checked": "2026-08-13" }
+        {
+          "title": "App startup time",
+          "url": "https://developer.android.com/topic/performance/vitals/launch-time",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Android runtime (ART)",
+          "url": "https://source.android.com/docs/core/runtime",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0018",
@@ -257,12 +332,16 @@
       "topic": "Components & navigation",
       "level": 3,
       "type": "qa",
-      "tags": ["manifest", "exported", "security"],
+      "tags": [
+        "manifest",
+        "exported",
+        "security"
+      ],
       "q": "What does `android:exported` actually control, and how do you keep your components safe?",
       "shortAnswer": [
-        "`exported` decides whether other apps can start or bind your component; it has been mandatory whenever a component has an intent filter since targeting Android 12.",
-        "A component with an intent filter but no `exported` attribute fails the build, and a component without a filter defaults to `false`.",
-        "An exported component is a public attack surface — validate every incoming intent, and prefer `exported=\"false\"` plus a strict `signature`-level permission when another app genuinely needs access."
+        "`android:exported` decides whether other apps can start or bind your component. It is mandatory whenever a component has an intent filter and you target Android 12+.",
+        "A filtered component without `exported` fails the build. A component without a filter defaults to `false`, which is the safe direction.",
+        "An exported component is a public attack surface: validate every incoming intent, and prefer `exported=\"false\"` plus a `signature`-level permission when another app genuinely needs access."
       ],
       "answer": "#### The flag\n`android:exported=\"true\"` means other apps can start your Activity, bind your Service, or send to your Receiver; `false` means only your app (and the system) can. Since targeting Android 12 the attribute is **required whenever the component declares an intent filter** — a manifest with an exported-less filtered component fails at install/build with a clear error. Components without a filter default to `false`, which is the safe direction.\n\n#### Why it matters\nAn exported Activity is a public entry point. Attackers can craft an intent that starts it with hostile extras — which is precisely why deep links and inter-app launches are security reviews' favourite target. An exported Service or Receiver can be driven to do work on demand, and an exported `ContentProvider` hands out your data by default. The `ContentProvider` default is `true` (to satisfy the platform's content URI machinery) unless you set it — the single most common accidental data exposure.\n\n#### The rules that keep you safe\n- `exported=\"false\"` unless you can name the other app and the exact use case.\n- If another app needs access, prefer `android:permission` with `protectionLevel=\"signature\"` so only your signed apps can reach it.\n- For a provider, `exported=\"true\"` only where needed plus `android:grantUriPermissions` and per-URI permissions, not blanket exposure.\n- Validate every extra and the calling package (`getCallingPackage`) inside exported components — the framework will not do it for you.\n- `activity-alias` inherits the target's exported state; keep its own filter honest.",
       "code": [
@@ -282,9 +361,14 @@
         "Treating `exported=\"true\"` as harmless when the component has no intent filter; the surface is still there for explicit intents."
       ],
       "refs": [
-        { "title": "Safer component exporting (Android 12)", "url": "https://developer.android.com/about/versions/12/behavior-changes-12", "checked": "2026-08-13" }
+        {
+          "title": "Safer component exporting (Android 12)",
+          "url": "https://developer.android.com/about/versions/12/behavior-changes-12",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0019",
@@ -292,12 +376,16 @@
       "topic": "Deep links",
       "level": 3,
       "type": "qa",
-      "tags": ["intent-redirection", "implicit-intent", "security"],
+      "tags": [
+        "intent-redirection",
+        "implicit-intent",
+        "security"
+      ],
       "q": "What is intent redirection, and why did Android 14 start blocking implicit intents to internal components?",
       "shortAnswer": [
-        "Intent redirection is when an exported component receives an intent from an attacker and forwards it to another component, carrying over the original grants and flags.",
-        "Android 14 (targetSdk 34+) blocks implicit intents that resolve to your own non-exported components — you must use explicit intents for internal navigation.",
-        "The fix is to never forward a received intent: build a fresh `Intent`, copy only the data you validated, and drop the caller's flags and URI grants."
+        "Intent redirection: an exported component receives an attacker's intent and forwards it on, carrying the original grants and flags with it.",
+        "Android 14 (targetSdk 34+) blocks implicit intents that resolve to your own non-exported components — so use explicit intents for internal navigation.",
+        "The fix: never forward a received intent. Build a fresh `Intent`, copy only validated data, and drop the caller's flags and URI grants."
       ],
       "answer": "#### The attack\nAn exported component is a funnel. An attacker sends an intent into it; the component does `startActivity(intent)` (or passes it to a `PendingIntent` or `getActivity`) — and the forwarded intent still carries the attacker's action, data URI, component target, and **grant flags**. The grant is the payoff: the attacker gets read access to a URI the victim app would never have granted, or a privileged action launched in a privileged context.\n\n#### What Android 14 changed\nFor apps targeting 34+, an **implicit intent** (no explicit component) that resolves to one of your own **non-exported** components throws — the system refuses to let a broadly-typed intent reach an internal component. That kills the old \"implicit self-broadcast\" pattern and forces explicit `Intent(this, Target::class.java)` for internal work.\n\n#### The hardening checklist\n- Never re-launch a received `Intent`. Copy what you need into a **new** `Intent` and validate every field.\n- Strip flags: `intent.flags = 0` (or keep only ones you set), and remove `FLAG_GRANT_READ_URI_PERMISSION`/`FLAG_GRANT_WRITE_URI_PERMISSION` unless you're intentionally handing a grant.\n- Apply `StrictMode.VmPolicy.Builder().detectUnsafeIntentLaunch()` to find forwards at development time.\n- For `PendingIntent`, prefer `FLAG_IMMUTABLE` so the recipient cannot fill in extras.\n- Treat the component that received the intent as untrusted input — same discipline as a deep link.",
       "code": [
@@ -317,10 +405,19 @@
         "Using implicit intents for internal navigation — blocked for non-exported targets since Android 14."
       ],
       "refs": [
-        { "title": "Android 14 behavior changes", "url": "https://developer.android.com/about/versions/14/behavior-changes-all", "checked": "2026-08-13" },
-        { "title": "Intents and intent filters", "url": "https://developer.android.com/guide/components/intents-filters", "checked": "2026-08-13" }
+        {
+          "title": "Android 14 behavior changes",
+          "url": "https://developer.android.com/about/versions/14/behavior-changes-all",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Intents and intent filters",
+          "url": "https://developer.android.com/guide/components/intents-filters",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "pf-0020",
@@ -328,12 +425,17 @@
       "topic": "UI & configuration",
       "level": 3,
       "type": "qa",
-      "tags": ["multi-window", "display-cutout", "foldables", "resizable"],
+      "tags": [
+        "multi-window",
+        "display-cutout",
+        "foldables",
+        "resizable"
+      ],
       "q": "How does multi-window, resizability, and the display cutout change what your Activity code has to handle?",
       "shortAnswer": [
-        "Multi-window means an Activity can be visible but not focused and can resize live — so `onPause` no longer means hidden, and layout must survive a running size change.",
-        "The display cutout removes a chunk of the screen: `WindowInsets.displayCutout` reports where, and `layoutInDisplayCutoutMode` decides whether you draw behind it.",
-        "Foldables and large screens are the same problem in disguise — a configuration change with a new window size and possibly a hinge, which you must handle as a config change or a resize event."
+        "In multi-window, an `Activity` can be visible but not focused, and it can resize while running. So `onPause` no longer means hidden, and layout must survive a live size change.",
+        "A display cutout removes part of the screen: `WindowInsets.displayCutout` reports where, and `layoutInDisplayCutoutMode` decides whether you draw behind it.",
+        "Foldables and large screens are the same problem in disguise: a configuration change with a new window size and maybe a hinge, handled as a config change or a resize event."
       ],
       "answer": "#### Multi-window changes the lifecycle story\nSince split-screen, an Activity can be **visible but not focused** (a paused activity on screen) and its size can change while running. Two consequences: stop treating `onPause` as \"hidden\" — use `onStop` — and handle window resizes gracefully (`onConfigurationChanged` with a new `screenWidthDp`, or Compose's adaptive layout). An app that only ever handled rotation is broken in split-screen.\n\n#### Resizability\n`android:resizeableActivity=\"true\"` (default) opts into resizing. Large-screen expectations keep rising: current releases push apps to support resizing and to stop locking orientation. When the window resizes, the system either recreates the Activity (a config change — your ViewModel survives) or delivers `onConfigurationChanged` if you suppressed recreation.\n\n#### Display cutouts\nA cutout (notch/punch-hole) consumes inset space at an edge. Read `WindowInsets.displayCutout` to get the cutout rect, and set `layoutInDisplayCutoutMode` (`default`, `shortEdges`, `never`) per-window. Drawing a status bar over the cutout is fine; placing your content behind it without insets is not.\n\n#### Foldables\nA foldable is a large screen that can change size — the hinge is a display feature reported through `WindowLayoutInfo`/`WindowInfoTracker`, and opening/closing it is a window size change plus a config change. Same rules: observe window metrics, handle the size change, never hard-code a phone-sized layout.",
       "code": [
@@ -353,10 +455,19 @@
         "Drawing behind a cutout without reading the inset, so content sits under the punch-hole."
       ],
       "refs": [
-        { "title": "Multi-window support", "url": "https://developer.android.com/guide/topics/ui/multi-window", "checked": "2026-08-13" },
-        { "title": "Display cutout support", "url": "https://developer.android.com/develop/ui/views/layout/display-cutout", "checked": "2026-08-13" }
+        {
+          "title": "Multi-window support",
+          "url": "https://developer.android.com/guide/topics/ui/multi-window",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Display cutout support",
+          "url": "https://developer.android.com/develop/ui/views/layout/display-cutout",
+          "checked": "2026-08-13"
+        }
       ],
-      "addedIn": "2026.08.11"
+      "addedIn": "2026.08.11",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

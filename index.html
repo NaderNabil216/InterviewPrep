@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Android Interview Prep</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
-<link rel="stylesheet" href="assets/css/app.css?v=4">
+<link rel="stylesheet" href="assets/css/app.css?v=5">
 </head>
 <body>
 
@@ -52,15 +52,10 @@
       <button data-nav="design">System Design</button>
       <button data-nav="mock">Mock</button>
       <button data-nav="cheatsheets">Cheat Sheets</button>
-      <button data-nav="whatsnew">What's New</button>
     </nav>
 
     <div class="topbar__actions">
       <button id="search-toggle" class="icon-btn" title="Search ( / )">🔎</button>
-      <button id="update-btn" class="update-btn" title="Check for new content">
-        <span class="update-btn__label">Up to date</span>
-        <span id="update-badge" class="update-btn__badge" hidden>0</span>
-      </button>
       <button id="theme-toggle" class="icon-btn" title="Toggle theme">🌙</button>
       <button data-nav="settings" class="icon-btn" title="Settings">⚙️</button>
     </div>
@@ -74,6 +69,10 @@
   </div>
 
   <main id="view" class="view" tabindex="-1"></main>
+
+  <!-- Static shell-phase indicator: visible before app.js evaluates, hidden by app.js once the
+       shell-phase render completes. No JS dependency — plain CSS + the hidden attribute. -->
+  <div id="boot-status" class="boot-status" role="status">Loading your prep library…</div>
 
   <div id="modal-root"></div>
   <div id="toast-root" class="toast-root" aria-live="polite"></div>

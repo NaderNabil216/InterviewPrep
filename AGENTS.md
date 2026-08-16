@@ -33,14 +33,16 @@ changes means loading the site in a browser. The site **must** be served over `h
 
 `store.js` keeps two physically separate stores that must never be conflated:
 - **Content snapshot** in **IndexedDB** (db `aip`, store `snapshot`, key `current`) — a pinned copy
-  of the whole content set. Replaced wholesale on Update.
+  of the whole content set. Replaced wholesale, all-or-nothing, when a sync applies.
 - **Learning state** in localStorage under the `aip.v1.` prefix (`progress`, `session`, `plan`,
   `mockResults`, `scratch.<id>`) — keyed by **permanent item id**.
 
 Consequences that trip agents up:
-- Everything renders from the snapshot. **New content on disk is invisible until the user presses
-  Update**, and `checkForUpdates()` short-circuits when `diskManifest.version === snapshot.version` —
-  a content edit without a manifest version bump is unreachable by the app.
+- Everything renders from the snapshot. **Content syncs automatically** — no Update button, no
+  What's New view — on boot, `visibilitychange`/`focus` and `online`, held back while
+  `App.sessionActive`. `checkForUpdates()` short-circuits when
+  `diskManifest.version === snapshot.version`, so a content edit without a manifest version bump is
+  unreachable by the app.
 - Plan ticks are keyed by material signature `[...itemIds].sort().join('+')`, never by
   `dayIdx:taskIdx`.
 - Progress survives updates only because **item ids are never reused or renumbered.** Reusing an id
@@ -57,7 +59,7 @@ strictly descending under **numeric** comparison — `2026.08.10` > `2026.08.9`)
   via `tools/sync-manifest.mjs --write`; never hand-edit the manifest.
 - Id prefixes in use (all taken): `kt- co- cmp- pf- ar- dn- pe- bt- sk- ds- sd- bh- cs-`.
 - `level` is 1–4; labels come from `assets/js/levels.js` (Basics / Mid-Level / Senior /
-  Staff-Monster) — never hardcode a difficulty word in a view.
+  Lead) — never hardcode a difficulty word in a view.
 - `type` is `qa | concept | dsa | design | behavioral`. `qa` answers are authored to 120–250 words;
   `concept`/`dsa`/`design` carry no band.
 - Every version- or date-bearing claim needs a `refs` entry with a `checked` date; ref hosts are
@@ -75,13 +77,13 @@ the built-in highlighter only colorizes `kotlin`/`kt`/unset.
 ## App code
 
 `app.js` is the shell: hash router (`#/view/param?k=v` → `parseHash`), `routes` map, theme cycling,
-search overlay, update flow, `toast()`/`showModal()`. Every view is
+search overlay, automatic content sync, `toast()`/`showModal()`. Every view is
 `renderView(el, { param, query, snapshot })` from `assets/js/views/<name>.js`, registered in
 `routes`. Views build HTML strings, assign `el.innerHTML`, then attach listeners — no virtual DOM,
 no reactivity, no re-render except navigation. Adding a view also means a `data-nav="<name>"` button
 in `index.html`.
 
-`assets/css/app.css` is versioned by query string in `index.html` (`app.css?v=4`) — bump `v` when a
+`assets/css/app.css` is versioned by query string in `index.html` (`app.css?v=5`) — bump `v` when a
 stale cache would matter.
 
 Shared modules: `store.js` (persistence), `content.js` (fetch/diff/merge), `srs.js` (SM-2-lite),
@@ -90,10 +92,9 @@ Shared modules: `store.js` (persistence), `content.js` (fetch/diff/merge), `srs.
 ## Gotchas
 
 - `README.md` is user-facing and its item counts drift; `node tools/validate.mjs` prints the truth
-  (100 items across 23 registered packs as of manifest 2026.08.8).
+  (629 items across 89 registered packs as of manifest 2026.08.17).
 - `validate.mjs` has 14 gates and a `--final` flag: several gates (per-track counts, difficulty
   mix, ref-host allowlist, near-duplicates) warn during a staged expansion and error at `--final`.
 - `InterviewPrep/` (nested subdirectory of the same name) is an unused Spec Kit scaffold — ignore it
   unless explicitly asked about Spec Kit.
-- `.claude/workflows/fill-content-gap.js` is **not in use**; content is authored directly.
 - `.claude/launch.json` defines a `prep-site` launch config running `python3 tools/serve.py` on 8777.

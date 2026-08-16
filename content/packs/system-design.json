@@ -16,11 +16,14 @@
         "rubric"
       ],
       "q": "The mobile system design framework — read this before any scenario",
+      "shortAnswer": [
+        "The meta-skill: run every session on a fixed 45-minute skeleton — 5 minutes clarifying, 40 planning — and say each section's name out loud.",
+        "Clarify users, scale, networks, offline, and real-time first; then plan in fixed blocks — architecture, API and data, offline and sync, reliability, security, trade-offs.",
+        "Interviewers score structure, depth in the right spot, concrete named tech, paired trade-offs, and unprompted failure modes — never design the backend for 30 minutes."
+      ],
       "prompt": "A mobile system design interview is **not** a distributed-systems interview with an app bolted on. The interviewer wants to see that you can own the client: its data flow, its offline behaviour, its failure modes, and its impact on battery, data, and memory. Backend depth is a supporting act.\n\nUse the same 45-minute skeleton every time. Say the section names out loud — it signals structure and keeps you from rabbit-holing.",
-      "framework": "#### 1. Requirements & scope (5 min)\nAsk before designing. Good clarifying questions:\n- Who are the users, how many, on what devices/networks? (Emerging-market 2G changes everything.)\n- Which flows are in scope? Push back on \"design Instagram\" — pick the feed.\n- Offline requirement: read-only cache, or full offline writes?\n- Real-time requirement: seconds, or eventual?\n- Platform scope: Android only, or KMP/cross-platform?\n\nState the **non-functional targets** explicitly: cold start budget, feed render p90, data usage per session, battery.\n\n#### 2. High-level architecture (5 min)\nDraw the client boxes: UI layer → state holder → repository → (memory cache, database, network). Then the server-side contour: API gateway, the 2-3 services you actually touch, push infrastructure. Keep server detail proportional — you are the mobile engineer.\n\n#### 3. API & data model (8 min)\n- Endpoint shapes, pagination style (**cursor, not offset** — offset breaks when items are inserted), payload size.\n- Local schema: tables, indices, what's denormalized for read speed.\n- Protocol choice with a reason: REST+JSON default; protobuf/gRPC for payload size and CPU; GraphQL when clients need varying field sets; WebSocket/SSE for push.\n\n#### 4. Offline & sync (8 min) — usually the highest-scoring section\n- Database as the single source of truth.\n- Read path: cache-first, then refresh.\n- Write path: outbox with optimistic UI, client-generated ids, idempotency keys.\n- Conflict policy, stated with its trade-off.\n- Delta sync with a cursor, and tombstones for deletes.\n\n#### 5. Performance, battery & network (7 min)\n- Image pipeline: correct sizes from the server, memory + disk cache, prefetch window.\n- Pagination page size and prefetch distance.\n- Batch and coalesce requests; respect Doze and standby buckets; use WorkManager constraints.\n- Cold start: what's on the critical path, Baseline Profiles.\n- Cache eviction policy and total disk budget.\n\n#### 6. Reliability & edge cases (5 min)\nFlaky network, airplane mode mid-write, token expiry and refresh, clock skew, app killed mid-sync, migration of the local schema, very large accounts.\n\n#### 7. Security & privacy (3 min)\nToken storage (Keystore, not SharedPreferences), TLS + optional pinning, PII at rest, what you log, and how the user deletes their data.\n\n#### 8. Observability & rollout (4 min)\nMetrics that would page you, crash/ANR monitoring, feature flags, staged rollout, kill switch. Senior candidates always mention the kill switch.\n\n#### Trade-offs\nClose by naming what you deliberately did **not** do, and under what conditions you'd revisit. This is the single strongest signal you can send.",
+      "framework": "#### Phase 1 — Clarify (5 min)\n\nAsk before designing. Good clarifying questions:\n- Who are the users, how many, on what devices/networks? (Emerging-market 2G changes everything.)\n- Which flows are in scope? Push back on \"design Instagram\" — pick the feed.\n- Offline requirement: read-only cache, or full offline writes?\n- Real-time requirement: seconds, or eventual?\n- Platform scope: Android only, or KMP/cross-platform?\n\nState the **non-functional targets** explicitly: cold start budget, feed render p90, data usage per session, battery. Everything you draw in Phase 2 must defend these numbers.\n\n#### Phase 2 — Plan (40 min)\n\n**High-level architecture (5 min)** — Draw the client boxes: UI layer → state holder → repository → (memory cache, database, network). Then the server-side contour: API gateway, the 2-3 services you actually touch, push infrastructure. Keep server detail proportional — you are the mobile engineer.\n\n**API & data model (8 min)** — Endpoint shapes, pagination style (**cursor, not offset** — offset breaks when items are inserted), payload size. Local schema: tables, indices, what's denormalized for read speed. Protocol choice with a reason: REST+JSON default; protobuf/gRPC for payload size and CPU; GraphQL when clients need varying field sets; WebSocket/SSE for push.\n\n**Offline & sync (8 min) — usually the highest-scoring section** — Database as the single source of truth. Read path: cache-first, then refresh. Write path: outbox with optimistic UI, client-generated ids, idempotency keys. Conflict policy, stated with its trade-off. Delta sync with a cursor, and tombstones for deletes.\n\n**Performance, battery & network (7 min)** — Image pipeline: correct sizes from the server, memory + disk cache, prefetch window. Pagination page size and prefetch distance. Batch and coalesce requests; respect Doze and standby buckets; use WorkManager constraints. Cold start: what's on the critical path, Baseline Profiles. Cache eviction policy and total disk budget.\n\n**Reliability & edge cases (5 min)** — Flaky network, airplane mode mid-write, token expiry and refresh, clock skew, app killed mid-sync, migration of the local schema, very large accounts.\n\n**Security & privacy (3 min)** — Token storage (Keystore, not SharedPreferences), TLS + optional pinning, PII at rest, what you log, and how the user deletes their data.\n\n**Observability & rollout (4 min)** — Metrics that would page you, crash/ANR monitoring, feature flags, staged rollout, kill switch. Senior candidates always mention the kill switch.\n\n**Trade-offs** — Close by naming what you deliberately did **not** do, and under what conditions you'd revisit. This is the single strongest signal you can send.",
       "requirements": [
-        "Ask clarifying questions before drawing anything",
-        "State explicit non-functional targets (latency, data, battery)",
         "Draw the client architecture layer by layer",
         "Specify the API shape and pagination strategy",
         "Design the local schema and name the source of truth",
@@ -68,7 +71,14 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17",
+      "clarifyingQuestions": [
+        "Who are the users, how many, and on what devices and networks?",
+        "Which flows are in scope — and what are we explicitly leaving out?",
+        "What does offline mean here: a read-only cache, or full offline writes?",
+        "How real-time must the system be — seconds, or eventual?",
+        "What are the non-functional targets — cold start budget, render p90, data per session, battery?"
+      ]
     },
     {
       "id": "sd-0001",
@@ -84,11 +94,14 @@
         "offline"
       ],
       "q": "Design an offline-capable social feed (Instagram/Twitter style)",
+      "shortAnswer": [
+        "An infinite social feed of images and text that renders offline and survives slow 3G — the client, not the backend, is the interview.",
+        "Room is the source of truth via Paging 3 and `RemoteMediator`, with cursor pagination; likes and comments use an outbox, optimistic UI, and idempotency keys.",
+        "Probes land hardest on pagination correctness — why offset breaks — and the image pipeline: sizing, memory plus disk cache tiers, eviction, and metered-connection prefetch."
+      ],
       "prompt": "Design the client architecture for an infinite social feed: images and text, pull-to-refresh, infinite scroll, likes and comments that work offline, and usable on a slow, intermittent connection.\n\nAssume ~10M DAU, median device is mid-range Android, and a meaningful share of users are on 3G. Scope to the feed surface only.\n\n**Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "Run the standard framework. For this scenario the interviewer almost always pushes hardest on **pagination correctness** and the **image pipeline** — budget extra time there.",
+      "framework": "Run the two-phase framework — clarify first, then plan. For this scenario the interviewer almost always pushes hardest on **pagination correctness** and the **image pipeline** — budget extra time there.",
       "requirements": [
-        "Clarify scope: which surface, what does 'offline' mean for writes",
-        "State non-functional targets (time to first content, data per session)",
         "Client architecture: UI → ViewModel → repository → Room + network",
         "Pagination strategy: cursor-based, with justification",
         "Local schema for posts, authors, and the feed ordering",
@@ -128,7 +141,7 @@
       ],
       "addedIn": "2026.08.1",
       "diagram": "<svg viewBox=\"0 0 720 300\" role=\"img\" aria-label=\"Architecture diagram\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"90.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Composable</text><text x=\"90.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">LazyColumn</text><rect x=\"20\" y=\"120\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"90.0\" y=\"144.0\" text-anchor=\"middle\" class=\"dg-label\">ViewModel</text><text x=\"90.0\" y=\"159.0\" text-anchor=\"middle\" class=\"dg-sub\">PagingData flow</text><rect x=\"220\" y=\"120\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"295.0\" y=\"151.0\" text-anchor=\"middle\" class=\"dg-label\">FeedRepository</text><rect x=\"430\" y=\"20\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"495.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Room</text><text x=\"495.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">source of truth</text><rect x=\"430\" y=\"120\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"495.0\" y=\"151.0\" text-anchor=\"middle\" class=\"dg-label\">RemoteMediator</text><rect x=\"430\" y=\"220\" width=\"130\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"495.0\" y=\"244.0\" text-anchor=\"middle\" class=\"dg-label\">OutboxDao</text><text x=\"495.0\" y=\"259.0\" text-anchor=\"middle\" class=\"dg-sub\">pending writes</text><rect x=\"610\" y=\"120\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"151.0\" text-anchor=\"middle\" class=\"dg-label\">Feed API</text><rect x=\"610\" y=\"220\" width=\"90\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"655.0\" y=\"251.0\" text-anchor=\"middle\" class=\"dg-label\">SyncWorker</text><line x1=\"90\" y1=\"120\" x2=\"90\" y2=\"80\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"90.0\" y=\"95.0\" text-anchor=\"middle\" class=\"dg-edge-label\">state</text><line x1=\"160\" y1=\"147\" x2=\"218\" y2=\"147\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"370\" y1=\"140\" x2=\"428\" y2=\"60\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"399.0\" y=\"95.0\" text-anchor=\"middle\" class=\"dg-edge-label\">observe</text><line x1=\"370\" y1=\"152\" x2=\"428\" y2=\"150\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"370\" y1=\"160\" x2=\"428\" y2=\"240\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"399.0\" y=\"195.0\" text-anchor=\"middle\" class=\"dg-edge-label\">queue write</text><line x1=\"560\" y1=\"147\" x2=\"608\" y2=\"147\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"584.0\" y=\"142.0\" text-anchor=\"middle\" class=\"dg-edge-label\">cursor page</text><line x1=\"560\" y1=\"247\" x2=\"608\" y2=\"247\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"584.0\" y=\"242.0\" text-anchor=\"middle\" class=\"dg-edge-label\">drain</text><line x1=\"655\" y1=\"220\" x2=\"655\" y2=\"176\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"655.0\" y=\"193.0\" text-anchor=\"middle\" class=\"dg-edge-label\">writes back</text></svg>",
-      "updatedIn": "2026.08.15",
+      "updatedIn": "2026.08.17",
       "refs": [
         {
           "title": "Build an offline-first app",
@@ -140,6 +153,12 @@
           "url": "https://developer.android.com/develop/background-work/background-tasks/persistent",
           "checked": "2026-08-09"
         }
+      ],
+      "clarifyingQuestions": [
+        "Which surface is in scope — the feed, or also profile, search, and notifications?",
+        "What does offline mean for writes: a read-only cache, or full offline likes and comments?",
+        "How many users, on what devices and networks — should the design survive 2G?",
+        "What are the non-functional targets — time to first content, data per session?"
       ]
     },
     {
@@ -156,10 +175,14 @@
         "ordering"
       ],
       "q": "Design an offline-capable chat app (WhatsApp style)",
+      "shortAnswer": [
+        "A WhatsApp-class chat client: near real-time delivery, full offline composition, ordering that survives reconnects, and delivery and read receipts, scoped to the client.",
+        "Draw the message state machine first: composing, queued, sending, sent, delivered, read; use client-generated ids for idempotency and server sequence numbers, never device clocks.",
+        "Grading hinges on the send state machine, WebSocket foreground versus FCM background battery trade-off, bounded catch-up sync, batched receipts, and resumable media upload."
+      ],
       "prompt": "Design the client for 1:1 and group messaging: send/receive in near real-time, full offline composition, delivery and read receipts, message ordering that survives reconnects, and media attachments.\n\nScope to the client. Assume the backend exposes a WebSocket plus REST endpoints.\n\n**45 minutes. Talk out loud.** The two things that separate strong answers here are **message ordering** and **the send state machine**.",
-      "framework": "Standard framework, but expect to spend most of your time on the write path and ordering. Draw the message state machine early — it anchors the whole discussion.",
+      "framework": "Run the two-phase framework, but expect to spend most of your time in Phase 2 on the write path and ordering. Draw the message state machine early — it anchors the whole discussion.",
       "requirements": [
-        "Clarify: group size limits, media types, encryption expectations, history depth",
         "Client architecture with a persistent connection manager",
         "Message state machine: composing → queued → sent → delivered → read → failed",
         "Client-generated message ids and why they're required",
@@ -202,7 +225,7 @@
       ],
       "addedIn": "2026.08.1",
       "diagram": "<svg viewBox=\"0 0 720 320\" role=\"img\" aria-label=\"Architecture diagram\" xmlns=\"http://www.w3.org/2000/svg\"><defs><marker id=\"dgArrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M0,0 L10,5 L0,10 z\" class=\"dg-arrow\"/></marker></defs><rect x=\"20\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box--blue\"/><text x=\"90.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Chat UI</text><text x=\"90.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">message list</text><rect x=\"20\" y=\"130\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"90.0\" y=\"161.0\" text-anchor=\"middle\" class=\"dg-label\">ChatViewModel</text><rect x=\"230\" y=\"130\" width=\"150\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"305.0\" y=\"161.0\" text-anchor=\"middle\" class=\"dg-label\">MessageRepository</text><rect x=\"450\" y=\"20\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box--accent\"/><text x=\"520.0\" y=\"44.0\" text-anchor=\"middle\" class=\"dg-label\">Room</text><text x=\"520.0\" y=\"59.0\" text-anchor=\"middle\" class=\"dg-sub\">source of truth</text><rect x=\"450\" y=\"130\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"520.0\" y=\"154.0\" text-anchor=\"middle\" class=\"dg-label\">SocketManager</text><text x=\"520.0\" y=\"169.0\" text-anchor=\"middle\" class=\"dg-sub\">foreground</text><rect x=\"450\" y=\"240\" width=\"140\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"520.0\" y=\"264.0\" text-anchor=\"middle\" class=\"dg-label\">FCM handler</text><text x=\"520.0\" y=\"279.0\" text-anchor=\"middle\" class=\"dg-sub\">background</text><rect x=\"640\" y=\"130\" width=\"60\" height=\"54\" rx=\"8\" class=\"dg-box\"/><text x=\"670.0\" y=\"161.0\" text-anchor=\"middle\" class=\"dg-label\">Server</text><line x1=\"90\" y1=\"130\" x2=\"90\" y2=\"80\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"90.0\" y=\"100.0\" text-anchor=\"middle\" class=\"dg-edge-label\">state</text><line x1=\"160\" y1=\"157\" x2=\"228\" y2=\"157\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"380\" y1=\"150\" x2=\"448\" y2=\"60\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"414.0\" y=\"100.0\" text-anchor=\"middle\" class=\"dg-edge-label\">read/write</text><line x1=\"380\" y1=\"157\" x2=\"448\" y2=\"157\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><text x=\"414.0\" y=\"152.0\" text-anchor=\"middle\" class=\"dg-edge-label\">send</text><line x1=\"590\" y1=\"150\" x2=\"638\" y2=\"150\" class=\"dg-edge\" marker-end=\"url(#dgArrow)\"/><line x1=\"590\" y1=\"250\" x2=\"638\" y2=\"176\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"614.0\" y=\"208.0\" text-anchor=\"middle\" class=\"dg-edge-label\">push</text><line x1=\"520\" y1=\"240\" x2=\"520\" y2=\"190\" class=\"dg-edge dg-edge--dashed\" marker-end=\"url(#dgArrow)\"/><text x=\"520.0\" y=\"210.0\" text-anchor=\"middle\" class=\"dg-edge-label\">reconnect</text><text x=\"20\" y=\"312\" class=\"dg-sub\">Client-generated id = idempotency key · server sequence number = authoritative order</text></svg>",
-      "updatedIn": "2026.08.15",
+      "updatedIn": "2026.08.17",
       "refs": [
         {
           "title": "Build an offline-first app",
@@ -214,6 +237,12 @@
           "url": "https://developer.android.com/develop/background-work/background-tasks/persistent",
           "checked": "2026-08-09"
         }
+      ],
+      "clarifyingQuestions": [
+        "What are the group size limits and the expected history depth?",
+        "Which media types must be supported, and what are the encryption expectations?",
+        "How many users and on what networks — does the design need to survive poor connectivity?",
+        "What are the non-functional targets — delivery latency, data per session, battery?"
       ]
     }
   ]

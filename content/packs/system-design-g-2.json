@@ -16,10 +16,14 @@
         "real-time"
       ],
       "q": "Design Uber-style live location tracking and sharing",
+      "shortAnswer": [
+        "Uber-style live location sharing: a publisher's position streams to many watchers in near real time, with consent, background updates, and battery constraints.",
+        "Model it as session publish-subscribe: adaptive accuracy driven by foreground or background state, a battery-aware upload cadence, and push-plus-pull fan-out to watchers.",
+        "Probes target background location — the ongoing-notification consent contract — staleness UX, server-side ETA so watchers agree, and geofence checks that survive app kill."
+      ],
       "prompt": "Design live location tracking and sharing (a driver ETA product / Find-My-Friends): users see each other's positions moving on a map, with consent, background updates, and battery constraints.\n\nAssume tens of millions of users, Android + iOS, and location must keep updating while the app is in the background. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "Two hard systems in one: on-device **location lifecycle** (accuracy vs battery) and a **server fan-out** problem (many watchers per publisher). Interviewers probe battery/background handling and the live-update path hardest.",
+      "framework": "Two hard systems in one: on-device **location lifecycle** (accuracy vs battery) and a **server fan-out** problem (many watchers per publisher). Run the two-phase framework; interviewers probe battery/background handling and the live-update path hardest.",
       "requirements": [
-        "Clarify the sharing model: who shares with whom, consent",
         "Define the on-device location pipeline (GPS, fused, accuracy modes)",
         "Design background location with Android restrictions",
         "Design the upload policy: how often, batching, batching under weak signal",
@@ -68,7 +72,12 @@
           "checked": "2026-08-13"
         }
       ],
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17",
+      "clarifyingQuestions": [
+        "Who shares location with whom, and how is consent granted and revoked?",
+        "How accurate must the shared location be, and how fresh?",
+        "What battery and data budgets must the sharing session respect?"
+      ]
     },
     {
       "id": "sd-0010",
@@ -83,10 +92,14 @@
         "conflict"
       ],
       "q": "Design an offline-first news reader",
+      "shortAnswer": [
+        "An offline-first news reader: articles work on a plane, bookmarks and read-state sync across devices, and offline is first-class, not degraded.",
+        "Local storage owns read-state, the network owns content: Room holds articles and monotonic mutation log, with delta sync, push freshness, and bounded image caching.",
+        "Grading centers on the local-first inversion, a monotonic last-write-wins conflict policy — no CRDT for tiny toggle fields — prefetch budgets, and offline-coverage metrics."
+      ],
       "prompt": "Design an offline-first news reader: articles are available on a plane, content is fresh when online, bookmarks and read-state sync across devices, and edits to read-state never conflict badly.\n\nAssume ~50M MAU, a shared content feed, and that 'offline' must be a first-class state, not a degraded one. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "The canonical local-first scenario. The interviewer wants to see **local as the source of truth** (see sd-0017) plus a freshness strategy, plus a conflict-resolution policy for tiny per-item writes.",
+      "framework": "The canonical local-first scenario. Run the two-phase framework; in Phase 2 the interviewer wants to see **local as the source of truth** (see sd-0017) plus a freshness strategy, plus a conflict-resolution policy for tiny per-item writes.",
       "requirements": [
-        "Clarify what is local vs remote state",
         "Design the offline content model (article, metadata, images)",
         "Design the fetch-ahead policy: what gets prefetched and when",
         "Design the sync model: full refresh vs delta vs push",
@@ -129,7 +142,13 @@
           "url": "https://developer.android.com/topic/architecture/data-layer/offline-first",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "clarifyingQuestions": [
+        "Which articles must work offline — everything, or a curated subset?",
+        "How should read-state and bookmarks behave across multiple devices?",
+        "What freshness contract does the product promise — how stale may an offline article be?"
+      ],
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sd-0011",
@@ -144,10 +163,14 @@
         "notifications"
       ],
       "q": "Design push notifications at scale on FCM",
+      "shortAnswer": [
+        "Push at scale on FCM: campaigns to millions, daily digests, and transactional alerts, where delivery rate and opt-out rate are the numbers that matter.",
+        "Separate delivery urgency from display: transactional, campaign, and digest queues; run token lifecycle as a feedback loop and fan out in waves with dead-lettering.",
+        "Interviewers push on token freshness and pruning, per-user throttling with local-time scheduling, client-side mute rules before posting, and ack-versus-receipt analytics."
+      ],
       "prompt": "Design a push-notification service built on FCM: campaign pushes to millions, personalized daily digests, transactional alerts, and the on-device handling that makes the product not annoying.\n\nAssume ~50M devices, multiple push campaigns per week, and that delivery rate and opt-out rate are the two numbers that matter. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "Half infrastructure (scheduling, batching, retries, token lifecycle), half product discipline (throttling, user-visible channel design). Interviewers probe token freshness and the 'not annoying' layer — opt-outs kill the product.",
+      "framework": "Half infrastructure (scheduling, batching, retries, token lifecycle), half product discipline (throttling, user-visible channel design). Run the two-phase framework; interviewers probe token freshness and the 'not annoying' layer — opt-outs kill the product.",
       "requirements": [
-        "Clarify the push types and their SLAs",
         "Design the token lifecycle: registration, refresh, invalidation",
         "Design the scheduler for campaigns (who, when, throttling)",
         "Design the send pipeline: batching, fan-out, retries",
@@ -190,7 +213,13 @@
           "url": "https://github.com/firebase/firebase-android-sdk/tree/main/firebase-messaging",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "clarifyingQuestions": [
+        "What push types must be supported, and what are their delivery SLAs?",
+        "How much user-visible push is acceptable before opt-outs kill the product?",
+        "What is the campaign scale — how many sends per day across how many users?"
+      ],
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sd-0012",
@@ -205,10 +234,14 @@
         "architecture"
       ],
       "q": "Design modularization for a large Android app",
+      "shortAnswer": [
+        "Split a 15-plus-minute monolith into buildable, ownable modules for ~200 engineers across 40 teams, without blowing up build times or creating dependency hell.",
+        "Layer downward — `:app` shell, `:feature:*`, pure-Kotlin `:domain`, `:core:*`, `:libs:*` — ban feature-to-feature dependencies, and split `api()` from `implementation()` with lint enforcement.",
+        "Grading focuses on build-time engineering — configuration caching, remote build cache, release-only R8 — plus a bottom-up migration that stays green and enforced acyclicity."
+      ],
       "prompt": "Design the module structure for an app with ~200 engineers across 40 teams: split a monolith into buildable, ownable modules without blowing up build times or creating dependency hell.\n\nAssume an existing large app that builds in 15+ minutes, circular dependencies, and no enforced boundaries. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "This is more of an architecture/process scenario than a runtime design. The interviewer wants dependency-structure thinking (layering, direction, cycles) plus build-time engineering (Gradle, incremental builds, remote cache).",
+      "framework": "This is more of an architecture/process scenario than a runtime design. Run the two-phase framework; the interviewer wants dependency-structure thinking (layering, direction, cycles) plus build-time engineering (Gradle, incremental builds, remote cache).",
       "requirements": [
-        "Clarify the goals: build time, ownership, test isolation",
         "Define the module layering (core → domain → feature → app)",
         "Define the ownership and API-boundary rules",
         "Design the dependency rules and how cycles are prevented",
@@ -257,7 +290,12 @@
           "checked": "2026-08-13"
         }
       ],
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17",
+      "clarifyingQuestions": [
+        "What are the goals — build time, ownership boundaries, test isolation — and which is primary?",
+        "How large is the team, and how are ownership boundaries enforced today?",
+        "What is the migration budget — how incremental must the path from the monolith be?"
+      ]
     },
     {
       "id": "sd-0013",
@@ -272,10 +310,14 @@
         "navigation"
       ],
       "q": "Design offline maps and turn-by-turn navigation",
+      "shortAnswer": [
+        "Offline maps with turn-by-turn navigation: download a region, browse and navigate without a network, with voice prompts and rerouting on constrained devices.",
+        "Store vector tiles, not rasters, with a region downloader that budgets size and resumes; embed precomputed contraction hierarchies so reroute happens on-device in milliseconds.",
+        "Probes are the storage math, offline routing and the traffic handoff, bounded offline search, the on-device voice engine, and tunnel dead-reckoning."
+      ],
       "prompt": "Design an offline maps and turn-by-turn navigation experience: download a region, browse maps without a network, and navigate with voice prompts and rerouting — on constrained devices.\n\nAssume Google-Maps-class product ambitions, Android + iOS, and that battery and storage are the two hard constraints. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "A storage-and-latency system: offline tiles, vector data, route calculation on-device, and the online/offline handoff for rerouting. Interviewers probe the *data layout* (vector tiles) and the *routing engine* more than the UI.",
+      "framework": "A storage-and-latency system: offline tiles, vector data, route calculation on-device, and the online/offline handoff for rerouting. Run the two-phase framework; interviewers probe the *data layout* (vector tiles) and the *routing engine* more than the UI.",
       "requirements": [
-        "Clarify what must work offline: browse, search, routes, voice",
         "Design the map data model: vector tiles vs raster, zoom levels",
         "Design region download: selection, size budgeting, partial regions",
         "Design storage layout and eviction",
@@ -318,7 +360,13 @@
           "url": "https://developers.google.com/maps/documentation/android-sdk/tileoverlay",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "clarifyingQuestions": [
+        "What must work offline — browsing, search, routes, voice — and which is the must-have?",
+        "Which regions must be downloadable, and what size budget is acceptable per region?",
+        "How fresh must offline map data be — what is the staleness contract?"
+      ],
+      "updatedIn": "2026.08.17"
     }
   ]
 }

@@ -16,6 +16,11 @@
         "design"
       ],
       "q": "Design an image memory cache with LRU eviction",
+      "shortAnswer": [
+        "Design a thread-safe in-memory image cache with LRU eviction under a byte budget.",
+        "Use `LruCache` with `sizeOf` returning `bitmap.byteCount`, a budget derived from the activity memory class, and keys of `url@size`.",
+        "The Android gotchas: count bytes, not entries; recycle only on eviction with sole ownership; key by URL plus size so densities don't collide."
+      ],
       "prompt": "Design a thread-safe in-memory image cache for an Android app: `get(url): Bitmap?` and `put(url, bitmap)` with LRU eviction and a byte-budget cap.\n\nThe real interview is about the *Android* details: size by bytes (not count), evict on the right thread, avoid caching giant bitmaps, and be able to explain why `android.util.LruCache` exists and when you'd write your own (pixel-size accounting, keying by URL + size, disk tier).",
       "hints": [
         "An LRU cache needs O(1) get and O(1) eviction — `LruCache` already is that, so the design question is what you key on and what you count.",
@@ -43,7 +48,9 @@
           "url": "https://developer.android.com/reference/android/util/LruCache",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val cache = ImageCache(150_000)\n    cache.put(\"a\", 100_000)\n    cache.put(\"b\", 100_000)\n    cache.put(\"c\", 100_000)\n    \"a=${cache.get(\"a\") != null} b=${cache.get(\"b\") != null} c=${cache.get(\"c\") != null} (LRU eviction under a byte budget)\"\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0056",
@@ -58,6 +65,11 @@
         "layout"
       ],
       "q": "Implement a custom Compose layout (measure/place)",
+      "shortAnswer": [
+        "Implement a custom Compose layout with `Layout { }`, honoring the measurement contract.",
+        "Measure each child with relaxed constraints, sum widths for a row with max height, clamp to `constraints.maxWidth`, then place with `placeRelative`.",
+        "The gotcha: ignoring max constraints throws at runtime, and `placeRelative` is the RTL-aware choice. One measure pass, one place pass per child."
+      ],
       "prompt": "Implement a custom Compose layout — e.g. a simple `Row`-like composable or a `FlowRow` — using `Layout { }`, and explain the measurement contract.\n\nThis tests real Compose fluency, not LeetCode. The contract: `Layout` gets `measurables`, each `MeasurePolicy.measure` returns a `Placeable`; you measure children with `Constraints`, and you must honor incoming `constraints.maxWidth/Height` while placing with `placeRelative`. Name the recomposition vs relayout difference.",
       "hints": [
         "Use `Layout(content) { measurables, constraints -> ... }`. Measure each child: `measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))`.",
@@ -85,7 +97,9 @@
           "url": "https://developer.android.com/develop/ui/compose/layouts/custom",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    \"custom Compose layout runs inside a Compose host, not this runner — graded on the contract: one measure pass, one place pass per child, clamped to max constraints\"\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0057",
@@ -100,6 +114,11 @@
         "state"
       ],
       "q": "Implement a minimal StateFlow from scratch",
+      "shortAnswer": [
+        "Implement a minimal StateFlow-like holder that notifies collectors on change, without coroutines machinery.",
+        "Hold the value under a lock with subscribers tracking their last emitted value; on update, notify only those whose value differs — conflation.",
+        "Replay the current value on subscribe inside the same lock so a concurrent update isn't missed; skip no-op equal updates to avoid spurious work."
+      ],
       "prompt": "Implement a minimal `StateFlow<T>`-like class: it holds a value, exposes it, and notifies collectors whenever the value changes — without building on `kotlinx.coroutines.flow`.\n\nThe point is the *contract*, not the coroutine machinery: a conflated state holder where collectors always get the latest value, updates are atomic, and multiple collectors each get a replay of the current value on subscribe. Use a `MutableStateFlow` in production; build this to prove you understand conflation and atomicity.",
       "hints": [
         "Hold `value` in an atomic or under a lock, plus a list of subscribers that each hold the last-emitted value.",
@@ -127,7 +146,9 @@
           "url": "https://developer.android.com/kotlin/flow/stateflow-and-sharedflow",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val flow = MiniStateFlow(1)\n    val seen = mutableListOf<Int>()\n    flow.subscribe { seen += it }\n    flow.update(2); flow.update(2); flow.update(3)\n    \"$seen / value=${flow.value}\"\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0058",
@@ -141,6 +162,11 @@
         "concurrency"
       ],
       "q": "Build a thread-safe in-memory key-value store",
+      "shortAnswer": [
+        "Build a thread-safe in-memory key-value store, used from multiple threads on Android.",
+        "`ConcurrentHashMap` gives lock-free reads and per-bin writes; `computeIfAbsent` makes the get-or-put compound operation atomic.",
+        "The gotcha is what's not atomic: read-then-write sequences and the eviction loop. A tiny store may be better served by one `synchronized` map."
+      ],
       "prompt": "Build a thread-safe `KeyValueStore` backed by a `HashMap`, with `get`/`put`/`remove`/`size`, used from multiple threads on Android.\n\nDiscuss the options in order: `synchronized` methods (correct, coarse), `ConcurrentHashMap` (fine-grained, but its `size()` and compound ops are not atomic), and per-key striping for hot paths. The interview is about *when* each is right and what compound operations (`getOrPut`) need.",
       "hints": [
         "A plain `HashMap` is not thread-safe — concurrent puts can corrupt it or loop forever.",
@@ -168,7 +194,9 @@
           "url": "https://developer.android.com/reference/java/util/concurrent/ConcurrentHashMap",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val store = KeyValueStore<Int, String>()\n    store.put(1, \"a\"); store.put(2, \"b\")\n    listOf(store.get(1), store.get(2), store.get(3)).toString()\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0059",
@@ -183,6 +211,11 @@
         "networking"
       ],
       "q": "Exponential backoff with jitter for network retries",
+      "shortAnswer": [
+        "Implement retries that wait `initial × 2^attempt`, with full jitter, and explain why jitter matters.",
+        "Full jitter sleeps a random value between zero and the backoff, breaking the synchronized retry storms plain exponential creates.",
+        "The policy is the grade: cap the backoff, retry only retryable errors — never 4xx — and know the three jitter styles."
+      ],
       "prompt": "Implement a retry helper that waits `initial * 2^attempt` before retrying, with full jitter — and explain why jitter matters.\n\nThe reason is thundering-herd prevention: without jitter, N clients all retry at the same synchronized instants, slamming the server. Full jitter (random between 0 and the backoff) breaks the synchronization. Know the three jitter styles (full, equal, decorrelated) well enough to discuss.",
       "hints": [
         "Base backoff is `initialMs * 2^attempt`. Pure exponential still causes synchronized retry storms.",
@@ -210,7 +243,9 @@
           "url": "https://github.com/lysine-dev/okhttp",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val seq = generateSequence(200L) { it * 2 }.take(5).toList()\n    \"exponential backoff: ${seq.joinToString()} ms — full jitter randomizes within [0, n] to break the thundering herd\"\n}",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0060",
@@ -225,6 +260,11 @@
         "queue"
       ],
       "q": "Build a bounded work queue with a worker pool",
+      "shortAnswer": [
+        "Build a bounded work queue: producers submit tasks, a fixed worker pool runs them, and a full queue must back off.",
+        "A `Channel(capacity)` with `BufferOverflow.SUSPEND` gives natural backpressure; `repeat(workers)` launch consumers, each job wrapped in `runCatching`.",
+        "The policy decisions are the answer: overflow behavior, draining on shutdown via close, and one failing job never killing the pool."
+      ],
       "prompt": "Build a bounded work queue: producers submit tasks, a fixed pool of workers runs them, and when the queue is full the producer must back off (block, drop, or reject with a policy).\n\nIn Kotlin this is `Channel<T>(capacity)` + a pool of `launch`ed consumers — but the interview wants the *policy decisions*: what happens on full (blocking vs dropping vs throwing), how shutdown drains pending work, and how errors in one task don't kill the pool.",
       "hints": [
         "`Channel(capacity, BufferOverflow.DROP_OLDEST / SUSPEND)` picks your overflow policy — say which you want and why.",
@@ -252,7 +292,9 @@
           "url": "https://kotlinlang.org/docs/channels.html",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val capacity = 16; val workers = 4\n    \"bounded queue: capacity=$capacity, workers=$workers — submit suspends when full (backpressure), shutdown cancels workers\"\n}",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

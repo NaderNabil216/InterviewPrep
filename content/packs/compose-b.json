@@ -16,9 +16,9 @@
       ],
       "q": "How do you write a custom layout, and what is `Modifier.Node`?",
       "shortAnswer": [
-        "`Layout(content) { measurables, constraints -> ... }` — measure each child **once**, decide your own size, then place children. Single pass, no multi-pass measurement.",
-        "`Modifier.Node` is the modern modifier implementation: a long-lived node object in a tree, so a modifier can hold state and be updated without reallocating on every recomposition.",
-        "The old `composed { }` API allocated per composition and defeated skipping; `Modifier.Node` replaced it for performance reasons."
+        "`Layout(content) { measurables, constraints -> ... }` measures each child **once**, picks your own size, then places the children. One pass, no measuring twice.",
+        "`Modifier.Node` is the modern modifier design: a long-lived node in a tree. A modifier can hold state and be updated without reallocating each recomposition.",
+        "The old `composed { }` API allocated on every composition and blocked skipping. `Modifier.Node` replaced it for performance."
       ],
       "answer": "#### Custom layout\n`Layout` content receives `measurables` and `constraints`; you measure each child **exactly once** and call `layout(width, height)` before placing. Measuring the same `Measurable` twice throws — that single-measure invariant is what keeps Compose layout O(n) instead of the exponential blow-up nested `LinearLayout` weights allowed. If you genuinely need a child's size before deciding constraints, the options are **intrinsics** (`minIntrinsicWidth`, which cost an extra query pass) or `SubcomposeLayout` (defers composition into layout; powerful and expensive — it's what `LazyColumn` and `BoxWithConstraints` use).\n\n#### Modifier.Node\nModifiers used to be built with `composed { }`, which ran a composable per usage — allocating every recomposition and blocking skipping. `Modifier.Node` replaced it: a `ModifierNodeElement` is a lightweight, comparable data holder; the long-lived `Modifier.Node` is attached to the layout node, and Compose diffs elements and calls `update(node)` instead of recreating. Nodes implement `LayoutModifierNode`, `DrawModifierNode`, `PointerInputModifierNode`, and can hold state and their own coroutine scope. Seeing `composed { }` is a performance smell.\n\n#### Modifier order\nModifiers apply outside-in and order changes behaviour: `padding(8.dp).background(Red)` pads *outside* the red area; `background(Red).padding(8.dp)` paints red behind the padding. `clip` before `clickable` clips the ripple; after, it doesn't.",
       "code": [
@@ -50,7 +50,7 @@
         }
       ],
       "addedIn": "2026.08.2",
-      "updatedIn": "2026.08.10"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "cmp-0008",
@@ -66,8 +66,8 @@
       "q": "How do you test Compose UI, and how do you catch visual regressions?",
       "shortAnswer": [
         "Compose tests query the **semantics tree**, not the view hierarchy: `onNodeWithTag`, `onNodeWithText`, then assertions and actions.",
-        "Prefer `Modifier.testTag` over text matching — text breaks when copy or translation changes.",
-        "Use `waitUntil` rather than sleeping; the test clock auto-advances and syncs with the composition, so most waits are unnecessary."
+        "Prefer `Modifier.testTag` over text matching — text breaks when copy or translations change.",
+        "Use `waitUntil` instead of sleeping. The test clock auto-advances and syncs with composition, so most waits are unnecessary."
       ],
       "answer": "#### The semantics tree\nCompose tests operate on the semantics tree — the same structure accessibility consumes, which is why testable Compose and accessible Compose are largely the same work.\n\n`onNodeWithTag`, `onNodeWithText`, `onNodeWithContentDescription`, plus `hasParent`/`hasAnyChild` matchers. `printToLog()` dumps the tree and is the fastest way to debug a failing matcher.\n\n#### Rules\n`createComposeRule()` — no Activity, fastest. `createAndroidComposeRule<MainActivity>()` — when you need the real Activity (Hilt, intents).\n\n#### Synchronization\nThe rule **auto-syncs** with the composition: it waits for idle before each assertion, so `Thread.sleep` is never right. For work outside Compose's knowledge use `waitUntil(timeoutMillis) { onAllNodesWithTag(\"row\").fetchSemanticsNodes().isNotEmpty() }`. To drive time deterministically, `mainClock.autoAdvance = false` plus `mainClock.advanceTimeBy(...)`.\n\n#### Screenshot testing\nThe cheapest visual-regression net across themes, font scales, locales: the first-party **Compose Preview screenshot testing** plugin (renders `@Preview`s and diffs), **Paparazzi** (JVM-only, no device, fast in CI), **Roborazzi** (Robolectric-based). Render each component at a couple of font scales and in dark mode — that's where most regressions hide.\n\n#### What to test where\nComposables: screenshots for appearance, semantics for behaviour. ViewModels: plain JVM unit tests. Whole screens: a few instrumented journey tests. Don't write a UI test for logic that could be a ViewModel unit test — it's 100x slower and flakier.",
       "code": [
@@ -99,7 +99,7 @@
         }
       ],
       "addedIn": "2026.08.2",
-      "updatedIn": "2026.08.10"
+      "updatedIn": "2026.08.17"
     }
   ]
 }

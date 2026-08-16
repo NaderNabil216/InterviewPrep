@@ -15,6 +15,11 @@
         "heap"
       ],
       "q": "Task Scheduler — minimum intervals with a cooldown",
+      "shortAnswer": [
+        "Return the minimum time units to run all tasks, where the same task must wait `n` units between runs.",
+        "The most frequent task dictates the skeleton: `(max - 1) * (n + 1) + tasksWithMaxCount`, then clamp to `tasks.size`.",
+        "The clamp is the detail that separates memorizing from understanding — when no idle is needed, extra tasks just extend the frame. Time O(tasks)."
+      ],
       "prompt": "Given `tasks: CharArray` and a cooldown `n`, each unit of CPU can process one task (or idle). The same task must wait `n` units between runs. Return the minimum number of time units to complete all tasks.\n\nThe greedy insight: the most frequent task dictates the skeleton — arrange it with `n` gaps, then fill the gaps with other tasks. The formula `(maxCount - 1) * (n + 1) + numberWithMax` is the classic answer, with the caveat that it's only valid when no task exceeds the gaps.",
       "hints": [
         "Which task constrains the schedule the most? The most frequent one.",
@@ -25,7 +30,7 @@
         {
           "lang": "kotlin",
           "caption": "Greedy formula — O(tasks)",
-          "src": "fun leastInterval(tasks: CharArray, n: Int): Int {\n    val counts = tasks.groupingBy { it }.eachCount().values\n    val max = counts.max()\n    val maxCount = counts.count { it == max }\n    val frame = (max - 1) * (n + 1) + maxCount\n    return maxOf(frame, tasks.size)\n}"
+          "src": "fun leastInterval(tasks: CharArray, n: Int): Int {\n    val counts = tasks.toList().groupingBy { it }.eachCount().values\n    val max = counts.max()\n    val maxCount = counts.count { it == max }\n    val frame = (max - 1) * (n + 1) + maxCount\n    return maxOf(frame, tasks.size)\n}"
         }
       ],
       "complexity": "Time O(tasks) to count, O(26) to scan. Space O(1) (fixed alphabet). The `maxOf(frame, tasks.size)` clamp is the detail that separates a memorized formula from an understood one.",
@@ -42,7 +47,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/grouping-by.html",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "leastInterval(charArrayOf('A','A','A','B','B','B'), 2)",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0049",
@@ -56,6 +63,11 @@
         "coin-change"
       ],
       "q": "Coin Change — fewest coins to reach an amount",
+      "shortAnswer": [
+        "Return the fewest coins to make an amount with unlimited denominations, or -1 if impossible.",
+        "Bottom-up DP: `dp[a] = min(dp[a - c] + 1)` over coins at most `a`, seeding `dp[0] = 0` and everything else to a sentinel.",
+        "Greedy fails — (1, 3, 4) for amount 6 is the counterexample. The sentinel tells impossible from possible; O(amount × coins) time."
+      ],
       "prompt": "Given coin denominations `coins: IntArray` (unlimited supply) and an amount, return the fewest number of coins to make that amount, or -1 if impossible.\n\nThe 1D DP classic: `dp[a]` = fewest coins for amount a, built bottom-up from the denominations. Interviewers will also expect you to know the greedy is wrong (25,10,5,1 works; 1,3,4 and amount 6 doesn't).",
       "hints": [
         "Greedy fails for some denomination sets — find a counterexample (1, 3, 4 → 6). That's why this needs DP.",
@@ -83,7 +95,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "coinChange(intArrayOf(1, 2, 5), 11)",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0050",
@@ -97,6 +111,11 @@
         "array"
       ],
       "q": "Longest Increasing Subsequence",
+      "shortAnswer": [
+        "Return the length of the longest strictly increasing subsequence, preserving original element order.",
+        "The O(n²) DP extends the best previous chain; the upgrade keeps `tails[k]`, the smallest tail of each length, via binary search.",
+        "`tails` holds lengths, not the subsequence — reconstructing needs parent pointers. State the O(n²) answer first, then upgrade."
+      ],
       "prompt": "Given `nums: IntArray`, return the length of the longest strictly increasing subsequence (elements keep their order but need not be contiguous).\n\nThe O(n²) DP is `dp[i] = max(dp[j]) + 1` over j < i with nums[j] < nums[i]. The O(n log n) version maintains a patience-sorting pile — the interviewer will ask for it as the follow-up. You should be able to do both.",
       "hints": [
         "The naive O(n²): for each i, look back at all j < i and extend the best chain that ends lower.",
@@ -124,7 +143,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "lengthOfLIS(intArrayOf(10, 9, 2, 5, 3, 7, 101, 18))",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0051",
@@ -138,6 +159,11 @@
         "knapsack"
       ],
       "q": "0/1 Knapsack — max value within a capacity",
+      "shortAnswer": [
+        "Return the maximum value carried within a capacity, with each item usable at most once.",
+        "One-dimensional DP over capacity, with take-or-skip transitions, iterating capacity backward so each item is used at most once.",
+        "The backward direction is mandatory — a forward loop silently turns 0/1 into unbounded knapsack. Time O(n·W), space O(W)."
+      ],
       "prompt": "Given weights and values for n items (each usable at most once) and a capacity, return the maximum total value you can carry.\n\nThe template behind 'subset sum', 'partition equal subset', and 'target sum'. The state is `dp[i][c]` = best value using the first i items and capacity c. The transition is the real lesson: take vs skip.",
       "hints": [
         "Two dimensions: items considered and capacity. `dp[i][c]` = max value from the first i items within capacity c.",
@@ -165,7 +191,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "knapsack(intArrayOf(1, 3, 4, 5), intArrayOf(1, 4, 5, 7), 7)",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0052",
@@ -179,6 +207,11 @@
         "grid"
       ],
       "q": "Unique Paths in a Grid",
+      "shortAnswer": [
+        "Count the distinct paths from top-left to bottom-right of an m×n grid, moving only right or down.",
+        "Grid DP where each cell sums its top and left neighbors, with the first row and column seeded to 1.",
+        "The closed form is `C(m+n-2, m-1)` — name it, then code the grid. O(m·n) time, space reducible to one row."
+      ],
       "prompt": "A robot starts at the top-left of an m×n grid and can only move right or down. Return the number of distinct paths to the bottom-right.\n\nWarm-up combinatorial/DP problem. Two valid answers: pure combinatorics `C(m+n-2, m-1)`, or the DP grid where each cell sums its top and left neighbors. The DP recurrence is the pattern that generalizes to obstacles and weighted cells.",
       "hints": [
         "To reach cell (r,c) you must come from (r-1,c) or (r,c-1). Counts add.",
@@ -206,7 +239,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "uniquePaths(3, 7)",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0053",
@@ -220,6 +255,11 @@
         "string"
       ],
       "q": "Longest Palindromic Substring",
+      "shortAnswer": [
+        "Return the longest substring of a string that reads the same forward and backward.",
+        "Expand around every center — single characters for odd lengths and the gaps between for even — tracking the best start and length.",
+        "Track start and length rather than materializing substrings, keeping space O(1). Time O(n²); name Manacher's O(n) as the extra."
+      ],
       "prompt": "Given a string, return the longest palindromic substring.\n\nTwo classic answers: expand around centers (O(n²) time, O(1) space — simplest, interviewers love it) and Manacher's (O(n), usually an extra). You should code the center-expansion fluently and be able to explain why it's O(n²) with n centers each expanding O(n).",
       "hints": [
         "A palindrome is symmetric around a center. Every palindrome has a center — either a single char (odd length) or between two chars (even).",
@@ -247,7 +287,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.text/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "longestPalindrome(\"babad\")",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "ds-0054",
@@ -261,6 +303,11 @@
         "rate-limiter"
       ],
       "q": "Design a Rate Limiter (fixed window and token bucket)",
+      "shortAnswer": [
+        "Design a rate limiter allowing at most N requests per window W per key.",
+        "Fixed window stores each key's window start and count; token bucket stores tokens and last refill, adding `elapsed × rate` capped at capacity.",
+        "Name the weakness: fixed windows allow a 2N boundary burst; the token bucket smooths it. O(1) per call, with eviction for many keys."
+      ],
       "prompt": "Design a `RateLimiter` that allows at most N requests per time window W. Support `allow(key: String, nowMs: Long): Boolean`.\n\nTwo implementations matter: fixed window (a map key → window start + count) and token bucket (key → tokens + last refill time). Know both and say when each is right — fixed window is simpler and has boundary spikes; token bucket smooths bursts. On Android this is the shape of a throttling layer in front of an API client.",
       "hints": [
         "Start simple: `HashMap<Key, WindowState>` where WindowState = (windowStart, count). Reset when nowMs passes the window edge.",
@@ -288,7 +335,9 @@
           "url": "https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-hash-map/",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "sampleCall": "run {\n    val rl = RateLimiter(2, 1000L)\n    listOf(rl.allow(\"u\", 0L), rl.allow(\"u\", 1L), rl.allow(\"u\", 2L), rl.allow(\"u\", 1001L)).toString()\n}",
+      "updatedIn": "2026.08.17"
     }
   ]
 }

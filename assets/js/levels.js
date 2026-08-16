@@ -4,7 +4,7 @@ export const LEVEL_LABEL = {
   1: 'Basics',
   2: 'Mid-Level',
   3: 'Senior',
-  4: 'Staff/Monster',
+  4: 'Lead',
 };
 
 export function levelLabel(level) {

@@ -26,6 +26,12 @@ export function renderSettings(el, { snapshot }) {
       </div>
 
       <div class="card">
+        <h3>Code runner key (optional)</h3>
+        <p class="faint">A RapidAPI <a href="https://rapidapi.com/judge0-official/api/judge0-ce/" target="_blank" rel="noopener">Judge0 CE</a> key unlocks <strong>Run</strong> on DSA items. Stored only on this device; never included in exports. Leave empty to disable.</p>
+        <input type="text" id="judge0-key" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Paste your RapidAPI key…" value="${settings.judge0ApiKey || ''}" style="background:var(--bg-card); border:1px solid var(--border); color:var(--text); padding:8px; border-radius:8px; width:100%; box-sizing:border-box;">
+      </div>
+
+      <div class="card">
         <h3>Export progress</h3>
         <p class="faint">Downloads a JSON file with your drill schedule, notes, plan checkmarks, and mock results. Content itself is not included — it's re-fetched from disk.</p>
         <button class="btn btn--primary" id="export-btn">⬇ Export progress.json</button>
@@ -63,6 +69,10 @@ export function renderSettings(el, { snapshot }) {
   el.querySelector('#theme-select').addEventListener('change', (e) => {
     Store.setSettings({ theme: e.target.value });
     location.reload();
+  });
+  el.querySelector('#judge0-key').addEventListener('change', (e) => {
+    Store.setSettings({ judge0ApiKey: e.target.value.trim() || null });
+    toast(e.target.value.trim() ? 'Code runner key saved.' : 'Code runner key cleared.');
   });
   el.querySelector('#export-btn').addEventListener('click', () => {
     const bundle = Store.exportProgress();

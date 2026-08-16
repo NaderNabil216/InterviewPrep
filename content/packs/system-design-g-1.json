@@ -16,10 +16,14 @@
         "client"
       ],
       "q": "Design a feature-flag and A/B experimentation system on the client",
+      "shortAnswer": [
+        "A client-side feature-flag and A/B system: remote flags flip features and variants, kill switches guard critical paths like payments and login at ~10M DAU.",
+        "Bundle default payloads so cold start never blocks; sticky bucketing `hash(user_id + experiment_id) % 100` holds cohorts; refresh via WorkManager, kill switches via push.",
+        "The pressure points are staleness versus availability when the payload is missing — critical flags fail closed — plus evaluation consistency and exposure logging."
+      ],
       "prompt": "Design the client-side of a feature-flag system: remote flags that can turn features on/off and serve A/B variants to cohorts, with kill switches and exposure logging.\n\nAssume ~10M DAU, an Android client, flags change multiple times a day, and some flags gate critical paths (payments, login). **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "This scenario is lighter than most — it's the client half of an infrastructure product. Run the standard framework but expect the interviewer to push hardest on **staleness vs availability** (what the app does when the flag payload is missing) and **evaluation consistency**.",
+      "framework": "This scenario is lighter than most — it's the client half of an infrastructure product. Run the two-phase framework but expect the interviewer to push hardest in Phase 2 on **staleness vs availability** (what the app does when the flag payload is missing) and **evaluation consistency**.",
       "requirements": [
-        "Clarify who reads flags and how often",
         "Define the flag evaluation API surface",
         "Design the config payload and its versioning",
         "Choose sync: fetch on start, poll, or push; and failure behaviour",
@@ -63,7 +67,12 @@
           "checked": "2026-08-13"
         }
       ],
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17",
+      "clarifyingQuestions": [
+        "Who reads flags — only the app UI, or also workers and background paths?",
+        "How often do flags change, and how fast must a change propagate to devices?",
+        "What is the failure contract when the flag payload is missing or stale?"
+      ]
     },
     {
       "id": "sd-0006",
@@ -78,10 +87,14 @@
         "sdk"
       ],
       "q": "Design a crash-reporting and observability SDK",
+      "shortAnswer": [
+        "A crash-reporting and observability SDK: capture crashes and ANRs, attach context, and upload on flaky networks without ever hurting the host app.",
+        "Three planes — capture, buffer, upload: an `UncaughtExceptionHandler` plus `ApplicationExitInfo` for ANRs, a disk buffer surviving process death, and WorkManager upload with backoff.",
+        "Interviewers probe the process-death window, the crash-on-startup loop detector, what context to attach, PII stripping under GDPR and CCPA, and near-zero main-thread cost."
+      ],
       "prompt": "Design a mobile crash-reporting and observability SDK (think a Firebase Crashlytics / Sentry class product): capture crashes and ANRs, attach context, and upload without hurting the app.\n\nAssume tens of millions of devices, mixed Android versions, and privacy constraints (GDPR/CCPA). **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "This is a client-infrastructure scenario. Expect the interviewer to probe **what to capture** (breadcrumbs, threads, memory) and **upload policy** (network, quota, retry) harder than the backend pipeline.",
+      "framework": "This is a client-infrastructure scenario. Run the two-phase framework; expect the interviewer to probe in Phase 2 **what to capture** (breadcrumbs, threads, memory) and **upload policy** (network, quota, retry) harder than the backend pipeline.",
       "requirements": [
-        "Clarify what events to capture: crash, ANR, native, custom",
         "Design the capture hooks (Thread.UncaughtExceptionHandler, ANR detection)",
         "Decide how much context to attach: threads, memory, breadcrumbs, logs",
         "Design on-device buffering and the upload policy",
@@ -130,7 +143,13 @@
           "checked": "2026-08-13"
         }
       ],
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17",
+      "clarifyingQuestions": [
+        "Which events must be captured — Java crashes, ANRs, native crashes, custom events?",
+        "What is the privacy and consent posture — what may the SDK upload?",
+        "How much context should each report carry — threads, memory, breadcrumbs, logs?",
+        "What volume and quota expectations follow from the host app's scale?"
+      ]
     },
     {
       "id": "sd-0007",
@@ -145,10 +164,14 @@
         "coil"
       ],
       "q": "Design an image-loading library (Coil-class)",
+      "shortAnswer": [
+        "An image-loading library in the Coil class: given a URL and target size, load from memory, disk, or network, decode, transform, display without janking.",
+        "Key requests by url, size, scaleType, and transformations; decode with `inSampleSize`, size the memory cache off `memoryClass`, keep encoded bytes on disk with LRU.",
+        "The hard parts are cancellation during `LazyColumn` fling, single-flight reuse of in-flight requests, OOM avoidance through downsampling, and correct cache keys across display sizes."
+      ],
       "prompt": "Design an image-loading library like Coil or Glide: given a URL and a target size, load a bitmap from memory cache, disk cache, or network, then decode, transform, and display it — all without janking the UI.\n\nAssume Android + Compose (but discuss Views interop), mid-range devices, and mixed networks. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "A contained, high-signal scenario. The interviewer will push on the **request lifecycle** (cancellation, reuse, keying) and the **memory cache** — that's where Coil/Glide earn their keep.",
+      "framework": "A contained, high-signal scenario. Run the two-phase framework; in Phase 2 the interviewer will push on the **request lifecycle** (cancellation, reuse, keying) and the **memory cache** — that's where Coil/Glide earn their keep.",
       "requirements": [
-        "Clarify the API surface you'd expose",
         "Design the request pipeline (load → decode → transform → display)",
         "Explain how a request is keyed for caching",
         "Design the memory cache and its size policy",
@@ -191,7 +214,13 @@
           "url": "https://developer.android.com/develop/ui/views/graphics",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "clarifyingQuestions": [
+        "What API surface should the library expose to app code?",
+        "Which image sources must be supported — network, content URIs, resources, files?",
+        "What memory budget is acceptable — should cache size adapt to the device class?"
+      ],
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "sd-0008",
@@ -206,10 +235,14 @@
         "api"
       ],
       "q": "Design a networking library (Retrofit-class)",
+      "shortAnswer": [
+        "A Retrofit-class networking library: annotated Kotlin interfaces become typed HTTP calls through a runtime proxy, with interceptors, converters, adapters, and testability.",
+        "Explain the two-layer OkHttp interceptor chain: application interceptors for auth, retry, and cache; network interceptors for the wire; keep converter separate from adapter.",
+        "Interviewers probe interceptor ordering so a 401-then-refresh-then-retry works, single-flight token refresh, typed error mapping with a retry policy, and mocking through the interceptor seam."
+      ],
       "prompt": "Design a networking library like Retrofit: map a Kotlin interface with annotated methods to typed HTTP calls, add interceptors, adapters, and mocking, and expose it to the app cleanly.\n\nFocus on the client side: interface-to-request mapping, the interceptor chain, how `suspend` functions and reactive types map, and how it's testable. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
-      "framework": "Retrofit is the shape everyone knows, so the interview is about *explaining its moving parts*, not inventing a new one. Expect probing on the interceptor chain and the conversion/adaptation layers.",
+      "framework": "Retrofit is the shape everyone knows, so the interview is about *explaining its moving parts*, not inventing a new one. Run the two-phase framework; expect probing in Phase 2 on the interceptor chain and the conversion/adaptation layers.",
       "requirements": [
-        "Clarify the public API surface (annotated interface)",
         "Explain how a method call becomes an HTTP request",
         "Design the interceptor chain and its order",
         "Design the converter layer (JSON, protobuf) and the adapter layer (suspend, Flow, callback)",
@@ -257,7 +290,14 @@
           "url": "https://github.com/square/retrofit",
           "checked": "2026-08-13"
         }
-      ]
+      ],
+      "clarifyingQuestions": [
+        "What API surface should the library expose — annotated interfaces, typed clients, or both?",
+        "Which serialization formats must be supported out of the box?",
+        "Must the library integrate with coroutines/Flow out of the box, and at what min-API?",
+        "Who owns the HTTP client and connection pool, and how is it configured per app?"
+      ],
+      "updatedIn": "2026.08.17"
     }
   ]
 }

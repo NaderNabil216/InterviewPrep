@@ -17,9 +17,9 @@
       ],
       "q": "How do you make a large Android build fast, and what changed in AGP 9?",
       "shortAnswer": [
-        "The big three: **configuration cache**, **build cache**, and **KSP2 instead of kapt**. Then module structure with api/impl separation so fewer modules recompile.",
-        "AGP 9 (Jan 2026) **applies the Kotlin plugin itself** — you no longer add `org.jetbrains.kotlin.android` to module build files. AGP is at 9.3 as of Jul 2026.",
-        "Measure with build scans / `--profile` before optimizing; the bottleneck is rarely where people assume."
+        "Three wins for a fast build: the **configuration cache**, the **build cache**, and **KSP2** over kapt. Then module structure — prefer `implementation` over `api` so fewer modules recompile.",
+        "AGP 9 (Jan 2026) **applies the Kotlin plugin itself**, so you stop adding `org.jetbrains.kotlin.android` to module build files. AGP 9.3 is current as of Jul 2026.",
+        "Measure first with a build scan or `--profile`; the slow part is rarely where people guess."
       ],
       "answer": "#### Configuration vs execution\nGradle configures every build script, then executes tasks. In a 50-module project configuration alone can take 10+ seconds per build.\n- **Configuration cache** serializes the configured task graph and reuses it — the single biggest win. It requires build logic that never reads mutable state at execution time.\n- **Build cache** reuses task *outputs* across builds and across machines (remote cache in CI).\n\n#### kapt to KSP\nkapt generates Java stubs for every Kotlin file so Java annotation processors can run — enormously expensive. KSP reads Kotlin directly and is typically 2x faster. Room, Hilt, Moshi and Glide all support it. One remaining kapt processor holds the module back, so migrating the last one matters more than it looks.\n\n#### AGP 9\nThe Android plugin applies Kotlin itself, so module scripts shrink and plugin versions cannot drift. AGP 9.0 (Jan 2026) was the breaking migration; 9.3 (Jul 2026) is incremental. Use the AGP Upgrade Assistant.\n\n#### Structure and levers\nBuild speed is mostly about how much has to recompile. api/impl separation means editing an implementation recompiles one module, not everything downstream — prefer `implementation` over `api`, which leaks onto consumers' compile classpath. Then: parallel, caching and configuration-cache in `gradle.properties`; enough daemon heap but not so much you swap; non-transitive R classes; unused build features off per module; in CI a remote cache, and never `clean`.\n\n#### Measuring\nA build scan gives configuration versus execution time, cache hit rates and the critical path. Optimize what it shows, not what you assume.",
       "code": [
@@ -61,7 +61,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "bt-0002",
@@ -76,9 +76,9 @@
       ],
       "q": "Describe your testing strategy. Fakes or mocks?",
       "shortAnswer": [
-        "Many fast unit tests (ViewModels, use cases, mappers) → fewer integration tests (repository + Room + fake network) → a thin layer of UI/E2E tests on critical journeys only.",
-        "**Prefer fakes over mocks** for anything you own: a fake repository backed by a `MutableStateFlow` is readable, reusable, and doesn't break when you refactor an implementation detail.",
-        "Mock only what you don't own and can't fake cheaply, and never mock the class under test."
+        "Many fast unit tests for ViewModels, use cases, and mappers, fewer integration tests with Room and a fake network, and a thin UI/E2E layer on critical journeys only.",
+        "**Prefer fakes over mocks** for code you own: a fake repository backed by a `MutableStateFlow` is readable, reusable, and survives refactors.",
+        "Mock only what you don't own and can't fake cheaply — and never mock the class under test."
       ],
       "answer": "#### The shape\n- **Unit (most)** — pure JVM, no framework. ViewModels with a `TestDispatcher`, use cases, mappers.\n- **Integration (some)** — repository against in-memory Room and `MockWebServer`. Catches what unit tests cannot: wrong SQL, wrong serialization, wrong transactions.\n- **UI (few)** — Compose or Espresso on the journeys that must never break. Slow and flaky-prone; keep it small.\n- **Screenshot tests** — Compose Preview screenshot testing, Paparazzi or Roborazzi, catching visual regressions without a device.\n\n#### Fakes versus mocks\nA **mock** asserts on *interactions* (\"was `save()` called once?\"), coupling the test to the implementation — a harmless refactor breaks a hundred tests. A **fake** is a real, simplified implementation you assert *state* against. It serves every test for that boundary and lets you *drive* emissions, which is what flow testing needs. Use MockK only to stub a third-party interface you cannot reimplement, or to verify a real interaction like \"analytics fired exactly once\".\n\n#### What makes tests flaky\nReal `delay` or `Thread.sleep` instead of virtual time; shared mutable state between tests; device locale, timezone or animations; wall-clock assertions.\n\n#### Compose testing\n`createComposeRule()` and the semantics tree. Prefer `onNodeWithTag` with a stable `testTag` over text matching, which breaks on copy changes. Use `waitUntil`, never sleep. Hilt tests take `@HiltAndroidTest` and `@UninstallModules` to swap in fakes.\n\n#### On coverage\nPercentage is a weak signal. Better: \"every ViewModel and use case has tests, repositories have integration tests against real Room, screenshot tests for the design system, five E2E journeys in CI.\" That describes confidence — the actual goal.",
       "code": [
@@ -115,7 +115,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.8"
+      "updatedIn": "2026.08.17"
     }
   ]
 }

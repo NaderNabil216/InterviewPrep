@@ -15,9 +15,9 @@
       ],
       "q": "How does Kotlin's null safety actually work, and what is a platform type?",
       "shortAnswer": [
-        "Nullability is part of the type system: `String` and `String?` are different types, checked at compile time.",
-        "The compiler inserts intrinsic null checks at Java interop boundaries, so NPEs surface at the boundary rather than deep in your code.",
-        "A platform type (`String!`) comes from Java where nullability is unknown — the compiler relaxes checks, which is exactly where NPEs still leak in."
+        "Nullability is part of the type system. `String` and `String?` are different types, so the compiler checks them at compile time.",
+        "At Java interop boundaries, the compiler inserts built-in null checks. NPEs then surface at the boundary, not deep in your code.",
+        "A platform type (`String!`) comes from Java, where nullability is unknown. The compiler relaxes its checks there — that's where NPEs still leak in."
       ],
       "answer": "Kotlin encodes nullability in the type system rather than in annotations or convention. `String` can never hold null; `String?` can. The compiler refuses unsafe calls on nullable types, so you must handle absence explicitly.\n\n#### The operators\n- `?.` safe call — returns null instead of throwing.\n- `?:` elvis — supplies a fallback, and because `throw`/`return` are expressions of type `Nothing`, `?: return` and `?: error(\"…\")` are idiomatic guard clauses.\n- `!!` not-null assertion — deliberately ugly; it throws `NullPointerException` by design so it is greppable in review.\n\n#### Platform types — the real interview point\nWhen Kotlin calls Java, the compiler often cannot know whether a value is nullable. It assigns a **platform type**, written `String!` in error messages but not writable by you. On a platform type the compiler applies **no** null checks — you can assign it to `String` and it will only blow up at runtime.\n\nMitigations: annotate the Java side (`@Nullable`/`@NonNull`, JSR-305), or declare the Kotlin type explicitly so the compiler inserts a check at assignment. Modern AndroidX is heavily annotated, so most framework calls give you real nullable types.\n\n#### Where NPEs still come from in Kotlin\n1. `!!`\n2. Platform types from unannotated Java\n3. `lateinit` accessed before initialization (throws `UninitializedPropertyAccessException`)\n4. Leaking `this` from a constructor into code that reads not-yet-initialized properties\n5. External Java libraries returning null from a method declared non-null",
       "code": [
@@ -44,7 +44,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.9"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0002",
@@ -59,9 +59,9 @@
       ],
       "q": "What does `data class` generate, and when is it the wrong choice?",
       "shortAnswer": [
-        "It generates `equals`/`hashCode`/`toString`/`componentN`/`copy` from the properties in the **primary constructor only**.",
-        "Wrong choice when identity matters, when you need inheritance, or when a `copy()` can bypass validation invariants.",
-        "`copy()` ignores `init` block validation — that's the classic gotcha."
+        "It generates `equals`, `hashCode`, `toString`, `componentN`, and `copy`. Only the properties in the **primary constructor** are used.",
+        "It's the wrong choice when identity matters, when you need inheritance, or when a `copy()` can get around your validation rules.",
+        "`copy()` re-runs the constructor, but it's `public` even when the constructor is `private`, so callers can build states you never intended."
       ],
       "answer": "`data class` is a codegen convenience for value-like aggregates.\n\n#### What is generated\n- `equals()`/`hashCode()` over primary-constructor properties\n- `toString()` of the form `User(id=1, name=Ada)`\n- `componentN()` enabling destructuring\n- `copy()` with defaults from the current instance\n\n#### The traps\n**Only primary-constructor properties count.** A body-declared property is invisible to `equals`, `hashCode`, `toString`, and `copy` — two instances differing only in a body property compare equal.\n\n**`copy()` bypasses nothing, but broadens reach.** `copy()` re-runs the constructor so `init` *does* run, yet it also lets callers construct states you never intended to be reachable, and it is `public` even if your constructor is `private`. Kotlin warns about data classes with non-public constructors: expose a factory or use explicit `copy`-like functions instead.\n\n**Inheritance.** A data class cannot be `open`. Model variants with a `sealed interface` whose implementations are data classes.\n\n**Mutable properties.** `var` fields change the hash code after insertion into a `HashSet`, making the element unfindable. Keep them `val`.\n\n#### When to use what\n- **`data class`** — DTOs, UI state, value aggregates.\n- **plain `class`** — entities with identity, classes with behavior.\n- **`value class`** — a single wrapped value you want type-safe and allocation-free at runtime.\n- **`sealed interface` + data classes** — a closed set of variants, exhaustively checkable in `when`.",
       "code": [
@@ -88,7 +88,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.9"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0003",
@@ -103,9 +103,9 @@
       ],
       "q": "What is a `value class` (inline class), and when does it actually get boxed?",
       "shortAnswer": [
-        "A single-property wrapper the compiler erases at runtime, giving you type safety with no allocation in the common path.",
-        "It boxes whenever it must be used as a reference: as a generic type argument, when nullable, when stored in a collection, or when used as a supertype-typed value.",
-        "Function names get mangled to avoid JVM signature clashes — that breaks Java interop unless you add `@JvmName`."
+        "A wrapper around one property. At runtime the compiler erases it, so you get type safety with no allocation in the common case.",
+        "It gets boxed whenever the JVM needs a reference: as a generic type argument, when nullable, in a collection, or when assigned to a supertype.",
+        "Function names get mangled to avoid JVM signature clashes. That breaks Java interop unless you add `@JvmName`."
       ],
       "answer": "`@JvmInline value class UserId(val raw: String)` compiles so that most usages pass the underlying `String` directly. You get a distinct compile-time type — you can no longer swap `UserId` and `OrderId` by accident — for zero runtime cost in the happy path.\n\n#### When boxing happens\nThe wrapper is materialized as a real object whenever the JVM needs a reference:\n- used as a generic type argument: `List<UserId>`, `Flow<UserId>`\n- nullable: `UserId?`\n- assigned to a supertype it implements (`Any`, or an interface)\n- captured in a way that requires an object identity\n\nSo `fun load(id: UserId)` is free, but `fun loadAll(ids: List<UserId>)` boxes every element.\n\n#### Name mangling\nBecause `fun send(id: UserId)` and `fun send(name: String)` would both erase to `send(String)`, the compiler mangles the name (`send-abc123`). From Kotlin this is invisible; from Java the function is effectively uncallable. Annotate with `@JvmName(\"sendById\")` if Java must call it.\n\n#### Practical Android use\n- Type-safe IDs (`UserId`, `TrackId`) so you cannot transpose arguments.\n- Units (`Millis`, `Dp`-like wrappers) — Compose's own `Dp`, `Color`, and `Offset` are value classes for exactly this reason; `Color` packs into a `ULong`.\n- Validated primitives (`Email`, `NonEmptyString`) with a private constructor plus a factory returning `Result`.",
       "code": [
@@ -131,7 +131,8 @@
           "checked": "2026-08-07"
         }
       ],
-      "addedIn": "2026.08.1"
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0004",
@@ -147,9 +148,9 @@
       ],
       "q": "Explain `inline`, `noinline`, `crossinline`, and `reified`. When does inlining hurt?",
       "shortAnswer": [
-        "`inline` copies the function body **and its lambda bodies** into the call site, removing the `Function` object allocation and enabling non-local returns.",
-        "`noinline` opts a single lambda out (so you can store or pass it); `crossinline` keeps it inlined but forbids non-local return (needed when the lambda runs inside another object).",
-        "`reified` is only possible because the body is inlined — the concrete type is substituted at the call site, defeating erasure."
+        "`inline` copies the function body, and the lambda bodies, into the call site. That removes the `Function` object allocation and enables non-local returns.",
+        "`noinline` opts one lambda out, so you can store or pass it. `crossinline` keeps it inlined but blocks non-local return — needed when the lambda runs inside another object.",
+        "`reified` only works because the body is inlined: the concrete type is filled in at the call site, so erasure doesn't apply."
       ],
       "answer": "#### What inlining buys you\nA higher-order function normally allocates a `Function0`/`Function1` object per lambda and adds a virtual call; `inline` pastes the body at the call site instead. It also enables:\n- **non-local return** — `return` inside the lambda returns from the *enclosing* function, which is what makes `forEach { … return }` work like a real loop.\n- **`reified` type parameters** — the type argument is known at each call site, so `T::class`, `is T`, and `as T` become legal.\n\n#### The modifiers\n- **`noinline`** — this specific lambda parameter is *not* inlined. Needed when you want to store it in a field, return it, or pass it to a non-inline function.\n- **`crossinline`** — still inlined, but non-local return is banned. Required when the lambda is invoked from inside another lambda or object (e.g. inside a `Runnable`), where returning from the outer function is not meaningful.\n\n#### When inlining hurts\n1. **Code size.** The body is duplicated at every call site; a large inline function called from 200 places is 200 copies — bad for APK size and instruction cache. The compiler warns when you inline a function with no lambda parameters.\n2. **Binary compatibility.** Inlined code is baked into consumers, so changing an inline function's body in a library does not take effect until dependents recompile.\n3. **Visibility.** A public inline function cannot touch non-public API, since the body ends up in the caller's module.\n\nRule of thumb: inline functions whose *reason for existing* is a lambda parameter, and keep them small.",
       "code": [
@@ -176,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.9"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0005",
@@ -190,9 +191,9 @@
       ],
       "q": "Explain declaration-site vs use-site variance, and what `in`/`out`/star-projection mean.",
       "shortAnswer": [
-        "`out T` = covariant, T only appears in output position → `Flow<Dog>` is a `Flow<Animal>`.",
-        "`in T` = contravariant, T only in input position → `Comparator<Any>` is usable as a `Comparator<String>`.",
-        "Use-site variance (`List<out Animal>`) is Kotlin's version of Java wildcards; `*` is a star projection meaning 'some unknown type, safe to read as the upper bound'."
+        "`out T` is covariant: T only appears in output positions, so `Flow<Dog>` is a `Flow<Animal>`.",
+        "`in T` is contravariant: T only appears in input positions, so `Comparator<Any>` works as a `Comparator<String>`.",
+        "Use-site variance (`List<out Animal>`) is Kotlin's version of Java wildcards. `*` is a star projection: 'some unknown type, safe to read as the upper bound'."
       ],
       "answer": "Generics are invariant by default: `List<Dog>` is not a `List<Animal>`, because if it were, you could add a `Cat` to it.\n\n#### Declaration-site variance\nAnnotate the type parameter once at the class:\n- **`out T`** (covariant, producer): T may only appear in return positions — `interface Flow<out T>`, `List<out E>`. Then `Flow<Dog>` **is a** `Flow<Animal>`, safe because you can only take Dogs out.\n- **`in T`** (contravariant, consumer): T may only appear in parameter positions — `interface Comparator<in T>`. Then `Comparator<Any>` **is a** `Comparator<String>`, safe because anything that can compare Anys can compare Strings.\n\nMnemonic: **PECS** — Producer `out`, Consumer `in`.\n\n#### Use-site variance\nWhen a class must be invariant (e.g. `MutableList<T>` both produces and consumes), restrict variance at a single usage: `fun copy(from: Array<out Any>, to: Array<Any>)`. Inside `copy`, `from` is read-only — exactly Java's `Array<? extends Object>`.\n\n#### Star projection\n`List<*>` means \"a list of *some* type I don't know\". You can read elements as the upper bound (`Any?`) and you cannot write anything except `null`. Use it when you genuinely don't care about the argument.\n\n#### Where this bites in Android\n- `Flow<out T>` is why a `Flow<LoadingState.Success>` flows into a `Flow<LoadingState>`.\n- `LiveData<T>` is invariant, a common friction point when migrating.\n- `UiState<out T>` lets `UiState.Loading` be a shared `object` usable at every T.",
       "code": [
@@ -219,7 +220,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.9"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0006",
@@ -234,9 +235,9 @@
       ],
       "q": "`List` operator chains vs `Sequence` — when does each win?",
       "shortAnswer": [
-        "List operators are **eager and horizontal**: each step allocates a full intermediate list.",
-        "Sequences are **lazy and vertical**: each element flows through the whole chain before the next one starts, so nothing intermediate is allocated.",
-        "Sequences win on large collections, long chains, or early termination (`first`, `take`); lists win on small data because sequences have per-element iterator overhead."
+        "List operators are **eager and horizontal**: each step builds a full intermediate list.",
+        "Sequences are **lazy and vertical**: each element runs through the whole chain before the next starts, so no intermediate list is built.",
+        "Sequences win on big collections, long chains, or early termination (`first`, `take`). Lists win on small data, because sequences pay per-element iterator overhead."
       ],
       "answer": "#### The mechanical difference\n`listOf(1,2,3).map { f(it) }.filter { g(it) }` runs `map` over **all** elements producing a new list, then `filter` over all of those producing another list. Two allocations, `2N` operations.\n\n`listOf(1,2,3).asSequence().map { f(it) }.filter { g(it) }.toList()` runs `f(1)`, `g(1)`, `f(2)`, `g(2)`… one element at a time. One allocation at `toList()`.\n\n#### When sequences win\n- **Large N** — avoids N intermediate objects per step.\n- **Long chains** — savings compound.\n- **Early termination** — `.first { … }`, `.take(10)`, `.any { … }` stop the whole pipeline immediately. On a list, `map` has already processed everything before `first` runs.\n- **Infinite/generated sources** — `generateSequence`, `sequence { yield(…) }`.\n\n#### When lists win\nFor small collections (roughly < 100 elements, few steps) the sequence machinery — an `Iterator` object per stage plus a virtual call per element — costs more than the intermediate lists. Default to lists for typical UI-sized data; reach for sequences when the data is big or the chain terminates early.\n\n#### Terminal vs intermediate\nSequences do nothing until a **terminal** operation (`toList`, `first`, `sum`, `forEach`) runs. Forgetting the terminal is a real bug: the code compiles and does nothing.",
       "code": [
@@ -263,7 +264,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.15"
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0007",
@@ -278,7 +279,7 @@
       ],
       "q": "Distinguish `let`, `run`, `with`, `apply`, and `also`. How do you pick?",
       "shortAnswer": [
-        "Two axes: how the object is referenced (`it` vs `this`) and what is returned (the lambda result vs the object itself).",
+        "Two axes matter: how the object is referenced (`it` vs `this`), and what is returned — the lambda result or the object itself.",
         "`let`/`run`/`with` return the **lambda result**; `apply`/`also` return the **receiver**.",
         "`let`/`also` expose it as `it`; `run`/`with`/`apply` expose it as `this`."
       ],
@@ -306,7 +307,8 @@
           "checked": "2026-08-07"
         }
       ],
-      "addedIn": "2026.08.1"
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.17"
     },
     {
       "id": "kt-0008",
@@ -321,9 +323,9 @@
       ],
       "q": "How does property delegation (`by`) work, and what does `by lazy` cost?",
       "shortAnswer": [
-        "`by` rewrites property access into `getValue`/`setValue` calls on a delegate object — the compiler generates the plumbing.",
-        "`by lazy` is thread-safe by default (`SYNCHRONIZED`), which means a lock check on first access; use `LazyThreadSafetyMode.NONE` when you know access is single-threaded.",
-        "Class delegation (`class A(b: B) : B by b`) forwards interface methods, giving composition without boilerplate — but it captures the instance at construction."
+        "`by` turns property access into `getValue`/`setValue` calls on a delegate object. The compiler generates the plumbing.",
+        "`by lazy` is thread-safe by default (`SYNCHRONIZED`), so the first access does a lock check. Use `LazyThreadSafetyMode.NONE` when only one thread reads it.",
+        "Class delegation (`class A(b: B) : B by b`) forwards interface methods, so you get composition without boilerplate. But it captures the instance at construction."
       ],
       "answer": "#### Property delegation\n`val x: T by delegate` compiles to a hidden field holding the delegate plus `get()` forwarding to `delegate.getValue(thisRef, property)`. Any object with the right operator functions works, which is how `viewModels()`, `savedStateHandle`, `preferences`, and `lazy` all share the same syntax.\n\n#### `by lazy` modes\n- `SYNCHRONIZED` (default) — double-checked locking; safe from any thread, small cost per access.\n- `PUBLICATION` — the initializer may run on multiple threads concurrently, but the first result wins.\n- `NONE` — no synchronization at all; fastest, and correct only if you guarantee single-thread access. Common for values initialized on the main thread in Android.\n\n#### `lateinit` vs `by lazy`\n| | `lateinit var` | `val … by lazy` |\n|---|---|---|\n| Mutability | `var` | `val` |\n| Who initializes | you, externally | the initializer block |\n| Primitives | not allowed | allowed |\n| Failure mode | `UninitializedPropertyAccessException` | cannot fail to initialize |\n\nUse `lateinit` for dependency injection and lifecycle-assigned fields (views bound in `onCreate`); use `lazy` for expensive values computed from things already available.\n\n#### Class delegation\n`class LoggingRepo(private val real: Repo) : Repo by real` forwards every `Repo` member to `real`, so you override only what you want to change. Caveat: the delegate is captured at construction, and overrides in the delegating class are **not** seen by the delegate's own internal calls — the delegate calls its own methods, not yours.",
       "code": [
@@ -349,7 +351,8 @@
           "checked": "2026-08-07"
         }
       ],
-      "addedIn": "2026.08.1"
+      "addedIn": "2026.08.1",
+      "updatedIn": "2026.08.17"
     }
   ]
 }
