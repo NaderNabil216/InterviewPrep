@@ -4,8 +4,9 @@ This is the deterministic procedure for bringing the content up to date. Ask Cla
 
 > **"Refresh the interview prep content."**
 
-and it should follow these steps exactly. The result lands on disk; the site shows nothing new
-until you press **Update** in the header.
+and it should follow these steps exactly. The result lands on disk; each device picks it up on its
+own at the next sync trigger (boot, focus/visibilitychange, or reconnecting) and announces it with a
+toast — **provided `manifest.version` was bumped**, which is what makes new content reachable at all.
 
 ---
 
@@ -128,7 +129,7 @@ The resulting shape:
     {
       "version": "2026.09.1",
       "date": "2026-09-03",
-      "summary": "One paragraph the user reads in the Update dialog and What's New. Say what moved and why it matters."
+      "summary": "One paragraph the sync toast summarises for the user. Say what moved and why it matters."
     },
     /* ...previous releases, newest first... */
   ]
@@ -157,8 +158,8 @@ coverage — plus the remediation backlog, to errors.
 
 ## Step 6 — Tell the user what changed
 
-Report the release summary and the count of added/updated items. They then press **Update** in the
-site header, see the diff, and confirm.
+Report the release summary and the count of added/updated items. Their device applies the release by
+itself at the next sync trigger — no button, no confirmation — and never mid-Drill or mid-Mock.
 
 ---
 
