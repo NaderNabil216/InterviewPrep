@@ -1,0 +1,21 @@
+
+== US2 step 1-3: cold cache ==
+  [PASS] US2.1 the served markup ships a loading indicator that is visible by default — <div id="boot-status" class="boot-status" role="status">
+  [PASS] US2.1 the indicator is hidden once the shell has rendered — hidden at 74ms (first paint 76ms — the two are ~ms apart on localhost)
+  [PASS] US2.2 shell interactive within 1s of first paint — first paint 76ms -> shell interactive 74ms = -2ms
+  [PASS] US2.2 pack requests still in flight when the shell became interactive — 89 pack fetches pending (total in flight 91)
+  [PASS] US2.2 nav is rendered and interactive during the shell phase — 8 nav buttons: Dashboard,Plan,Topics,Drill,DSA,System Design,Mock,Cheat Sheets
+  [PASS] US2.3 content-derived figures show neutral placeholders, not real-looking zeros —  Dashboard Welcome back Snapshot v2026.08.17 · — items · — touched · — known Set interview date → Resume Start your first item Jump into the guided pl
+  [PASS] US2.3 figures fill in with real values once the content phase resolves —  Dashboard Welcome back Snapshot v2026.08.17 · 629 items · 0 touched · 0 known Set interview date → Resume Start your first item J
+  [PASS] US2.3 no full-page flash on fill-in (loading indicator never reappeared, no re-navigation) — boot indicator re-shown 0x, navigations 1
+       cold-cache totals: 89 pack fetches, content ready at 152ms
+
+== US2 step 4: slow CPU + slow network (ordering must still hold) ==
+  [PASS] US2.4 under 6x CPU + slow 3G the shell still renders while packs are pending (ordering) — 89 packs pending at shell-interactive; fcp->shell 1648ms (1s bound waived per FR-005b)
+       throttled content phase completed; persisted snapshot v2026.08.17 (89 packs)
+
+== US2 step 5: warm cache (must not regress) ==
+  [PASS] US2.5 warm cache renders the full library on first paint (no shell placeholders) —  Dashboard Welcome back Snapshot v2026.08.17 · 629 items · 0 touched · 0 known Set interview date → Resume Start your fi
+  [PASS] US2.5 warm cache fetches no packs at boot (renders straight from the stored snapshot) — 0 pack fetches
+  [PASS] US2.5 warm-cache shell is effectively instant — first paint -> interactive 44ms
+  [PASS] US2 no console errors across all three load paths — clean

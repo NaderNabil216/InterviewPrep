@@ -1,0 +1,31 @@
+Manifest v2026.08.6 (generated 2026-08-07)
+  ✓ kotlin-a                8 items
+  ✓ kotlin-b                5 items
+  ✓ coroutines-a            8 items
+  ✓ compose-a               6 items
+  ✓ compose-b               2 items
+  ✓ compose-c               3 items
+  ✓ platform                6 items
+  ✓ platform-b              4 items
+  ✓ architecture            4 items
+  ✓ architecture-b          3 items
+  ✓ dsa                     6 items
+  ✓ dsa-b                   8 items
+  ✓ dsa-c                   5 items
+  ✓ system-design           3 items
+  ✓ system-design-b         2 items
+  ✓ data-networking         4 items
+  ✓ performance             3 items
+  ✓ build-testing           2 items
+  ✓ security-kmp            3 items
+  ✓ behavioral              3 items
+  ✓ cheatsheets             3 items
+  ✓ cheatsheets-b           2 items
+  ✓ plan 7day            7 days, 127 item refs
+  ✓ plan 14day           15 days, 164 item refs
+
+Total: 93 items
+  by level: { '1': 6, '2': 28, '3': 50, '4': 9 }
+  by type : { qa: 64, dsa: 19, design: 5, concept: 5 }
+
+All good (0 warning(s))

@@ -1,0 +1,37 @@
+
+== US1: type-ahead search and filter ==
+  [PASS] US1.1-2 every character lands in the input immediately — "coroutine scope" (15 chars)
+  [PASS] US1.3 the list rebuilds on a trailing debounce, not once per keystroke — 1 list rebuilds for 15 keystrokes (0 mid-typing)
+  [PASS] US1.3 results settle within 300ms of the last keystroke — list rebuilt 155ms after the final keystroke (debounce ~150ms)
+  [PASS] US1.4 the URL/hash is written after typing stops, not per keystroke — 1 hash writes for 15 keystrokes
+  [PASS] US1.5 clearing mid-typing restores the full list with no stale query left behind — list 37 -> 59584 chars
+  [PASS] US1.3 the search overlay also computes on a trailing debounce — 1 result renders for 22 keystrokes, 10 hits
+  [PASS] US1.5 clearing the overlay query returns the prompt state — "Type to search all ~600 items…"
+
+== US4: one-tap progress marking ==
+  [PASS] US4.1 item detail offers exactly one "Mark complete" action, no Again/Hard/Good/Easy — buttons: Mark complete
+  [PASS] US4.2 marking complete records progress and schedules the item — after one tap: reps=1, ease=2.5, due=2026-08-17
+  [PASS] US4.3 a second tap advances the schedule without corrupting it (same as double-"Good" before) — after two taps: reps=2, ease=2.5, due=2026-08-19
+  [PASS] US4.5 the same single action appears on every review surface — DSA:1×"Mark complete"  Design:1×"Mark complete"  Drill:1×"Mark complete"
+  [PASS] US4.4 mastery percentages still compute after marking — 0%
+
+== US4 step 6: legacy mock row (FR-014b) ==
+  [PASS] US4.6 a pre-change mock session still appears in the history alongside the new metric — rapid 2.5/4 avg score 8 7/1/2026  ||  rapid 6/8 complete 8 8/1/2026
+  [PASS] US4.6 the legacy row is labelled as the older metric and was not back-filled — rendered as "2.5/4 avg score"; stored row still carries only avgScore
+
+== US5: timers pause on reveal ==
+  [PASS] US5.1 the Drill clock advances while the question is visible — 00:02 -> 00:05
+  [PASS] US5.1 the Drill clock freezes the instant the answer is revealed — held at 00:05 across a 5s reveal
+  [PASS] US5.1 the clock resumes from the frozen value (the 5s reveal was not counted) — 00:05 -> 00:07 after a 5s pause + ~2.5s of visible time
+  [PASS] US5.2 the Mock per-question countdown runs, then freezes on reveal — running 44:59->44:56; frozen at 44:56 across 5s revealed
+
+== US8: clarify-then-plan design flow ==
+  [PASS] US8.4 the framework item is held to the same >=3 clarifying-questions floor — sd-0000 carries 5 clarifying questions
+  [PASS] US8.1 the framework item documents two labeled phases — both phase headings present
+  [PASS] US8.2 a scenario opens on clarifying questions with no plan content visible — 4 clarifying questions; plan-phase and plan-side both hidden
+  [PASS] US8.2 the plan is reachable only after an explicit proceed step — plan phase revealed in place after Proceed
+
+== US9: "Lead" replaces "Staff/Monster" ==
+  [PASS] US9.2 the level filter reads "Lead" for level 4, with no Staff/Monster anywhere — options: All levels, Basics, Mid-Level, Senior, Lead
+  [PASS] US9.2 filtering by level 4 returns items whose chip reads "Lead" — 80 level-4 items, chip label "Lead"
+  [PASS] No console errors across US1/US4/US5/US8/US9 — clean

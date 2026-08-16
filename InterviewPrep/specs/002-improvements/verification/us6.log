@@ -1,0 +1,39 @@
+
+== US6 step 1: code editor replaces the plain notes textarea ==
+  [PASS] US6.1 Settings accepts a Judge0 CE key — stored via Settings card
+  [PASS] US6.1 scratchpad is a code editor pre-filled from starter, with an enabled Run button — class="scratchpad code-editor", 74 chars, button "▶ Run"
+
+== US6 step 4: no key configured ==
+  [PASS] US6.4 with no key, Run shows a clear "needs setup" state and sends no request — "No code runner key. Add a Judge0 CE key in Settings to run code here." · 0 judge0 requests
+
+== US6 steps 9 & 6: pending state, then a second Run supersedes the first ==
+  [PASS] US6.9 an explicit "running" state appears, visually distinct from idle and from a result — panel class "run-result run-result--pending", button "▶ Running…"
+  [PASS] US6.9 the previous run's output is cleared the moment the new run starts — panel no longer shows the earlier stdout
+  [PASS] US6.6 pressing Run again aborts the in-flight run; only the newest result ever renders — panel shows "SECOND-RUN-ONLY"; 2 judge0 requests seen
+
+== US6 steps 2-3 (contract mapping, simulated responses — no live key) ==
+  [PASS] US6.2 an accepted run renders raw stdout with no pass/fail verdict — "[0, 1]"
+  [PASS] US6.3 a compile failure renders a readable compile error in place of output — "Compilation failed error: expecting '}'"
+  [PASS] US6.3 a runtime failure renders the runtime error and stderr — "Run failed — 11 Runtime Error (NZEC) java.lang.ArithmeticException"
+
+== US6 step 12: key hygiene on failure ==
+  [PASS] US6.12 the key travels only in the X-RapidAPI-Key header — never console, DOM, or URL — header carries it: true; console/DOM/URL leaks: false/false/0
+  [PASS] US6.12 the failure shows fixed copy, not a dump of the outgoing request — "Couldn't reach the runner. Check your connection and try again."
+
+== US6 step 5: offline ==
+  [PASS] US6.5 offline shows "Run needs a connection" and leaves the in-progress code untouched — "Couldn't reach the runner. Check your connection and try aga" · editor unchanged (76 chars)
+
+== US6 step 8: the rest of the app still works offline with no key ==
+  [PASS] US6.8 Topics, Drill, Mock and Cheat Sheets all render offline with no key — Topics:ok Drill:ok Mock:ok Cheat sheets:ok
+
+== US6 step 7: navigating away and back ==
+  [PASS] US6.7 the candidate's code is restored, the previous run's output is not — code restored (76 chars); panel back to idle
+
+== US6 step 11: an item with no sampleCall ==
+  [PASS] US6.11 Run is disabled with a plain explanation, and no request is sent — button disabled, panel "This problem has no runnable sample case.", 0 requests
+  [PASS] US6.11 the not-runnable state reads as normal, not as an error — panel class "run-result run-result--idle", copy "This problem has no runnable sample case."
+
+== US6 step 10: stalled request must abort at ~30s (this takes 30s) ==
+  [PASS] US6.10 (setup) the restored item is runnable again — Run enabled
+  [PASS] US6.10 a stalled run aborts at ~30 seconds rather than spinning forever — aborted after 30.1s — "The runner timed out after 30 seconds. Check your connection"
+  [PASS] US6 no console errors beyond the deliberate network failures — clean
