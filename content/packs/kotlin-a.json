@@ -13,7 +13,7 @@
         "null-safety",
         "basics"
       ],
-      "q": "How does Kotlin's null safety actually work, and what is a platform type?",
+      "q": "How does Kotlin's null safety actually work, and what's a platform type?",
       "shortAnswer": [
         "Nullability is part of the type system. `String` and `String?` are different types, so the compiler checks them at compile time.",
         "At Java interop boundaries, the compiler inserts built-in null checks. NPEs then surface at the boundary, not deep in your code.",
@@ -44,7 +44,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0002",
@@ -88,7 +88,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0003",
@@ -132,7 +132,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0004",
@@ -146,7 +146,7 @@
         "performance",
         "internals"
       ],
-      "q": "Explain `inline`, `noinline`, `crossinline`, and `reified`. When does inlining hurt?",
+      "q": "What do `inline`, `noinline`, `crossinline`, and `reified` each do — and when does inlining hurt?",
       "shortAnswer": [
         "`inline` copies the function body, and the lambda bodies, into the call site. That removes the `Function` object allocation and enables non-local returns.",
         "`noinline` opts one lambda out, so you can store or pass it. `crossinline` keeps it inlined but blocks non-local return — needed when the lambda runs inside another object.",
@@ -177,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0005",
@@ -189,7 +189,7 @@
         "generics",
         "variance"
       ],
-      "q": "Explain declaration-site vs use-site variance, and what `in`/`out`/star-projection mean.",
+      "q": "What's the difference between declaration-site and use-site variance — and what do `in`/`out`/star-projection mean?",
       "shortAnswer": [
         "`out T` is covariant: T only appears in output positions, so `Flow<Dog>` is a `Flow<Animal>`.",
         "`in T` is contravariant: T only appears in input positions, so `Comparator<Any>` works as a `Comparator<String>`.",
@@ -220,7 +220,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0006",
@@ -264,7 +264,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0007",
@@ -277,7 +277,7 @@
         "basics",
         "idiom"
       ],
-      "q": "Distinguish `let`, `run`, `with`, `apply`, and `also`. How do you pick?",
+      "q": "What's the difference between `let`, `run`, `with`, `apply`, and `also` — and how do you pick?",
       "shortAnswer": [
         "Two axes matter: how the object is referenced (`it` vs `this`), and what is returned — the lambda result or the object itself.",
         "`let`/`run`/`with` return the **lambda result**; `apply`/`also` return the **receiver**.",
@@ -308,7 +308,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0008",
@@ -352,7 +352,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     }
   ]
 }
