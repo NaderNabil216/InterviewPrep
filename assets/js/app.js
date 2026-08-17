@@ -131,7 +131,20 @@ function setActiveNav(view) {
 
 function render() {
   const { view, param, query } = parseHash();
-  const fn = routes[view] || routes.dashboard;
+  // Item-type workspaces: a dsa/design item must open in its own view (checklist, timer, code
+  // editor), never in the generic item view. Redirecting here — the choke point every
+  // navigate('item', …) passes through — fixes search clicks, plan rows, the resume card, and
+  // stale bookmarks alike. replaceState rewrites the URL without a second hashchange render.
+  let v = view;
+  if (view === 'item' && param) {
+    const it = App.snapshot.byId[param];
+    if (it && (it.type === 'dsa' || it.type === 'design')) {
+      v = it.type;
+      const canonical = '#/' + v + '/' + param;
+      if (location.hash !== canonical) history.replaceState(null, '', canonical);
+    }
+  }
+  const fn = routes[v] || routes.dashboard;
   // Leaving a Drill/Mock session by navigating away clears the session flag — a sync pending on
   // App.sessionActive must not stay blocked forever because the candidate quit mid-session. Once
   // clear, an already-detected diff applies right away (no modal, no confirm).
@@ -139,13 +152,13 @@ function render() {
     if (App.sessionActive) App.sessionActive = false;
     applyPendingSync();
   }
-  setActiveNav(view === 'item' ? 'topics' : view);
+  setActiveNav(v === 'item' ? 'topics' : v);
   const el = document.getElementById('view');
   el.innerHTML = '';
   el.scrollTop = 0;
   fn(el, { param, query, snapshot: App.snapshot });
   // A failed session write raises the banner via store.js; it must not break navigation.
-  try { Store.setSession({ lastView: view + (param ? '/' + param : '') }); } catch (e) { /* reported */ }
+  try { Store.setSession({ lastView: v + (param ? '/' + param : '') }); } catch (e) { /* reported */ }
   window.scrollTo(0, 0);
 }
 
