@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0065",
@@ -89,7 +89,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0066",
@@ -133,7 +133,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0067",
@@ -146,7 +146,7 @@
         "buildString",
         "templates"
       ],
-      "q": "String handling: templates, `buildString`, raw strings — what is the performance and correctness story?",
+      "q": "String templates, `buildString`, and raw strings — what's the performance and correctness story?",
       "shortAnswer": [
         "`\"$a$b\"` compiles to invokedynamic via `StringConcatFactory` on JVM 9+ targets, not a StringBuilder chain. But `s += x` in a loop is still O(n²).",
         "`trimIndent`/`trimMargin` run at runtime on every evaluation. Hoist them out of hot paths.",
@@ -177,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0068",
@@ -220,7 +220,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     }
   ]
 }
