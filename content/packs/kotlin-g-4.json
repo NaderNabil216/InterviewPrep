@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0030",
@@ -94,7 +94,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0031",
@@ -107,7 +107,7 @@
         "Delegates",
         "KProperty"
       ],
-      "q": "Write a custom property delegate — and what does the stdlib already give you?",
+      "q": "How would you write a custom property delegate — and what does the stdlib already give you?",
       "shortAnswer": [
         "A delegate needs `operator fun getValue(thisRef, property: KProperty<*>)`, plus `setValue` for a `var`. Or you can implement `ReadOnlyProperty`/`ReadWriteProperty`.",
         "The stdlib ships `Delegates.observable`, `vetoable`, and `notNull`, plus `by map` for map-backed properties.",
@@ -138,7 +138,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0032",
@@ -182,7 +182,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0033",
@@ -231,7 +231,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     }
   ]
 }
