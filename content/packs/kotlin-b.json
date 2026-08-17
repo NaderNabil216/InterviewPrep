@@ -21,7 +21,7 @@
         "`sealed class`/`interface` — a closed set of **types** that can each carry different data and have multiple instances.",
         "`sealed interface` is the modern default: a type can implement several of them, so you can model overlapping categories that a sealed class hierarchy can't."
       ],
-      "answer": "#### The distinction that matters\nAn `enum` constant is a single instance with fixed data — `Status.LOADING` is always the same object. A sealed subtype is a *type* — `Error(cause)` can have thousands of distinct instances carrying different payloads.\n\nIf the variants need to carry different data, you need sealed. If they're just labels, `enum` is lighter and gets you `values()`, `entries`, `valueOf`, and `ordinal` for free.\n\n#### Exhaustiveness\nBoth give the compiler a closed set, so `when` can be exhaustive without an `else`. **Always omit the `else`** — adding a variant then becomes a compile error at every site that must handle it; `else` throws that safety away. Kotlin 2.3 made exhaustiveness data-flow-aware.\n\n#### Why sealed interface is usually better\n- A class can implement **multiple** sealed interfaces, modeling cross-cutting categories — e.g. an error that is both `Retryable` and `UserFacing`.\n- No forced inheritance relationship, so implementations stay free to extend something else.\n- Existing types can join the hierarchy.\n\n`sealed class` is still right when the variants genuinely share state or behaviour that belongs in a base class.\n\n#### Sealed + data object\n`data object Loading : UiState` gives a proper `toString()` (`Loading` rather than the object default with a hash), which matters in logs and test failures.\n\n#### Permitted subtypes\nSubtypes must be in the same package and module (previously the same file). That is what makes the set closed and the check sound.",
+      "answer": "#### The distinction that matters\nAn `enum` constant is a single instance with fixed data — `Status.LOADING` is always the same object. A sealed subtype is a *type*: `Error(cause)` can have thousands of distinct instances carrying different payloads.\n\nIf the variants need to carry different data, you need sealed. If they're just labels, `enum` is lighter and gives you `values()`, `entries`, `valueOf`, and `ordinal` for free.\n\n#### Exhaustiveness\nBoth give the compiler a closed set, so `when` is exhaustive without an `else`. **Always omit the `else`** — add a variant and it becomes a compile error at every site that must handle it; `else` throws that safety away. Kotlin 2.3 made exhaustiveness data-flow-aware.\n\n#### Why sealed interface is usually better\n- A class can implement **multiple** sealed interfaces, modeling cross-cutting categories — an error that is both `Retryable` and `UserFacing`.\n- No forced inheritance relationship, so implementations stay free to extend something else.\n- Existing types can join the hierarchy.\n\n`sealed class` is still right when the variants genuinely share state or behaviour that belongs in a base class.\n\n#### Sealed + data object\n`data object Loading : UiState` gives a proper `toString()` — `Loading` rather than the object default with a hash — which matters in logs and test failures.\n\n#### Permitted subtypes\nSubtypes must live in the same package and module (previously the same file). That's what makes the set closed and the check sound.",
       "code": [
         {
           "lang": "kotlin",
@@ -51,7 +51,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.18"
+      "updatedIn": "2026.08.19"
     },
     {
       "id": "kt-0010",
@@ -70,7 +70,7 @@
         "They compile to static methods with the receiver as the first parameter. They don't modify the class and can't be overridden.",
         "A member function always wins over an extension with the same signature. The extension silently becomes unreachable."
       ],
-      "answer": "#### Static dispatch\n`open class Base` / `class Derived : Base()` with `fun Base.name() = \"Base\"` and `fun Derived.name() = \"Derived\"` — then `val x: Base = Derived(); x.name()` resolves to `\"Base\"`, from the **declared** type.\n\nThis catches people out because member functions are virtual and extensions look identical at the call site. Extensions are just syntax sugar over `NameKt.name(x)`.\n\n#### Members win\nIf a class has a member with the same name and signature, the member is always called. Add a member later and every call site silently switches behaviour — no warning, no error. A real hazard when extending a class you don't control.\n\n#### What they compile to\n`fun String.shout(): String = uppercase() + \"!\"` becomes `public static String shout(String $receiver)`. So from Java: `UtilsKt.shout(\"hi\")`. Use `@JvmName` on the file to give that generated class a decent name.\n\n#### Where they earn their keep in Android\n- Adding domain-specific helpers to framework classes you can't modify (`Context.dp`, `View.hide()`).\n- Keeping mapping logic out of data classes: `UserDto.toDomain()` lives next to the code that cares, not on the DTO.\n- Scoped DSLs via extension *lambdas* (`build.gradle.kts`, Compose modifiers, `buildString`).\n\n#### Extension properties\nSame rules; note they can't hold state — there's no backing field, only a getter. `val View.isVisible get() = visibility == VISIBLE`.\n\n#### Nullable receivers\n`fun String?.orEmpty()` is legal — the receiver can be null inside the body. That's how the stdlib provides null-safe helpers.",
+      "answer": "#### Static dispatch\nTake `open class Base` / `class Derived : Base()` with `fun Base.name() = \"Base\"` and `fun Derived.name() = \"Derived\"` — then `val x: Base = Derived(); x.name()` resolves to `\"Base\"`, because the pick comes from the **declared** type.\n\nThat's the surprise: member functions are virtual and an extension looks identical at the call site. Extensions are sugar over `NameKt.name(x)`.\n\n#### Members win\nIf a class has a member with the same name and signature, the member is always called. Add a member later and every call site silently switches behaviour — no warning, no error. Real hazard when you extend a class you don't control.\n\n#### What they compile to\n`fun String.shout(): String = uppercase() + \"!\"` becomes `public static String shout(String $receiver)`. From Java: `UtilsKt.shout(\"hi\")`. Use `@JvmName` on the file to give that generated class a decent name.\n\n#### Where they earn their keep in Android\n- Adding domain-specific helpers to framework classes you can't modify (`Context.dp`, `View.hide()`).\n- Keeping mapping logic out of data classes: `UserDto.toDomain()` lives next to the code that cares, not on the DTO.\n- Scoped DSLs via extension *lambdas* (`build.gradle.kts`, Compose modifiers, `buildString`).\n\n#### Extension properties\nSame rules; note they can't hold state — there's no backing field, only a getter. `val View.isVisible get() = visibility == VISIBLE`.\n\n#### Nullable receivers\n`fun String?.orEmpty()` is legal — the receiver can be null inside the body. That's how the stdlib provides null-safe helpers.",
       "code": [
         {
           "lang": "kotlin",
@@ -95,7 +95,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.18"
+      "updatedIn": "2026.08.19"
     },
     {
       "id": "kt-0011",
@@ -149,7 +149,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.18"
+      "updatedIn": "2026.08.19"
     },
     {
       "id": "kt-0012",
@@ -198,7 +198,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.18"
+      "updatedIn": "2026.08.19"
     },
     {
       "id": "kt-0013",
@@ -247,7 +247,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.18"
+      "updatedIn": "2026.08.19"
     }
   ]
 }
