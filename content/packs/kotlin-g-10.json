@@ -49,7 +49,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0060",
@@ -62,7 +62,7 @@
         "guard",
         "exhaustive"
       ],
-      "q": "`when`: guard conditions, exhaustiveness rules, and how it compiles.",
+      "q": "How does `when` work — its guard conditions, its exhaustiveness rules, and what it compiles to?",
       "shortAnswer": [
         "A guard (`is Loading if state.retries > 3 ->`) removes the nested `if` in a branch. But it does NOT count toward exhaustiveness, so the compiler still demands an `else`.",
         "A non-exhaustive `when` statement over a sealed/enum subject is now an error, not a warning. And 2.3 added data-flow-based exhaustiveness.",
@@ -98,7 +98,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0061",
@@ -141,7 +141,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0062",
@@ -185,7 +185,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0063",
@@ -228,7 +228,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     }
   ]
 }
