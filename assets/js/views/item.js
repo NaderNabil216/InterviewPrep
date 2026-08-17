@@ -4,6 +4,7 @@ import { renderMarkdown, renderCodeBlock, renderInline, stripMarkdown } from '..
 import { rate, statusOf } from '../srs.js';
 import { toast } from '../app.js';
 import { LEVEL_LABEL } from '../levels.js';
+import { SECTION_LABEL, isLabelled } from '../sections.js';
 
 // Module-scoped so navigating between items replaces the handler instead of stacking them.
 let activeKeyHandler = null;
@@ -34,30 +35,41 @@ export function renderItem(el, { snapshot, param }) {
     </div>
 
     <div class="card">
+      ${isLabelled(item) && item.q ? `<h4 class="section-label">${SECTION_LABEL.question}</h4>` : ''}
       <div class="item-view__q">${renderInline(item.q)}</div>
 
+      ${isLabelled(item) && item.shortAnswer?.length ? `<h4 class="section-label">${SECTION_LABEL.shortAnswer}</h4>` : ''}
       ${item.shortAnswer?.length ? `
         <ul class="short-answer">
           ${item.shortAnswer.map(s => `<li>${renderInline(s)}</li>`).join('')}
         </ul>` : ''}
 
+      ${isLabelled(item) && item.answer ? `<h4 class="section-label">${SECTION_LABEL.answer}</h4>` : ''}
       <div class="answer-body">${renderMarkdown(item.answer || '')}</div>
 
-      ${(item.code || []).map(renderCodeBlock).join('')}
+      ${(item.code || []).map(block => (isLabelled(item)
+        ? `<h4 class="section-label">${SECTION_LABEL.code}</h4>`
+        : '') + renderCodeBlock(block)).join('')}
 
       ${item.followUps?.length ? `
-        <h4 style="margin-top:18px;">Likely follow-ups</h4>
+        ${isLabelled(item)
+          ? `<h4 class="section-label">${SECTION_LABEL.followUps}</h4>`
+          : '<h4 style="margin-top:18px;">Likely follow-ups</h4>'}
         <ul>${item.followUps.map(f => `<li>${renderInline(f)}</li>`).join('')}</ul>` : ''}
 
       ${item.traps?.length ? `
         <div class="traps-box">
-          <h4>⚠ Traps that get people rejected here</h4>
+          ${isLabelled(item)
+            ? `<h4 class="section-label">${SECTION_LABEL.traps}</h4>`
+            : '<h4>⚠ Traps that get people rejected here</h4>'}
           <ul>${item.traps.map(t => `<li>${renderInline(t)}</li>`).join('')}</ul>
         </div>` : ''}
 
       ${item.refs?.length ? `
         <div class="refs-box faint">
-          <strong>Sources</strong>
+          ${isLabelled(item)
+            ? `<h4 class="section-label">${SECTION_LABEL.refs}</h4>`
+            : '<strong>Sources</strong>'}
           ${item.refs.map(r => `<a href="${r.url}" target="_blank" rel="noopener">${r.title} <span class="faint">(checked ${r.checked})</span></a>`).join('')}
         </div>` : ''}
 

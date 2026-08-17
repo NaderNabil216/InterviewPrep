@@ -1,6 +1,7 @@
 import { navigate, toast, App } from '../app.js';
 import { buildQueue, rate } from '../srs.js';
 import { renderMarkdown, renderCodeBlock, renderInline } from '../md.js';
+import { SECTION_LABEL, isLabelled } from '../sections.js';
 
 export function renderDrill(el, { snapshot, param }) {
   let items;
@@ -73,11 +74,16 @@ export function renderDrill(el, { snapshot, param }) {
 
       <div class="card drill-card" id="drill-card" style="cursor:pointer;">
         <div class="faint">${item.track} · ${item.topic}</div>
+        ${isLabelled(item) && item.q ? `<h4 class="section-label">${SECTION_LABEL.question}</h4>` : ''}
         <div class="item-view__q" style="margin-top:8px;">${renderInline(item.q)}</div>
         <div id="drill-answer" style="display:none; margin-top:16px;">
+          ${isLabelled(item) && item.shortAnswer?.length ? `<h4 class="section-label">${SECTION_LABEL.shortAnswer}</h4>` : ''}
           ${item.shortAnswer?.length ? `<ul class="short-answer">${item.shortAnswer.map(s => `<li>${renderInline(s)}</li>`).join('')}</ul>` : ''}
+          ${isLabelled(item) && item.answer ? `<h4 class="section-label">${SECTION_LABEL.answer}</h4>` : ''}
           <div class="answer-body">${renderMarkdown(item.answer || '')}</div>
-          ${(item.code || []).slice(0, 1).map(renderCodeBlock).join('')}
+          ${(item.code || []).slice(0, 1).map(block => (isLabelled(item)
+            ? `<h4 class="section-label">${SECTION_LABEL.code}</h4>`
+            : '') + renderCodeBlock(block)).join('')}
         </div>
       </div>
       <div class="flip-hint" id="flip-hint">Click the card or press <span class="kbd">Space</span> to reveal the answer</div>

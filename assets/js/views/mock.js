@@ -2,6 +2,7 @@ import { Store } from '../store.js';
 import { navigate, toast, App } from '../app.js';
 import { renderMarkdown, renderCodeBlock, renderInline } from '../md.js';
 import { rate } from '../srs.js';
+import { SECTION_LABEL, isLabelled } from '../sections.js';
 
 const MODES = {
   android: { label: 'Android screen', minutes: 45, desc: 'Mixed Kotlin/Coroutines/Compose/Platform/Architecture questions, random level mix.', pool: it => ['kotlin','coroutines-flow','compose','platform','architecture','data-networking','performance','build','testing','security','kmp','modern'].includes(it.track) && it.type !== 'dsa' && it.type !== 'design' },
@@ -136,12 +137,17 @@ function runSession(el, snapshot, modeKey, itemCount) {
       </div>
       <div class="card">
         <div class="faint">${item.track} · ${item.topic}</div>
+        ${isLabelled(item) && item.q ? `<h4 class="section-label">${SECTION_LABEL.question}</h4>` : ''}
         <div class="item-view__q" style="margin-top:8px;">${renderInline(item.q)}</div>
         ${item.prompt ? `<div class="answer-body" style="margin-top:10px;">${renderMarkdown(item.prompt)}</div>` : ''}
         <div id="reveal-body" style="display:none; margin-top:16px;">
+          ${isLabelled(item) && item.shortAnswer?.length ? `<h4 class="section-label">${SECTION_LABEL.shortAnswer}</h4>` : ''}
           ${item.shortAnswer?.length ? `<ul class="short-answer">${item.shortAnswer.map(s=>`<li>${renderInline(s)}</li>`).join('')}</ul>` : ''}
+          ${isLabelled(item) && item.answer ? `<h4 class="section-label">${SECTION_LABEL.answer}</h4>` : ''}
           <div class="answer-body">${renderMarkdown(item.answer || item.referenceAnswer || '')}</div>
-          ${(item.code||[]).slice(0,1).map(renderCodeBlock).join('')}
+          ${(item.code||[]).slice(0,1).map(block => (isLabelled(item)
+            ? `<h4 class="section-label">${SECTION_LABEL.code}</h4>`
+            : '') + renderCodeBlock(block)).join('')}
         </div>
         <div class="btn-row" style="margin-top:14px;">
           <button class="btn" id="reveal-btn">Reveal model answer</button>
