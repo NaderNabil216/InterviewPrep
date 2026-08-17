@@ -6,7 +6,9 @@
 import { CDP, ORIGIN, sleep, PROBE } from '../../002-improvements/verification/cdp.mjs';
 import { writeFileSync } from 'node:fs';
 
-const RELEASE = '2026.08.18';
+const RELEASE = process.env.RELEASE || '2026.08.18';
+const REWIND_FROM = process.env.REWIND_FROM || '2026.08.17';
+const summary = process.env.SUMMARY || '';
 const results = [];
 const ok = (name, detail) => { results.push([name, 'PASS', detail]); console.log(`  PASS ${name} — ${detail}`); };
 const fail = (name, detail) => { results.push([name, 'FAIL', detail]); console.log(`  FAIL ${name} — ${detail}`); };
@@ -69,17 +71,17 @@ try {
   // the rewound store (in-memory App.snapshot is not enough — checkForUpdates compares memory, so
   // a same-tab focus event would see no diff), finds the release, and syncs with a toast.
   // The rewind reverts both the version and the kotlin items' updatedIn, exactly like a device
-  // that last synced 2026.08.17: otherwise the diff would count 0 changed items.
+  // that last synced ${REWIND_FROM}: otherwise the diff would count 0 changed items.
   await cdp.eval(`(async () => {
     const db = await new Promise(res => { const r = indexedDB.open('aip'); r.onsuccess = () => res(r.result); });
     const tx = db.transaction('snapshot', 'readwrite');
     const store = tx.objectStore('snapshot');
     const cur = await new Promise(res => { const q = store.get('current'); q.onsuccess = () => res(q.result); });
-    cur.version = '2026.08.17';
+    cur.version = '${REWIND_FROM}';
     for (const pk of Object.values(cur.packs || {})) {
-      for (const it of pk.items || []) if (/^kt-/.test(it.id)) it.updatedIn = '2026.08.17';
+      for (const it of pk.items || []) if (/^kt-/.test(it.id)) it.updatedIn = '${REWIND_FROM}';
     }
-    for (const it of Object.values(cur.byId || {})) if (/^kt-/.test(it.id)) it.updatedIn = '2026.08.17';
+    for (const it of Object.values(cur.byId || {})) if (/^kt-/.test(it.id)) it.updatedIn = '${REWIND_FROM}';
     await new Promise(res => { store.put(cur, 'current'); tx.oncomplete = res; });
     db.close();
     return true;
