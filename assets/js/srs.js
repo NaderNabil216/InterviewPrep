@@ -12,10 +12,8 @@ function todayISO(offsetDays = 0) {
 }
 
 export function rate(itemId, rating) {
-  const prev = Store.getItemProgress(itemId) || {
-    status: 'new', ease: 2.5, interval: 0, due: todayISO(), reps: 0, lapses: 0,
-  };
-  let { ease, interval, reps, lapses } = prev;
+  const prev = Store.getItemProgress(itemId) || {};
+  let { ease = 2.5, interval = 0, reps = 0, lapses = 0 } = prev;
 
   if (rating === 'again') {
     lapses += 1;
@@ -48,7 +46,7 @@ export function isDue(itemId) {
 
 export function statusOf(itemId) {
   const p = Store.getItemProgress(itemId);
-  if (!p) return 'new';
+  if (!p || !p.status) return 'new';
   if (p.due <= todayISO() && p.status !== 'new') return 'due';
   return p.status;
 }
