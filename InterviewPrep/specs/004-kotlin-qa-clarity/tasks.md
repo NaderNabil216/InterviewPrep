@@ -32,7 +32,7 @@ are tracked in the same repo and called out explicitly where used.
 
 ## Phase 1: Setup
 
-- [ ] T001 Create the feature branch and pin the baselines: in `/Users/nn/InterviewPrep`, create
+- [X] T001 Create the feature branch and pin the baselines: in `/Users/nn/InterviewPrep`, create
   `feat/004-kotlin-qa-clarity` off `main` (plan.md Branch line — the branch does not exist yet). Then
   verify the environment: `bash tools/serve.sh` (site **must** be served over `http://localhost:8777` —
   `fetch()` of local JSON is blocked over `file://`), and confirm `node tools/validate.mjs` exits 0
@@ -56,7 +56,7 @@ exists in this repo (no build step, no npm) — this phase is intentionally thin
 **Purpose**: The one piece of shared plumbing both content deliveries' batch gates (US2, US3) rely on.
 **US1 does NOT depend on this phase** — it is app code and may start immediately after Setup.
 
-- [ ] T002 Build the per-batch scope check at `specs/004-kotlin-qa-clarity/verification/scope-check.mjs`,
+- [X] T002 Build the per-batch scope check at `specs/004-kotlin-qa-clarity/verification/scope-check.mjs`,
   adapted from `specs/002-improvements/verification/fielddiff.mjs` (which already diffs every pack
   against `git HEAD` and exits non-zero on a protected-field change, an id change or an unexpected
   field). CLI: `node scope-check.mjs --delivery q <pack-file>` and
@@ -93,7 +93,7 @@ label and still carries its `Likely follow-ups` and `Sources` headings.
 
 ### Implementation for User Story 1
 
-- [ ] T003 [US1] Create `assets/js/sections.js` — the single source of the label vocabulary and the
+- [X] T003 [US1] Create `assets/js/sections.js` — the single source of the label vocabulary and the
   predicate, modelled on `assets/js/levels.js` (R-001). Export exactly (a) `SECTION_LABEL`, an object
   with these seven keys and strings, in this order — `question: 'Question'`,
   `shortAnswer: 'The 30-second answer'`, `answer: 'The full picture'`, `code: 'Code'`,
@@ -104,7 +104,7 @@ label and still carries its `Likely follow-ups` and `Sources` headings.
   `null`/`undefined`/unknown/absent `type` — FR-006b), type-keyed never page-keyed (no `track`,
   `route`, `view`, `pack` or `param` may appear — FR-006), and the **only** definition in the codebase
   (FR-006c).
-- [ ] T004 [P] [US1] Add the `.section-label` pill to `assets/css/app.css` plus its `@media print`
+- [X] T004 [P] [US1] Add the `.section-label` pill to `assets/css/app.css` plus its `@media print`
   fallback, and retire `.traps-box h4` (line 257 — safe because no unlabelled item carries `traps`,
   R-013). The treatment is exactly the contract's Style section: `display:inline-block; font-size:11px;
   font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--accent-strong);
@@ -119,7 +119,7 @@ label and still carries its `Likely follow-ups` and `Sources` headings.
   the originally proposed 14% tint fails light-theme AA (3.06:1); this pair measures 7.77 dark / 4.71
   light (FR-026). The pill must remain visually distinct from `.answer-body h4` (line 247,
   accent-coloured, same `<h4>` tag — FR-002a).
-- [ ] T005 [US1] `assets/js/views/item.js` — emit the seven labels, every one gated on **both**
+- [X] T005 [US1] `assets/js/views/item.js` — emit the seven labels, every one gated on **both**
   `isLabelled(item)` **and** the section's own content being present and non-empty (FR-003: a missing
   field, an empty list, a list of blank entries, or whitespace-only text all count as absent; no label
   may ever appear over emptiness — FR-003a, and the `answer-body` at line 44 renders unconditionally
@@ -138,7 +138,7 @@ label and still carries its `Likely follow-ups` and `Sources` headings.
   here</h4>`, `<strong>Sources</strong>` (FR-006d, R-013 — the unlabelled branch is what SC-007a and
   contract C10 assert on). No emoji/icon in any label — the traps danger meaning is carried by the
   wording "What sinks you", not by colour (FR-028).
-- [ ] T006 [P] [US1] `assets/js/views/drill.js` — inside the reveal body (lines 77-81), emit
+- [X] T006 [P] [US1] `assets/js/views/drill.js` — inside the reveal body (lines 77-81), emit
   `Question`, `The 30-second answer`, `The full picture` and `Code` labels, each gated on
   `isLabelled(item)` **and** the section's content being non-empty, using the same
   `<h4 class="section-label">` markup as T005 (FR-005 — same names wherever a section appears; Drill
@@ -146,19 +146,19 @@ label and still carries its `Likely follow-ups` and `Sources` headings.
   is `.slice(0, 1)` (line 80) so at most one `Code` label can render; a `qa` item with no `code[]`
   (89 exist) renders none (FR-003). Import `isLabelled`/`SECTION_LABEL` from `../sections.js` — do not
   hardcode a string or a type test (R-001).
-- [ ] T007 [P] [US1] `assets/js/views/mock.js` — same four labels in the reveal body (lines 141-145),
+- [X] T007 [P] [US1] `assets/js/views/mock.js` — same four labels in the reveal body (lines 141-145),
   with the same gating. The deep answer renders `item.answer || item.referenceAnswer` (line 143): the
   label shown MUST describe the field actually rendered (FR-005a) — today `referenceAnswer` exists only
   on unlabelled `design` items, so `The full picture` can never land above one, but the label must
   track `item.answer`'s presence, not the `||` expression, so a future labelled kind carrying only a
   reference answer cannot get a misdescribing label. The `item.prompt` block (line 140) renders only
   for `design` items (unlabelled) — no label there. Same import and markup conventions as T006.
-- [ ] T008 [US1] Bump the `app.css?v=6` query string in `index.html` (line 8) to `?v=7` — the labels
+- [X] T008 [US1] Bump the `app.css?v=6` query string in `index.html` (line 8) to `?v=7` — the labels
   ship as app code with no content release, so the stylesheet cache-bust is the only thing that gets
   the new CSS to devices (FR-029; the ES modules carry no version marker and that is accepted — every
   verification of this delivery must be done after a hard refresh). Must land after T004 (same file's
   CSS).
-- [ ] T009 [US1] Run the full Delivery 1 walkthrough, quickstart.md **D1-1…D1-9**, in a browser served
+- [X] T009 [US1] Run the full Delivery 1 walkthrough, quickstart.md **D1-1…D1-9**, in a browser served
   via `bash tools/serve.sh` from `/Users/nn/InterviewPrep`, **after a hard refresh** (FR-029 — cached
   modules render the new stylesheet against old markup until revalidated). Cover: D1-1 (seven pills in
   FR-001's order on `#/item/kt-0004`; all one treatment; distinguishable from the in-answer heading
@@ -227,13 +227,13 @@ neighbours — in practice **lead with the subject** (R-009, FR-012).
 
 ### Implementation for User Story 2 — 14 per-pack batches
 
-- [ ] T010 [US2] **Reference batch (R-011)**: rewrite `q` (and set `updatedIn` to `2026.08.18`) for all
+- [X] T010 [US2] **Reference batch (R-011)**: rewrite `q` (and set `updatedIn` to `2026.08.18`) for all
   **8 items** in `content/packs/kotlin-a.json`, per the authoring rules above, then run the full batch
   gate (validator → scope check → screens → read-through). This pack goes **first** in the delivery:
   once accepted it is held alongside FR-013a as the worked reference batch that batches 2–14 are judged
   against (FR-013d) — the exemplar stays normative and wins any conflict (FR-013c). Record the outcome
   and any near-duplicate adjudication inline under this task.
-- [ ] T011 [US2] **FR-022c named checkpoint — Delivery 2**: before the final D2 batch (T024) is begun,
+- [X] T011 [US2] **FR-022c named checkpoint — Delivery 2**: before the final D2 batch (T024) is begun,
   compare the projected release date for `2026.08.18` against both freshness windows — gate 10 closes
   **2026-09-06** (oldest Kotlin ref `checked` is 2026-08-07) and gate 11 closes **2026-09-13**
   (`stackSnapshotChecked` is 2026-08-14, R-007). Decide and record: comfortably inside → proceed; in
@@ -241,35 +241,37 @@ neighbours — in practice **lead with the subject** (R-009, FR-012).
   release; past a window → genuine re-verification (re-reading the primary source and re-dating
   `checked`, or `--stack-checked`) is required and is planned as its own work. The decision is taken
   now, while there is still time to act — never discovered as a blocked release gate.
-- [ ] T012 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-b.json`,
+  **Record (2026-08-17):** today is 8 days before the projected cut of `2026.08.18`; gate 10 closes
+  in 20 days, gate 11 in 27 days — comfortably inside both windows → **proceed, no re-verification**.
+- [X] T012 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-b.json`,
   run the full batch gate (steps 1–4 above), record the outcome inline under this task.
-- [ ] T013 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-1.json`,
+- [X] T013 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-1.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T014 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-2.json`,
+- [X] T014 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-2.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T015 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-3.json`,
+- [X] T015 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-3.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T016 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-4.json`,
+- [X] T016 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-4.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T017 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-5.json`,
+- [X] T017 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-5.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T018 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-6.json`,
+- [X] T018 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-6.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T019 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-7.json`,
+- [X] T019 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-7.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T020 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-8.json`,
+- [X] T020 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-8.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T021 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-9.json`,
+- [X] T021 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-9.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T022 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-10.json`,
+- [X] T022 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-10.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T023 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-11.json`,
+- [X] T023 [P] [US2] Batch: rewrite `q` + `updatedIn` for all **5 items** in `content/packs/kotlin-g-11.json`,
   run the full batch gate, record the outcome inline under this task.
-- [ ] T024 [P] [US2] **Final D2 batch** (do not begin until T011's checkpoint is decided): rewrite `q` +
+- [X] T024 [P] [US2] **Final D2 batch** (do not begin until T011's checkpoint is decided): rewrite `q` +
   `updatedIn` for both **2 items** in `content/packs/kotlin-g-12.json`, run the full batch gate, record
   the outcome inline under this task. After this batch, all 70 questions are rewritten — 0
   instructional openers, down from 5 (D2-1).
-- [ ] T025 [US2] **Release gate — Delivery 2** (quickstart.md D2 Release gate + D2-5): from
+- [X] T025 [US2] **Release gate — Delivery 2** (quickstart.md D2 Release gate + D2-5): from
   `/Users/nn/InterviewPrep`, run `node tools/validate.mjs` (0 errors, 0 warnings, whole library),
   `node tools/check-refs.mjs kotlin-` (every ref URL still resolves), then cut the release — the **only**
   writer of `content/manifest.json`:
@@ -282,6 +284,19 @@ neighbours — in practice **lead with the subject** (R-009, FR-012).
   away and back and expect the sync toast naming the release summary, `UPD` chips on the Kotlin Topics
   rows (`topics.js:59` — expected, both deliveries stamp all 70 items), and a candidate's own ratings,
   due dates, notes and plan ticks intact (FR-023, SC-008). Record the outcome inline.
+  **Record (2026-08-17):** `node tools/validate.mjs` clean (0 warnings, whole library);
+  `node tools/check-refs.mjs kotlin-` → 60 unique URLs, 60 ok, 0 broken. Release cut via
+  `sync-manifest.mjs --write --release 2026.08.18 --summary "Kotlin questions reworded in plain,
+  spoken English (70 items)." --date 2026-08-17`; post-cut validator clean, gates 6/10/11 active and
+  passing. D2-5 device walkthrough (`verification/d25.mjs`, headless Chrome on `localhost:8777`)
+  7/7 PASS: snapshot lands on `2026.08.18` (89 packs); 70 `UPD` chips, all on Kotlin Topics rows;
+  sync toast `Content updated — 0 new, 70 changed.` after booting from a store rewound to
+  `2026.08.17`; rating (`learning`, due 2026-08-18) and a notes entry on kt-0001 both intact after
+  the release. **Out-of-scope finding:** pre-existing bug — `srs.js rate()` throws on a notes-only
+  partial progress record (`getItemProgress` returns `{notes}` → `ease/interval` destructure as
+  undefined → NaN → `todayISO` throws), so rating an item right after writing notes silently fails;
+  reproduced via CDP, not caused by this feature, filed for a follow-up fix. T011 checkpoint
+  (2026-08-17): comfortably inside both freshness windows → proceeded, no re-verification.
 
 **Checkpoint**: All 70 questions shipped as release `2026.08.18`. Every Kotlin item now pairs a
 rewritten question with an unrewritten answer — the accepted, bounded interim register split
