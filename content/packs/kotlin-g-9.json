@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0055",
@@ -57,7 +57,7 @@
         "JvmSuppressWildcards",
         "Java-friendly"
       ],
-      "q": "Design rules for a Kotlin library whose main consumers write Java — what do you keep out of the public surface?",
+      "q": "What design rules apply to a Kotlin library whose main consumers write Java — and what do you keep out of the public surface?",
       "shortAnswer": [
         "A Kotlin `List<out T>` parameter becomes `List<? extends T>` in Java signatures. That breaks Java callers and Dagger multibindings. `@JvmSuppressWildcards`/`@JvmWildcard` are the levers.",
         "Value classes mangle method names. `Result`, inline+reified, default arguments, and sealed exhaustiveness are unusable or hostile from Java.",
@@ -88,7 +88,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0056",
@@ -131,7 +131,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0057",
@@ -175,7 +175,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0058",
@@ -219,7 +219,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     }
   ]
 }
