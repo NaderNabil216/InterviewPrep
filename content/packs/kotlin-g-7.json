@@ -50,7 +50,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0045",
@@ -94,7 +94,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0046",
@@ -138,7 +138,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0047",
@@ -182,7 +182,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     },
     {
       "id": "kt-0048",
@@ -196,7 +196,7 @@
         "zip",
         "partition"
       ],
-      "q": "Explain `chunked`, `windowed`, `zip`, `zipWithNext` and `partition` precisely.",
+      "q": "What do `chunked`, `windowed`, `zip`, `zipWithNext`, and `partition` each do?",
       "shortAnswer": [
         "`windowed(size, step, partialWindows)` slides a window across the list. By default it DROPS the trailing partial window — silent data loss when batching.",
         "`chunked(n)` is `windowed(n, n, partialWindows = true)`. `zip` truncates to the shorter input and allocates a `Pair` per element.",
@@ -227,7 +227,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.18"
     }
   ]
 }
