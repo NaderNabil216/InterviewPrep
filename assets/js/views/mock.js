@@ -154,6 +154,7 @@ function runSession(el, snapshot, modeKey, itemCount) {
         </div>
         <div class="rate-row" id="rate-row" style="display:none;">
           <button class="rate-btn rate-btn--complete" id="mark-complete">Mark complete</button>
+          <button class="rate-btn" id="skip">Skip</button>
         </div>
       </div>
     `;
@@ -166,6 +167,11 @@ function runSession(el, snapshot, modeKey, itemCount) {
     el.querySelector('#mark-complete').addEventListener('click', () => {
       rate(item.id, 'good');
       completedCount++;
+      idx++;
+      draw();
+    });
+    el.querySelector('#skip').addEventListener('click', () => {
+      // No rating, not counted as completed — just move on.
       idx++;
       draw();
     });

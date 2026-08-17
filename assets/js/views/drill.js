@@ -90,6 +90,7 @@ export function renderDrill(el, { snapshot, param }) {
 
       <div class="rate-row" id="rate-row" style="display:none;">
         <button class="rate-btn rate-btn--complete" id="mark-complete">Mark complete</button>
+        <button class="rate-btn" id="skip">Skip</button>
       </div>
     `;
 
@@ -100,7 +101,7 @@ export function renderDrill(el, { snapshot, param }) {
       revealedAt = Date.now();
       el.querySelector('#drill-answer').style.display = 'block';
       el.querySelector('#rate-row').style.display = 'flex';
-      el.querySelector('#flip-hint').textContent = 'Tap Mark complete when you have said it out loud — it drives when this comes back.';
+      el.querySelector('#flip-hint').textContent = 'Mark complete when you have said it out loud — it drives when this comes back. Skip leaves it for later.';
     }
     el.querySelector('#drill-card').addEventListener('click', () => { if (!flipped) reveal(); });
     el.querySelector('#mark-complete').addEventListener('click', (e) => {
@@ -111,6 +112,17 @@ export function renderDrill(el, { snapshot, param }) {
         revealedAt = null;
       }
       completed++;
+      i++;
+      draw();
+    });
+    el.querySelector('#skip').addEventListener('click', (e) => {
+      e.stopPropagation();
+      // No rating — the card stays unseen for spaced repetition. The reveal still froze the
+      // clock, so absorb that paused time exactly like Mark complete does.
+      if (revealedAt) {
+        pausedMs += Date.now() - revealedAt;
+        revealedAt = null;
+      }
       i++;
       draw();
     });
