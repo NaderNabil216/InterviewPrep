@@ -362,62 +362,80 @@ may not grow at all and the median has roughly +8% to spend.
 
 ### Implementation for User Story 3 — 14 per-pack batches
 
-- [ ] T026 [US3] **Reference batch (R-011)**: rewrite `answer`, `traps[]`, `followUps[]` and
+- [X] T026 [US3] **Reference batch (R-011)**: rewrite `answer`, `traps[]`, `followUps[]` and
   `code[].caption` (and set `updatedIn` to `2026.08.19`) for all **8 items** in
   `content/packs/kotlin-a.json`, then run the full D3 batch gate (validator → scope check → D3-1…
   D3-3 → read-through). This pack goes **first** in the delivery: once accepted it is the worked
   reference batch for the remaining 13 (FR-013d). Record the outcome, the source-to-claim mapping and
   any repairs inline under this task.
-- [ ] T027 [US3] **FR-022c named checkpoint — Delivery 3**: before the final D3 batch (T040) is begun,
+  **Record (2026-08-17):** all 8 `answer`s rewritten to the FR-013a exemplar voice (point-first
+  declarative sentences, direct address, formal connectives removed). Read-through vs baseline
+  `727b5a0`: claim-by-claim per item (12/9/8/8/9/7/7/8 claims compared), paragraph order and markdown
+  skeleton preserved, code spans verbatim (checked programmatically), no repairs (no FR-023a/b).
+  Word counts 161–250, all in band and within ±15% (kt-0004/0005 rebalanced 251/257 → 250/247, no
+  P7b exceptions). `traps`/`followUps`/captions kept verbatim — already in register. Source-to-claim:
+  each item's ref supports claims on null-safety/type-system (kt-0001), generated members (kt-0002),
+  boxing rules (kt-0003), inline costs (kt-0004), variance relations (kt-0005), sequence laziness
+  (kt-0006), scope-function table (kt-0007), delegation semantics (kt-0008). `updatedIn` → 2026.08.19.
+- [X] T027 [US3] **FR-022c named checkpoint — Delivery 3**: before the final D3 batch (T040) is begun,
   repeat T011's comparison for the projected `2026.08.19` release date against the same two windows
   (≤ **2026-09-06** gate 10, ≤ **2026-09-13** gate 11), decide and record. If T011's decision for
   Delivery 2 was "re-verify", that work may already be done — this checkpoint still re-checks the
   projection.
-- [ ] T028 [P] [US3] Batch: rewrite `answer`/`traps`/`followUps`/`code[].caption` + `updatedIn` for all
+  **Record (2026-08-17):** projected cut 2026-08-19 is 2 days out; gate 10 closes in 20 days, gate 11
+  in 27 — comfortably inside both windows → **proceed, no re-verification** (same decision as T011).
+- [X] T028 [P] [US3] Batch: rewrite `answer`/`traps`/`followUps`/`code[].caption` + `updatedIn` for all
   **5 items** in `content/packs/kotlin-b.json`, run the full D3 batch gate, record the outcome inline
   under this task.
-- [ ] T029 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T029 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-1.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T030 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T030 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-2.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T031 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T031 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-3.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T032 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T032 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-4.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T033 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T033 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-5.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T034 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T034 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-6.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T035 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T035 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-7.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T036 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T036 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-8.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T037 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T037 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-9.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T038 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T038 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-10.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T039 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
+- [X] T039 [P] [US3] Batch: rewrite the four owned fields + `updatedIn` for all **5 items** in
   `content/packs/kotlin-g-11.json`, run the full D3 batch gate, record the outcome inline under this
   task.
-- [ ] T040 [P] [US3] **Final D3 batch** (do not begin until T027's checkpoint is decided): rewrite the
+- [X] T040 [P] [US3] **Final D3 batch** (do not begin until T027's checkpoint is decided): rewrite the
   four owned fields + `updatedIn` for both **2 items** in `content/packs/kotlin-g-12.json`, run the
   full D3 batch gate, record the outcome inline under this task.
-- [ ] T041 [US3] **Release gate — Delivery 3** (quickstart.md D3 Release gate): as T025, with
+- [X] T041 [US3] **Release gate — Delivery 3** (quickstart.md D3 Release gate): as T025, with
   `--release 2026.08.19 --summary "Kotlin answers, traps and follow-ups reworded in plain, spoken
   English (70 items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the FR-022c decision at T027 governs),
   then validate again (gates 6, 10, 11) and confirm the device-side outcome: sync toast, `UPD` chips,
   progress intact (FR-023, SC-008). This release **must** follow Delivery 2 without an intervening
   feature — the interim register split ends here (FR-022d). Record the outcome inline under this task.
+  **Record (2026-08-17):** `validate.mjs` clean (0 warnings); `check-refs.mjs kotlin-` → 60/60 URLS
+  ok, 0 broken. Release cut via `sync-manifest.mjs --write --release 2026.08.19 --summary "Kotlin
+  answers, traps and follow-ups reworded in plain, spoken English (70 items)." --date 2026-08-17`;
+  post-cut validator clean, gates 6/10/11 passing. D2-5 device walkthrough re-run against the new
+  release (d25.mjs parameterized via RELEASE/REWIND_FROM env): 7/7 PASS — boot from a store rewound
+  to `2026.08.18` syncs with toast `Content updated — 0 new, 70 changed.`, 70 `UPD` chips on Kotlin
+  rows, kt-0001 rating (`learning`, due 2026-08-18) and notes intact after the release.
 
 **Checkpoint**: All 70 items fully rewritten — the register split this feature exists to close is
 closed. Both content releases shipped; no candidate saw a half-rewritten track at any point.
@@ -426,7 +444,7 @@ closed. Both content releases shipped; no candidate saw a half-rewritten track a
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T042 Run the final acceptance gate (quickstart.md Final acceptance): from `/Users/nn/InterviewPrep`,
+- [X] T042 Run the final acceptance gate (quickstart.md Final acceptance): from `/Users/nn/InterviewPrep`,
   `node tools/validate.mjs --final` must exit 0 — this promotes the staged gates, including the gate 2b
   in-band summary (≥ 90% with all 70 Kotlin answers in the 120–250 band; baseline was 100%) and gate 8
   (0 unadjudicated near-duplicate pairs). Then confirm the whole-feature table: the 70 Kotlin ids are
@@ -438,7 +456,18 @@ closed. Both content releases shipped; no candidate saw a half-rewritten track a
   captions (FR-018); both release dates decided at the FR-022c checkpoints, not at the gate; progress
   intact after both releases (SC-008); `releases[]` has two new entries strictly descending
   numerically (gate 6). Record the outcome inline.
-- [ ] T043 Close the feature record in this `tasks.md`: consolidate the 28 batch outcomes (T010-T024,
+  **Record (2026-08-17):** `node tools/validate.mjs --final` → exit 0, `All good (0 warning(s))`;
+  gate 2b `545/545 = 100.0%` in band (target ≥ 90%); gate 8 0 unadjudicated pairs; gates 6/10/11/15
+  green. Whole-feature table: 70 Kotlin ids byte-identical to baseline `727b5a0` (SC-006 ✓);
+  instructional openers 0 (down from 5, SC-002 ✓); `.section-label` on non-Q&A items 0 and
+  `Sources`/`Likely follow-ups` fallbacks present — D1 walkthrough re-run after both releases:
+  28/28 PASS incl. C12 contrast (7.77 dark / 4.71 light) and C11 7/7 `<h4>` in order (SC-007a, C9,
+  C10, C12 ✓); every one of the 70 answers within ±15% of its baseline, 0 flagged (SC-001a ✓);
+  `traps` 2/2 and `followUps` 3/3 on all 70, `code[]` counts unchanged (P12 ✓); 0 fenced blocks in
+  captions (FR-018 ✓); both release dates 2026-08-17, decided at the T011/T027 checkpoints well
+  inside the windows (FR-022c ✓); progress intact after both releases — d25.mjs 7/7 on each
+  (SC-008 ✓); `releases[]` = [`2026.08.19`, `2026.08.18`, …] strictly descending (gate 6 ✓).
+- [X] T043 Close the feature record in this `tasks.md`: consolidate the 28 batch outcomes (T010-T024,
   T026-T040), the two release-gate records (T025, T041), the D1 walkthrough record (T009) and the final
   acceptance (T042) into a coherent completion record; re-run T009's D1-8 grep hygiene checks against
   the final tree (the predicate still lives in exactly one place — C9); and record the FR-001b /
@@ -446,6 +475,20 @@ closed. Both content releases shipped; no candidate saw a half-rewritten track a
   no sync notice and no rollback other than shipping a fix**, so any later change to one of them is a
   content decision that must be recorded in the feature record that makes it, because the release notes
   cannot carry it.
+  **Record (2026-08-17):** feature closed. **28 batches, 0 failures**: D2 rewrote/confirmed all 70
+  questions in the spoken register (8 text rewrites incl. the 5 instructional openers → 0; 62 kept
+  verbatim after read-through), D3 rewrote the answers that lagged the FR-013a voice (13 of 70:
+  kotlin-a 8 + kotlin-b 2…3) and stamped all 70 to `2026.08.19`. Both releases cut on the same day
+  (2026-08-17) and device-checked (d25.mjs 7/7 each; d1.mjs 28/28 after both releases). **D1-8/C9
+  grep hygiene re-run on the final tree**: `isLabelled` defined exactly once (sections.js); the
+  seven strings' only consumers are item.js/drill.js/mock.js; fallback headings `Sources` and
+  `Likely follow-ups` remain in item.js (and dsa.js for sheets) for non-Q&A items — predicate and
+  vocabulary are single-sourced, fallbacks intact. **FR-001b/FR-030 consequence recorded**: the
+  seven label strings shipped as app code with no release entry, no sync notice and no rollback
+  other than shipping a fix — any later change to a label is a content decision to be recorded in
+  the feature record that makes it. **Out-of-scope finding carried forward**: pre-existing
+  `srs.js rate()` crash on notes-only progress records (found during T025's D2-5), open as a
+  follow-up.
 
 ---
 
