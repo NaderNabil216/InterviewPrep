@@ -14,11 +14,11 @@
         "progressions",
         "rangeUntil"
       ],
-      "q": "Ranges and progressions: `..`, `..<`, `downTo`, `step`, `in` — what do they cost?",
+      "q": "`..`, `..<`, `downTo`, `step`, `in` — what do ranges and progressions cost?",
       "shortAnswer": [
         "`for (i in 0..<n)` compiles to a plain int loop with no allocation and no boxing, same for `downTo`/`step`.",
         "`(0..n).map { }` materializes a list. And `..<` (rangeUntil) is the stable replacement for `until`.",
-        "Ranges double as membership checks: `c in 'a'..'z'`, `i in list.indices`. But `IntRange` becomes a real object once you store it."
+        "Ranges double as membership checks: `c in 'a'..'z'`, `i in list.indices`. But `IntRange` becomes a real object once stored."
       ],
       "answer": "Ranges and progressions are cheap when used right.\n\n#### Loops are free\n`for (i in 0..<n)` compiles down to a plain `int` loop — an index variable, a comparison, an increment: **no allocation, no boxing, no iterator**. The same for `downTo` and `step`: `for (i in 10 downTo 0 step 2)` is just arithmetic. In loop position the range is an *optimization target*, not a runtime object.\n\n#### Where the cost appears\nThe moment a range is used as a **collection**, it materializes: `(0..n).map { }` builds an actual `IntRange` object and then a list. Storing it also pays: `val r: IntRange = 0..10` is a real heap object. Use ranges for *iteration and membership* (free); avoid them as intermediate collections.\n\n#### The operators\n- `..` — inclusive: `0..n` covers `0` through `n`.\n- `..<` — **rangeUntil**, the stable replacement for `until`: `0..<n` covers `0` through `n-1`, aligned with `subList(0, n)`'s exclusive end.\n- `downTo` — descending.\n- `step` — stride; a `step` of `0` throws `IllegalArgumentException`.\n\n#### Membership checks\nRanges are predicates: `c in 'a'..'z'`, `i in list.indices`, `t in 0..100`. These compile to plain comparisons — no object unless you keep the range.\n\n#### Choosing the loop tool\n`list.indices` when you need indexes, `withIndex()` when you need index+value, `forEachIndexed` in operator land. Prefer `for (i in 0..<list.size)` over `for (i in 0..list.size - 1)` — the exclusive upper bound reads the intent.",
       "code": [
@@ -58,9 +58,9 @@
         "value-class",
         "time"
       ],
-      "q": "Why should an API take `kotlin.time.Duration` instead of `Long` milliseconds?",
+      "q": "Why take `kotlin.time.Duration` instead of `Long` milliseconds in an API?",
       "shortAnswer": [
-        "`Duration` is a value class packing magnitude and unit into one `Long`. No allocation, and no 'seconds or millis?' bug — you write `30.seconds`, `timeout.inWholeMilliseconds`.",
+        "`Duration` is a value class packing magnitude and unit into one `Long`: no allocation, no 'seconds or millis?' bug — `30.seconds`.",
         "It gives you `ZERO`/`INFINITE`, arithmetic, ISO-8601 parsing, and `toComponents`.",
         "For elapsed time use `TimeSource.Monotonic.markNow()`/`elapsedNow()` or `measureTime`. Not `System.currentTimeMillis` — it can jump backwards."
       ],
@@ -102,9 +102,9 @@
         "UInt",
         "value-class"
       ],
-      "q": "When do unsigned types (`UInt`, `ULong`, `UByte`) earn their place?",
+      "q": "When do unsigned types (`UInt`, `ULong`, `UByte`) make sense?",
       "shortAnswer": [
-        "They're value classes over the signed primitives, so there's no JVM-level unsigned support: arithmetic wraps, method names get mangled, and Java callers see the signed underlying type.",
+        "They're value classes over signed primitives, with no JVM unsigned support: arithmetic wraps, names mangle, and Java callers see the signed type.",
         "`UIntArray`/`UByteArray` avoid boxing, but `List<UInt>` does not.",
         "Honest uses: binary protocol/file-format parsing, hashing, and C interop in KMP. Otherwise, `Int` with masking is clearer."
       ],
@@ -146,11 +146,11 @@
         "buildString",
         "templates"
       ],
-      "q": "String templates, `buildString`, and raw strings — what's the performance and correctness story?",
+      "q": "String templates, `buildString`, and raw strings — how do they affect performance and correctness?",
       "shortAnswer": [
-        "`\"$a$b\"` compiles to invokedynamic via `StringConcatFactory` on JVM 9+ targets, not a StringBuilder chain. But `s += x` in a loop is still O(n²).",
+        "`\"$a$b\"` compiles to invokedynamic via `StringConcatFactory` on JVM 9+, not a StringBuilder chain. `s += x` in a loop is O(n²).",
         "`trimIndent`/`trimMargin` run at runtime on every evaluation. Hoist them out of hot paths.",
-        "`split(\".\")` takes literal delimiters; the Regex overload is separate. `==` is `equals`, so interning never matters. And `Char.code`/`digitToInt` replaced the removed `toInt()` conversions."
+        "`split(\".\")` takes literal delimiters; the Regex overload is separate. `Char.code`/`digitToInt` replaced the removed `toInt()` conversions."
       ],
       "answer": "#### Template cost\nOn JVM 9+ targets, `\"$a$b\"` compiles to an `invokedynamic` via **StringConcatFactory** — a single efficient concat, not a StringBuilder chain. But the trap is in a **loop**: `s += x` still allocates a new string per iteration and copies everything — **O(n²)**. The fix is `buildString { append(...) }` (optionally with a capacity hint) or `joinToString`.\n\n#### Raw strings\n`\"\"\"...\"\"\"` is compile-time — but `trimIndent()`/`trimMargin()` run **at runtime on every evaluation**, so a raw string used in a hot path re-trims each time. Hoist the trimmed result into a `val` or a constant.\n\n#### Correctness details\n- **`split` takes literals, not regexes**: `\"a.b\".split(\".\")` splits on the *character* `.` — unlike Java, where `split` takes a regex. Kotlin's regex overload is a separate `split(Regex)` call. This is a silent-difference trap for Java migrants.\n- **`==` is content equality**: `\"abc\" == buildString { append(\"abc\") }` is `true`. Interning is never something you need to rely on or worry about.\n- **Removed `toInt()` conversions**: `'5'.toInt()` on a `Char` was removed in 1.5. Use `Char.code` (the numeric code) and `digitToInt()` (the digit value). `String.toInt()` remains (parsing), throwing `NumberFormatException`.",
       "code": [
@@ -189,11 +189,11 @@
         "stdlib",
         "gotchas"
       ],
-      "q": "Which stdlib calls are quiet bugs waiting to happen?",
+      "q": "Which stdlib calls hide quiet bugs?",
       "shortAnswer": [
-        "`emptyList<Double>().average()` is `NaN`, while `sum()` is 0.0. `first()`/`last()`/`single()` throw `NoSuchElementException`; the OrNull variants return null. `single()` also throws when two elements match.",
+        "`emptyList<Double>().average()` is `NaN`; `sum()` is 0.0. `first()`/`last()`/`single()` throw `NoSuchElementException`; OrNull variants return null.",
         "`toInt()` throws `NumberFormatException`; `toIntOrNull()` returns null. `MutableList<Int>.remove(1)` removes the VALUE, while `removeAt(1)` removes the index.",
-        "Integer division truncates toward zero; `%` keeps the dividend's sign. `map.getValue(k)` throws, while `map[k]` returns null. And `getOrPut` may run its lambda twice under concurrency."
+        "Integer division truncates toward zero; `%` keeps dividend's sign. `map.getValue(k)` throws; `map[k]` is null. `getOrPut` runs its lambda twice."
       ],
       "answer": "The stdlib is ergonomic, but a handful of calls hide their failure modes.\n\n#### Aggregates on empty\n`emptyList<Double>().average()` returns **`NaN`** (0.0 / 0) — while `sum()` returns `0.0`. Guard empty collections before averaging, or use `averageOrNull()`.\n\n#### The `OrNull` family\n`first()`, `last()`, `single()` **throw `NoSuchElementException`** when nothing matches. `single()` throws *also* when **two or more** match — it asserts exactly one. The `OrNull` variants (`firstOrNull`...) return null instead. Choose based on whether absence is a bug (throw) or a case (OrNull).\n\n#### Parsing\n`\"abc\".toInt()` throws **`NumberFormatException`**; `toIntOrNull()` returns null. Same for `toDouble`/`toLong` and friends — the OrNull forms are the safe parsing entry point.\n\n#### The `remove` trap\n`MutableList<Int>.remove(1)` removes the *element with value* `1` (it calls `remove(Object)`), while `removeAt(1)` removes the element at *index* 1. Mixing them on an `Int` list is a classic off-by-nowhere.\n\n#### Arithmetic\nInteger division truncates **toward zero** (`-7 / 2 == -3`), and `%` keeps the **dividend's** sign (`-7 % 2 == -1`, not `1`).\n\n#### Maps\n`map.getValue(k)` throws when the key is absent; `map[k]` returns null. Under concurrency, `getOrPut` may **run its lambda twice** (it isn't atomic) — precompute or synchronize. And `use { }` closes the resource, attaching a close-failure as a **suppressed exception** on the original exception.",
       "code": [
