@@ -15,11 +15,11 @@
         "coupling",
         "boundaries"
       ],
-      "q": "Here's an architecture proposal for a new feature. Walk me through how you'd read it, what you'd probe, and how you'd push back before approving it.",
+      "q": "Here's an architecture proposal for a new feature. How would you read it, what would you probe, and how would you push back?",
       "shortAnswer": [
-        "I read in three passes — data flow first, then boundaries, then the state and error model — so I understand what the diagram shows before I judge it.",
+        "I read in three passes — data flow first, then boundaries, then state and error model — I understand what the diagram shows before I judge it.",
         "I probe the edges hardest: whether a change stays inside one region, how errors cross boundaries, and who owns lifecycle and cancellation.",
-        "I push back by naming a concrete failure mode the proposal must survive; I approve when there is no bug or unaffordable cost — not because the diagram is clean."
+        "I push back by naming a concrete failure mode the proposal must survive; approve when no bug or unaffordable cost — not because diagram is clean."
       ],
       "answer": "#### Read it in three passes\nFirst pass: **data flow**. Where does the screen's state come from, who writes it, and how does it change? I trace one end-to-end scenario — a user taps, the state updates, the screen re-renders — and I check the direction of every arrow. Second pass: **boundaries**. Which modules and layers does the feature touch, and does each dependency point the way the rest of the app already points? A new module-to-module edge is a design decision, not a build detail. Third pass: **state and errors**. Is the screen state one sealed shape, and do failures cross boundaries as a typed result instead of swallowed exceptions?\n\n#### What I probe\n- **Coupling** — can a change to one region stay inside that region, or does it ripple outward?\n- **Lifecycle** — who owns long-running work, and what happens on rotation, process death, and cancellation?\n- **Testability** — could a junior write a unit test for the core logic on a plain JVM? If the seams are not visible in the proposal, they do not exist yet.\n\n#### How I push back\nI name the failure mode the proposal must survive — \"a refresh fails mid-form, what renders?\" — and I ask for the cost of the design. If I cannot point at a bug or an unaffordable cost, I approve. Review is for catching broken boundaries, not for enforcing taste.",
       "code": [
@@ -66,11 +66,11 @@
         "feature-flags",
         "measurement"
       ],
-      "q": "We're replacing the legacy sync engine — not rewriting it. Walk me through the migration: how do you adopt the new path gradually, and how do you know it's actually working while you go?",
+      "q": "We're replacing the legacy sync engine — not rewriting it. How do you adopt the new path gradually, and how do you know it works as you go?",
       "shortAnswer": [
-        "Keep the legacy path live behind its interface, add an anti-corruption layer, and switch consumers via a per-cohort flag — every step a releasable slice, never a big bang.",
-        "For data I dual-write and backfill: reads compare old and new sources until they agree, and writes go to both until the new one is the verified source of truth.",
-        "I define a comparison metric, an error budget, and a halt rule per cohort — 'at least as good as legacy' is the number that decides the cutover, and a cohort I can switch off."
+        "Keep the legacy path live behind its interface, add anti-corruption layer, and switch consumers via a per-cohort flag — every step releasable, never a big bang.",
+        "For data, dual-write and backfill: reads compare old and new until they agree; writes go to both until new is the verified source of truth.",
+        "Define a comparison metric, error budget, halt rule per cohort — 'at least as good as legacy' decides cutover, with a cohort you can switch off."
       ],
       "answer": "#### Feature-flag-driven adoption\nThe legacy path stays live behind its old interface. I build the new implementation behind the **same interface**, wrap it with an anti-corruption layer so neither side leaks its shapes, and pick which cohort uses which path with a flag evaluated at runtime. Adoption is incremental and reversible: turn a cohort on, watch it, turn it back off if it misbehaves. Because mobile cannot roll back a build, the flag *is* the rollback.\n\n#### The data half\nCode is the easy part; data is where migrations stall. For reads, **dual-read** — serve from the new source while a comparison job checks both — so nothing trusts the new path until they agree. For writes, **dual-write** to both sources until the new one is verified, then backfill history and cut the old source out. Verification is a job, not an assumption: checksummed counts and sampled diffs catch drift that a smoke test never will.\n\n#### Measuring while you go\nDefine success before you flip anything: a **comparison metric** — the new engine must match or beat legacy on sync latency and success rate — an **error budget per cohort**, and a halt rule. Ship a cohort, watch vitals and the comparison for a real window, then widen. No green dashboards and no hand-waving; the number decides.\n\n#### The exit\nSet a deletion deadline for the legacy path the day you start. A migration without one is two systems maintained forever.",
       "code": [
@@ -124,9 +124,9 @@
       ],
       "q": "A senior on your team keeps rejecting designs with 'that's not Clean Architecture.' Argue both sides honestly: where do the rules actually protect you, and where does following them hurt — with the real costs named?",
       "shortAnswer": [
-        "The dependency rule blocks a real failure mode: business rules welded to `Context` and `NavController`, so a UI change rewrites the logic and a database change rewrites the UI — which justifies the layers.",
-        "The dogma hurts when a thin feature becomes entities, use cases, mappers, and an adapter — four files tracing one query, a pass-through hiding nothing, and a junior learning layers instead of shipping.",
-        "The staff position: name the failure mode each rule prevents here and what it costs, apply the ceremony only at real boundaries, and keep the seam even where you collapse the layers."
+        "The dependency rule blocks a real failure mode: business rules welded to `Context` and `NavController` — UI change rewrites the logic, database change rewrites the UI.",
+        "The dogma hurts when a thin feature becomes entities, use cases, mappers, an adapter — four files tracing one query, junior learning layers instead of shipping.",
+        "Staff position: name the failure mode each rule prevents and what it costs, apply ceremony at real boundaries, keep the seam where you collapse layers."
       ],
       "answer": "#### The case for the rules\nThe dependency rule — UI calls use cases, use cases call repositories, never the reverse — prevents the actual failure mode of app code: business rules welded to `Context` and `NavController`, so a UI change rewrites the logic and a database change rewrites the UI. Entities and use cases test in milliseconds with no emulator, and the layers let a payment flow survive a backend rewrite that would otherwise redraw every screen. For security-critical, long-lived code, it is the boundary working, not ceremony.\n\n#### The case against the dogma\nApplied as a checklist, the same rules manufacture their own costs. A form-plus-list screen becomes entities, use cases, mappers, and an adapter — four files tracing one query, and a newcomer spends the first week tracing layers instead of shipping. A pass-through use case (`invoke() = repo.get()`) adds a hop that hides nothing, and speculative mapper pairs protect a divergence that hasn't happened. Every layer is another place a bug can hide and a reader must open — a compile-time cost, a tracing cost, an onboarding cost.\n\n#### The resolution\nThe senior test is two questions: *what failure mode does this rule prevent here*, and *what does applying it cost here*? Where the boundary is real — security, ownership, a contract that outlives a team — the ceremony earns its keep. Where the code is a pass-through, collapse the layers but keep the seam for when the second consumer arrives. Dogma is answering \"which pattern?\" before \"what is this boundary for?\"",
       "code": [
