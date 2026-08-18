@@ -215,7 +215,7 @@
       "shortAnswer": [
         "Return the deepest node that has both `p` and `q` as descendants, where a node is its own descendant.",
         "Recurse and return what was found: a node equal to `p` or `q` returns itself; a node finding both targets is the LCA.",
-        "This assumes both nodes are present; otherwise you need a two-pass count. Otherwise, one O(n) pass with O(height) recursion."
+        "This assumes both nodes are present. If not, use a two-pass count instead. Otherwise, it's one O(n) pass with O(height) recursion."
       ],
       "prompt": "Given a binary tree and two node references `p` and `q` (both guaranteed present), return their lowest common ancestor: the deepest node that has both as descendants (itself included).\n\nClassic recursive divide: each node asks \"does my left or right subtree contain a target?\" A node is the LCA exactly when one target is in each side, or it *is* a target and the other is somewhere below it.",
       "hints": [
