@@ -14,10 +14,10 @@
         "star",
         "structure"
       ],
-      "q": "What does STAR structure done well and done badly actually look like?",
+      "q": "What does STAR structure done well and done badly look like?",
       "answer": "Done badly, STAR is a checklist: a long Situation dump, a vague Action (“I coordinated with the team”), and a Result with no number. You give twenty seconds of context for every second of evidence, and the interviewer cannot score you.\n\nDone well, STAR is compression. **Situation: two sentences max.** “Payments had a 3% failure rate at peak and the team had rewritten it twice.” **Task: one sentence** naming your specific responsibility. **Action: 60–70% of the answer**, first person singular, in order, with the actual decisions and your reasoning. **Result: one or two sentences, quantified** (“3% → 0.4%, saving roughly $40k a month in refunds”), plus a line on what you would do differently.\n\nThe real test is reversibility: the interviewer should be able to re-enter your story mid-way (“why that order of operations?”) and you still have the answer. A rehearsed-sounding story collapses on the first tangent; a well-built one is a network of cause and effect that survives any entry point.",
       "shortAnswer": [
-        "Bad STAR: 80% context, 20% action, no numbers. Good STAR: Situation in 2 sentences, Task in 1, Action 60–70% in first person, Result with numbers.",
+        "Bad STAR: 80% context, 20% action, no numbers. Good STAR: Situation 2 sentences, Task 1, Action 60-70% first person, Result with numbers.",
         "Action is what gets scored — \"I decided X because of Y\" beats \"we worked on it.\"",
         "A story is a network, not a script. You can enter it from any follow-up and still hold the thread."
       ],
@@ -90,7 +90,7 @@
         "failure",
         "self-awareness"
       ],
-      "q": "Structure and a worked example for “tell me about a failure”",
+      "q": "How do you answer “tell me about a failure”?",
       "answer": "The interviewer wants one thing: that you can say “I caused a bad outcome, here is the mechanism, and here is what I changed.” Four moves.\n\n**Own it fast.** Name the failure and make the cause yours: “I shipped a migration that took six weeks instead of two because I ignored the unknown-unknowns in my estimate.”\n\n**Give the mechanism.** Explain the specific wrong decision: “I scheduled the two phases in parallel assuming no dependency, but phase two read schema phase one had not finished migrating.” A mechanism proves it was a real failure, not bad luck.\n\n**The structural fix.** “We now gate phase two on phase one’s migration job in CI, and I add a 30% contingency to estimates with external dependencies.”\n\n**Close the loop.** Ideally the new process caught something later: “six months on, the same gating caught a real incident before it shipped.”\n\nWorked example: “I owned a feature-flag rollout that hit prod defaulting on, exposing a half-finished flow to 20% of users for an hour. The cause was my rollout checklist — I validated the flag flip in staging but not the default in the config file. I added a lint rule that fails when a flag ships without default-off, plus a canary step. The lint rule has since caught two similar defaults before release.”",
       "shortAnswer": [
         "Four moves: own it in two sentences, give the mechanism, state the structural fix, close with the outcome.",
@@ -128,7 +128,7 @@
         "conflict",
         "collaboration"
       ],
-      "q": "Structure a “conflict with a colleague” answer",
+      "q": "How do you tell a colleague-conflict story?",
       "answer": "The interviewer scores whether you escalated to a decision instead of a grudge, and whether you supported the outcome even when it was not yours.\n\n**Setup (2 sentences).** Two people, one disagreement, stakes. “I wanted the payments rewrite behind a flag; the backend owner wanted a direct cutover to hit the release date.”\n\n**The disagreement (1–2 sentences).** Make it concrete and neutral: “We each had evidence — I had the rollback time, they had the release pressure.” Two reasonable positions, no villain.\n\n**How you resolved it (the bulk).** Name the moves: you listened for the constraint (“their real worry was the date”), reframed into a shared goal, and proposed a decision rule: “we agreed the cutover ships if the load test stays under 80% CPU, else we flip the flag.” If the call went against you, say how you supported it: “we cut over, it was the right call on the data, and I owned monitoring for the first week.”\n\n**Outcome + lesson (1 sentence).** “Release shipped on time with zero regressions, and the team now uses decision rules for risky cutovers.”\nThe senior signature is willingness to be overruled well. Stories ending “eventually they saw I was right” score lower than ones ending “we made a call on evidence and I backed it.”",
       "shortAnswer": [
         "Structure: setup, a concrete disagreement (evidence on both sides), resolution moves (listen for the constraint, reframe, pick a decision rule), outcome.",
@@ -204,7 +204,7 @@
         "deadlines",
         "estimation"
       ],
-      "q": "Structure a “project that slipped” answer",
+      "q": "How do you tell a slipped-project story?",
       "answer": "A slippage story scores on **three moves: honest accounting, the structural cause, and the process fix.**\n\n**Honest accounting.** State the delta plainly: “the rewrite was estimated at three weeks and took seven.” No hedges. The interviewer knows you are about to explain; they are testing whether you can state the fact without flinching.\n\n**The structural cause, not the scapegoat.** The strongest answers name a cause that is yours and systemic: estimation bias (“I gave a number without a task breakdown”), a wrong dependency assumption (“I assumed the SDK version was free to upgrade, but it changed the min-SDK”). Weaker answers blame “requirements changed” without owning that you chose not to re-baseline.\n\n**The process fix.** Name the concrete change: “we now break estimates into task-level granularity, and any external dependency gets a spike week before the estimate is committed.” Tie it to a later save: “the same breakdown caught a real overrun two quarters later and we cut scope a week before the deadline.”\n\nClose with the outcome and the early heads-up: “I re-baselined with the PM in week two, not week six.” A slip communicated early and absorbed without surprise reads completely differently from one that appears at the deadline.",
       "shortAnswer": [
         "Three moves: state the delta, name the structural cause that was yours, and give the process fix with proof it worked later.",
@@ -280,7 +280,7 @@
         "mentoring",
         "growth"
       ],
-      "q": "Structure a strong mentoring story",
+      "q": "How do you tell a mentoring story?",
       "answer": "The interviewer scores **whether the growth is measurable and the protégé grew**, not just “you helped someone.”\n\n**Setup: a skill gap, not a task.** “A new teammate owned the notifications feature but had no background-worker experience and kept hitting ANR issues on call.”\n\n**The approach: the method (the scored part).** Strong methods are concrete: weekly pairing with an agenda; reviewing her designs before the code, not only the code after; teaching a *framework* — “I walked her through when a worker is the right tool — network, deferral, constraints — then had her decide, not me” — and handing over the on-call for the feature with you as second line. You taught a skill, not a codebase: “I showed her the three questions to ask before any background work” outranks “I walked her through the worker file.”\n\n**The friction (strong but optional).** A moment she pushed back or failed, and how you handled it without taking the work back: “her first design used a service; I let it ship behind a flag and we measured — the data showed it was the wrong call, and she made the case for the worker in the retro herself.” Letting the lesson arrive via data, not your authority, is the senior move.\n\n**Outcome: their growth, quantified.** “Six months on she owns the feature end-to-end, her on-call pages are zero, and she now reviews newer teammates’ designs.” The final line shows the person stepped beyond where you needed to be involved.",
       "shortAnswer": [
         "Setup: a skill gap. Approach: teach a framework, not a codebase. Outcome: the protégé's measurable growth.",
