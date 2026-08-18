@@ -742,7 +742,9 @@ chars, median 45 — expect a mixed verdict distribution (R-011).
 
     **Record (2026-08-18)**: release `2026.08.31` dated 2026-08-18 sits 21 days inside gate 10 (≤ 2026-09-08, oldest ref `checked` 2026-08-09) and 26 days inside gate 11 (≤ 2026-09-13). 3 of the 14 items reviewed so far (T108-T111) were **simplified** — a release is due regardless of T113's outcome. Decision: **proceed, no action.**
 
-- [ ] T113 [US3] **Final system-design batch** (do not begin until T112's checkpoint is decided): rewrite `q` + `shortAnswer` for all **5 items** (`sd-0014`–`sd-0018`) in `content/packs/system-design-g-3.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+- [X] T113 [US3] **Final system-design batch** (do not begin until T112's checkpoint is decided): rewrite `q` + `shortAnswer` for all **5 items** (`sd-0014`–`sd-0018`) in `content/packs/system-design-g-3.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+    **Record (2026-08-18)**: 5 items, 1 edit this batch. Validator exit 0, 0 warnings. Scope check 0 failures (ids 5/5). Screens: 0 collisions, 0 near-matches ≥ 24 shared chars. Per-item verdicts (scenario form preserved throughout, V17): sd-0014 — **already simple**: bullets already plain, ≤24 words, no filler. sd-0015 — **already simple**: bullets already plain, ≤24 words, no filler. sd-0016 — **already simple**: bullets already plain, ≤24 words, no filler. sd-0017 — **simplified**: B0 24→23 words, `actually` dropped per V14, never-charged-twice/never-told-failed-when-succeeded + ~10M-daily-checkouts-scale claims kept; B1/B2 already ≤24, untouched. sd-0018 — **already simple**: bullets already plain, ≤24 words, no filler.
 
 - [ ] T114 [US3] **Release gate — system-design** (19 items; the non-qa release-gate variant): as T107, via `tools/sync-manifest.mjs`, with `--release 2026.08.31 --summary "Task prompts and descriptions simplified (N items)." --date <YYYY-MM-DD>` (≤ **2026-09-08**; the T112 decision governs; N = items actually touched), or record "no release" if nothing was touched. Record the outcome inline under this task.
 

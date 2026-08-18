@@ -230,7 +230,7 @@
       ],
       "q": "Design a checkout and payment flow",
       "shortAnswer": [
-        "A checkout and payment flow where a user is never charged twice and never told failed when it actually succeeded, at ~10M daily checkouts.",
+        "A checkout and payment flow where a user is never charged twice and never told failed when it succeeded, at ~10M daily checkouts.",
         "Idempotency first: client-generated `orderId` and per-attempt `requestId` make retry safe; one terminal success, CONFIRMED, confirmed by querying the server, never the PSP callback.",
         "Grading hits network loss at every state with safe retries, webhook reconciliation of PENDING, tokenization shrinking PCI scope, idempotent refunds, and perfect settlement match."
       ],
