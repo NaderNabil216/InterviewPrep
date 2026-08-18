@@ -13,10 +13,10 @@
         "typealias",
         "actual-typealias"
       ],
-      "q": "What is a `typealias` good for, what can it never do, and what changed with nested typealiases?",
+      "q": "What is a `typealias` good for? What can it never do? What changed with nested typealiases?",
       "shortAnswer": [
         "A typealias is a compile-time alias with zero enforcement. `typealias UserId = String` still accepts any `String`, unlike a value class.",
-        "It can't add members or constraints, and it expands in error messages. Real uses: shortening function/generic types, disambiguating clashing imports, and `actual typealias` in KMP.",
+        "It can't add members or constraints, and it expands in error messages. Real uses: shortening function/generic types, disambiguating clashing imports, `actual typealias` in KMP.",
         "Kotlin 2.3 stabilized typealiases declared inside a class, so they can be scoped."
       ],
       "answer": "A `typealias` is a **pure compile-time alias**: the name exists only in source, and after compilation the underlying type is used everywhere. It is documentation-grade, not safety-grade.\n\n#### What it can never do\n- **No enforcement.** `typealias UserId = String` means `accept(UserId)` is still `accept(String)` — any `String` compiles. This is the contrast with a `value class`, which is a *new type* at compile time.\n- **No members.** You cannot add methods, companions, or operators to an alias.\n- **No constraints.** `typealias Positive = Int` does not check positivity. An alias can't narrow an existing type's contract.\n- **It expands in errors.** Messages show the underlying type, which can flood a large API with raw types.\n\n#### What it is genuinely good for\n- **Shortening function/generic types**: `typealias ClickHandler = (Item) -> Unit`, `typealias TableRow = Map<String, Any?>` — readability and a single place to change.\n- **Disambiguating clashing imports**: two `Domain` classes from different packages — `import a.Domain` and `typealias bDomain = b.Domain`.\n- **`actual typealias` in KMP**: map an `expect` declaration onto a platform type — `expect class Platform` / `actual typealias Platform = java.util.concurrent.Foo`. This is the *main* reason typealiases exist across multiplatform boundaries.\n\n#### Nested typealiases\nKotlin 2.3 **stabilized typealiases declared inside a class or object**: `class Container { typealias Items = List<Int> }` — scoped aliases that don't leak into the global namespace. Before that they were an experimental preview. Useful for namespacing a package-private shorthand inside its owning type.",
@@ -62,9 +62,9 @@
         "guard",
         "exhaustive"
       ],
-      "q": "How does `when` work — its guard conditions, its exhaustiveness rules, and what it compiles to?",
+      "q": "How does `when` work? What are its guard and exhaustiveness rules? What does it compile to?",
       "shortAnswer": [
-        "A guard (`is Loading if state.retries > 3 ->`) removes the nested `if` in a branch. But it does NOT count toward exhaustiveness, so the compiler still demands an `else`.",
+        "A guard removes the nested `if` in a branch. But it does NOT count toward exhaustiveness, so the compiler still demands an `else`.",
         "A non-exhaustive `when` statement over a sealed/enum subject is now an error, not a warning. And 2.3 added data-flow-based exhaustiveness.",
         "Enum/`Int`/`String` subjects compile to a table/lookupswitch. Sealed subjects compile to an instanceof chain."
       ],
@@ -110,7 +110,7 @@
         "context-parameters",
         "ambient"
       ],
-      "q": "What are context parameters, why were context receivers dropped, and when would you actually use them?",
+      "q": "What are context parameters? Why were context receivers dropped? And when would you use them?",
       "shortAnswer": [
         "`context(logger: Logger, tx: Transaction)` declares NAMED ambient parameters. They're resolved implicitly from the call-site scope.",
         "Context receivers were redesigned: unnamed receivers were ambiguous, shadowed `this`, and were hard to discover.",
@@ -154,7 +154,7 @@
         "migration",
         "FIR"
       ],
-      "q": "You are migrating a large Android codebase to the K2 compiler. What actually breaks, and how do you sequence it?",
+      "q": "You're migrating a large Android codebase to the K2 compiler. What breaks? And how do you sequence it?",
       "shortAnswer": [
         "The FIR frontend changes diagnostics and inference. Code that relied on old smart-cast or platform-type behavior now warns or errors.",
         "kapt only runs in a K1-compatibility stub mode. Annotation processors are the long pole — move to KSP2. Every compiler plugin needs a K2-capable version.",
@@ -197,10 +197,10 @@
         "MustUseReturnValue",
         "checker"
       ],
-      "q": "What is the unused-return-value checker, and would you turn it on?",
+      "q": "What is the unused-return-value checker? Would you turn it on?",
       "shortAnswer": [
-        "Kotlin 2.3 shipped an opt-in checker. It flags discarded results of functions with no other effect: `list.filter { }` on its own line, `string.trim()`, an ignored `Result`.",
-        "Library authors opt types in with `@MustUseReturnValue`, and carve out exceptions with `@IgnorableReturnValue`. It's the bug class Java handled with ErrorProne's `@CheckReturnValue`.",
+        "Kotlin 2.3 shipped an opt-in checker. It flags discarded results of functions with no other effect: `list.filter { }`, `string.trim()`.",
+        "Library authors opt types in with `@MustUseReturnValue`, and carve exceptions with `@IgnorableReturnValue`. Java covered that class with ErrorProne's `@CheckReturnValue`.",
         "On a large codebase, enable it per module in warning mode first, because fluent/builder APIs generate noise."
       ],
       "answer": "The unused-return-value checker (Kotlin 2.3, opt-in) is the language-level fix for the 'result ignored' bug class that Java had to patch with ErrorProne's `@CheckReturnValue`.\n\n#### What it flags\nAny expression statement whose **return value is discarded** while the call has no other effect. Concretely:\n- `list.filter { }` on its own line — the filtered list is thrown away; the original is unchanged (the classic 'I thought this mutated' bug).\n- `string.trim()` — `trim()` returns a new string; a bare call does nothing.\n- `result.takeIf { }`, `map.getOrElse` results, and an **ignored `Result`** — discarding a `Result` silently swallows a failure.\n\n#### How it works\n- **`@MustUseReturnValue`** — opt your own functions/types in: the checker then requires the return value be used or ignored explicitly.\n- **`@IgnorableReturnValue`** — the carve-out for deliberate fire-and-forget calls (e.g. `subscribe { }` where the subscription is intentionally dropped).\n\n#### Would you turn it on?\nYes — with staging. On a large codebase the first enable surfaces **noise from fluent/builder APIs**: chained builders whose intermediate results look 'unused' but are pure-style. So: enable per module in **warning mode** first, apply `@IgnorableReturnValue` to the deliberate cases, fix the genuine bugs (`filter`/`trim`/ignored `Result`), then escalate to error per module once the noise is cleared. The value is the `filter { }`-alone and swallowed-`Result` classes, which are otherwise invisible at runtime until a failure surfaces later.",
