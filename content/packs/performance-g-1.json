@@ -9,12 +9,16 @@
       "topic": "Startup",
       "level": 1,
       "type": "qa",
-      "tags": ["startup", "cold-start", "warm-start"],
+      "tags": [
+        "startup",
+        "cold-start",
+        "warm-start"
+      ],
       "q": "What's the difference between a cold, warm, and hot app start?",
       "shortAnswer": [
-        "A **cold start** creates the whole process from scratch: fork from Zygote, class loading, Application and first Activity — and it's the only start worth optimizing hard.",
+        "A **cold start** creates the whole process from scratch: Zygote fork, class loading, Application and first Activity — the only start worth optimizing hard.",
         "A **warm start** reuses a live process but recreates the Activity (rotation, or returning after the system dropped it), so Activity-creation work runs again.",
-        "A **hot start** just brings an existing Activity to the front and resumes it — effectively free."
+        "A **hot start** brings an existing Activity to the front and resumes it — effectively free."
       ],
       "answer": "#### The three kinds\nA **cold start** creates the whole process: fork from Zygote, ART class loading, `Application.onCreate`, Activity creation, then the first frame. Everything between \"user tapped the icon\" and that first frame is the cold-start cost — the one users feel and the one Android vitals tracks.\nA **warm start** happens when the process is alive but the Activity is being recreated — typically rotation, or returning after the system dropped the Activity but kept the process. Your Activity-creation work re-runs, but `Application.onCreate` and class loading do not.\nA **hot start** brings an existing Activity to the front and resumes it. Nothing is recreated — it's effectively free.\n#### Why it matters\nOnly cold start deserves heavy investment. Measure it with `StartupTimingMetric` from a Macrobenchmark rather than a stopwatch, and remember vitals flags a cold start of 5 s or more as excessive — a healthy app targets far less. Warm starts still matter on rotation-heavy flows, but they are secondary to the cold case.",
       "code": [
@@ -34,8 +38,16 @@
         "Treating warm and hot starts as equally worth optimizing — cold is the one users feel and vitals tracks."
       ],
       "refs": [
-        { "title": "App startup time", "url": "https://developer.android.com/topic/performance/vitals/launch-time", "checked": "2026-08-13" },
-        { "title": "Baseline Profiles", "url": "https://developer.android.com/topic/performance/baselineprofiles/overview", "checked": "2026-08-13" }
+        {
+          "title": "App startup time",
+          "url": "https://developer.android.com/topic/performance/vitals/launch-time",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Baseline Profiles",
+          "url": "https://developer.android.com/topic/performance/baselineprofiles/overview",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -46,8 +58,12 @@
       "topic": "ANR & responsiveness",
       "level": 1,
       "type": "qa",
-      "tags": ["anr", "main-thread", "responsiveness"],
-      "q": "Your app freezes and Android shows 'App isn't responding'. What just happened under the hood?",
+      "tags": [
+        "anr",
+        "main-thread",
+        "responsiveness"
+      ],
+      "q": "Your app freezes and Android shows 'App isn't responding'. What happened under the hood?",
       "shortAnswer": [
         "ANR means 'Application Not Responding' — the system shows a dialog when your main thread can't answer input in time.",
         "The classic timeouts: 5 s for input dispatch, 10 s for a foreground BroadcastReceiver, 20 s for a foreground Service.",
@@ -71,7 +87,11 @@
         "Blaming the network request itself — the sin is blocking the main thread on it, not the request."
       ],
       "refs": [
-        { "title": "App responsiveness | Android vitals", "url": "https://developer.android.com/topic/performance/vitals/anr", "checked": "2026-08-13" }
+        {
+          "title": "App responsiveness | Android vitals",
+          "url": "https://developer.android.com/topic/performance/vitals/anr",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -82,7 +102,11 @@
       "topic": "Memory",
       "level": 1,
       "type": "qa",
-      "tags": ["memory-leak", "gc", "out-of-memory"],
+      "tags": [
+        "memory-leak",
+        "gc",
+        "out-of-memory"
+      ],
       "q": "What is a memory leak on Android, and why does it matter?",
       "shortAnswer": [
         "A leak means your app still references objects it's done with, so the garbage collector can never reclaim them.",
@@ -107,8 +131,16 @@
         "Claiming GC 'will clean it up eventually' — a reachable object is unreclaimable by definition."
       ],
       "refs": [
-        { "title": "Manage your app's memory", "url": "https://developer.android.com/topic/performance/memory", "checked": "2026-08-13" },
-        { "title": "LeakCanary", "url": "https://square.github.io/leakcanary/", "checked": "2026-08-13" }
+        {
+          "title": "Manage your app's memory",
+          "url": "https://developer.android.com/topic/performance/memory",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "LeakCanary",
+          "url": "https://square.github.io/leakcanary/",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -119,10 +151,14 @@
       "topic": "Battery",
       "level": 1,
       "type": "qa",
-      "tags": ["battery", "wakelock", "background"],
+      "tags": [
+        "battery",
+        "wakelock",
+        "background"
+      ],
       "q": "What makes an Android app drain battery, and what are the top culprits?",
       "shortAnswer": [
-        "The screen dominates, but from the app's side the biggest controllable drains are radio use, wake locks, and background work that keeps the CPU or radio awake.",
+        "The screen dominates, but the app's own biggest drains are radio use, wake locks, and background work that keeps the CPU or radio awake.",
         "The classic mistakes: holding a wakelock too long, many small network requests instead of batching, and background services instead of WorkManager.",
         "Find them with Battery Historian or the Play Console's battery metrics — not by watching the battery percentage."
       ],
@@ -144,8 +180,16 @@
         "Optimizing by watching the battery percentage; you need per-component attribution."
       ],
       "refs": [
-        { "title": "Doze and App Standby", "url": "https://developer.android.com/training/monitoring-device-state/doze-standby", "checked": "2026-08-13" },
-        { "title": "Wake locks", "url": "https://developer.android.com/training/scheduling/wakelock", "checked": "2026-08-13" }
+        {
+          "title": "Doze and App Standby",
+          "url": "https://developer.android.com/training/monitoring-device-state/doze-standby",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Wake locks",
+          "url": "https://developer.android.com/training/scheduling/wakelock",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -156,7 +200,11 @@
       "topic": "App size",
       "level": 1,
       "type": "qa",
-      "tags": ["aab", "apk", "app-bundle"],
+      "tags": [
+        "aab",
+        "apk",
+        "app-bundle"
+      ],
       "q": "Why do we publish an App Bundle (AAB) instead of an APK?",
       "shortAnswer": [
         "An AAB is a publishing format, not an installable app — Play builds per-device APKs from it for the ABI, density, and language each device needs.",
@@ -181,7 +229,11 @@
         "Expecting the AAB to shrink code — that's R8's job; the bundle only splits what you ship."
       ],
       "refs": [
-        { "title": "About Android App Bundles", "url": "https://developer.android.com/guide/app-bundle", "checked": "2026-08-13" }
+        {
+          "title": "About Android App Bundles",
+          "url": "https://developer.android.com/guide/app-bundle",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -192,10 +244,14 @@
       "topic": "Startup",
       "level": 2,
       "type": "qa",
-      "tags": ["ttid", "ttfd", "reportfullydrawn"],
+      "tags": [
+        "ttid",
+        "ttfd",
+        "reportfullydrawn"
+      ],
       "q": "What's the difference between TTID and TTFD, and what does reportFullyDrawn() do?",
       "shortAnswer": [
-        "TTID is when the first frame is drawn after the starting window; TTFD is when your content is actually usable.",
+        "TTID is when the first frame is drawn after the starting window; TTFD is when your content is usable.",
         "The system can't see your async loading, so `reportFullyDrawn()` marks the moment real content is on screen and makes the number meaningful.",
         "Call it once, after the content users can interact with has rendered — never in `onResume` before async data lands."
       ],
@@ -217,7 +273,11 @@
         "Not knowing vitals' startup metric is TTID-based (cold start of 5 s or more is 'excessive')."
       ],
       "refs": [
-        { "title": "App startup time", "url": "https://developer.android.com/topic/performance/vitals/launch-time", "checked": "2026-08-13" }
+        {
+          "title": "App startup time",
+          "url": "https://developer.android.com/topic/performance/vitals/launch-time",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -228,7 +288,11 @@
       "topic": "Startup",
       "level": 2,
       "type": "qa",
-      "tags": ["startup", "content-provider", "app-startup"],
+      "tags": [
+        "startup",
+        "content-provider",
+        "app-startup"
+      ],
       "q": "A library auto-initializes via a ContentProvider. Why is that slow, and how do you fix it?",
       "shortAnswer": [
         "Provider initializers run before `Application.onCreate`, and each provider starts as its own component — every one sits on the cold-start critical path.",
@@ -253,7 +317,11 @@
         "Missing that provider init runs before your Application object exists."
       ],
       "refs": [
-        { "title": "App Startup library", "url": "https://developer.android.com/topic/libraries/app-startup", "checked": "2026-08-13" }
+        {
+          "title": "App Startup library",
+          "url": "https://developer.android.com/topic/libraries/app-startup",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -264,12 +332,15 @@
       "topic": "Startup",
       "level": 2,
       "type": "qa",
-      "tags": ["splash-screen", "startup"],
-      "q": "How does the splash screen API work, and does it actually speed up startup?",
+      "tags": [
+        "splash-screen",
+        "startup"
+      ],
+      "q": "How does the splash screen API work, and does it speed up startup?",
       "shortAnswer": [
-        "Since Android 12 the system draws every app's splash from your theme — icon, background, animation — and `androidx.core.splashscreen` backports the same API to older versions.",
+        "Since Android 12 the system draws every app's splash from your theme — icon, background, animation — and `androidx.core.splashscreen` backports that API to older versions.",
         "It makes startup feel instant by showing branded UI in the starting window, but it does not cut the time to first frame.",
-        "Treat it as polish: the real wins are Baseline Profiles, R8, and less `Application.onCreate` work — the splash just hides the wait."
+        "Treat it as polish: the real wins are Baseline Profiles, R8, and less `Application.onCreate` work — the splash hides the wait."
       ],
       "answer": "#### How it works\nThe splash is the **starting window**: the system shows your theme's window background and icon from the moment the process starts until the app draws its first frame. On Android 12+ this is mandatory and standardized (icon, background, and window background color); on 11 and below the `androidx.core.splashscreen` library provides the same look, and `installSplashScreen()` on the Activity makes the window animate smoothly into your first frame.\n#### What it does and doesn't do\n- It **hides latency** — a branded window appears in tens of milliseconds, so the app feels faster even if TTID is unchanged.\n- It does **not** reduce real startup time. The same work still runs; the user just sees it behind a nicer window.\n- You can keep the splash visible until async content is ready by suspending with `setKeepOnScreenCondition`, but that *adds* perceived time if it outlives the real first frame.\n#### Practical notes\n- Configure via a theme (`windowSplashScreenBackground`, `windowSplashScreenAnimatedIcon`) with `postSplashScreenTheme` for the real theme.\n- A splash is a band-aid over jank, not a fix: pair it with Baseline Profiles and cold-start cleanup, or you've just wrapped a slow app in a pretty window.",
       "code": [
@@ -289,7 +360,11 @@
         "Forgetting the backport — on pre-12 devices without androidx.core.splashscreen the experience is a blank window."
       ],
       "refs": [
-        { "title": "Splash screens", "url": "https://developer.android.com/develop/ui/views/launch/splash-screen", "checked": "2026-08-13" }
+        {
+          "title": "Splash screens",
+          "url": "https://developer.android.com/develop/ui/views/launch/splash-screen",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -300,11 +375,15 @@
       "topic": "Jank",
       "level": 2,
       "type": "qa",
-      "tags": ["frame", "vsync", "jank"],
+      "tags": [
+        "frame",
+        "vsync",
+        "jank"
+      ],
       "q": "What does it mean for a frame to be 'dropped', and what is the frame budget?",
       "shortAnswer": [
-        "At each display refresh the `Choreographer` wants one frame: ~16.7 ms at 60 Hz, ~11.1 ms at 90 Hz, ~8.3 ms at 120 Hz.",
-        "A dropped frame missed its deadline and is shown one refresh late; a frozen frame is a much longer stall — vitals sets it at over 700 ms.",
+        "At each display refresh the `Choreographer` wants one frame: about 17ms at 60Hz, 11ms at 90Hz, 8ms at 120Hz.",
+        "A dropped frame missed its deadline, shown one refresh late. A frozen frame is a much longer stall — vitals sets it at over 700ms.",
         "If the main thread and RenderThread together exceed the budget, the compositor keeps the last frame, which users see as stutter."
       ],
       "answer": "#### The budget\nThe display refreshes at a fixed rate; before each refresh the `Choreographer` posts a frame callback. Everything — input, animation, composition/layout/draw, and the RenderThread's GPU submission — must finish inside one refresh interval. At 60 Hz that's ~16.7 ms; modern panels at 90/120 Hz leave only ~11.1/8.3 ms, so code that barely passed at 60 Hz janks on a 120 Hz flagship.\n#### Dropped vs slow vs frozen\n- **Dropped frame**: missed its vsync deadline. The compositor can't submit on time, so the previous frame is shown for an extra refresh — users see a skip.\n- **Slow frame**: took between the budget and 700 ms (vitals' rendering-time band).\n- **Frozen frame**: over 700 ms — the UI appears stuck, and it's often followed by an ANR dialog at the 5 s mark.\nThe frame lifecycle matters: work over budget doesn't just lose one frame — a single long main-thread slice pushes *every* frame after it past deadline until the pipeline drains.\n#### Where to look\nPerfetto shows the main-thread `Choreographer#doFrame` slice and the RenderThread's `drawFrames`; the widest slice is the cause. JankStats in the field tells you which screens exceed the budget on real devices.",
@@ -325,7 +404,11 @@
         "Saying a dropped frame is a crash."
       ],
       "refs": [
-        { "title": "Slow rendering | Android vitals", "url": "https://developer.android.com/topic/performance/vitals/render", "checked": "2026-08-13" }
+        {
+          "title": "Slow rendering | Android vitals",
+          "url": "https://developer.android.com/topic/performance/vitals/render",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
