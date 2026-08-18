@@ -15,11 +15,11 @@
         "messagequeue",
         "main-thread"
       ],
-      "q": "Explain the main thread message loop: `Looper`, `Handler`, and `MessageQueue`. What is each for?",
+      "q": "The main thread message loop: `Looper`, `Handler`, `MessageQueue` — what is each for?",
       "shortAnswer": [
         "`Looper.loop()` is the main-thread loop that reads `Message`s from the `MessageQueue` and hands each to its target `Handler`.",
-        "`Handler` posts and handles messages: `sendMessage` or `post` enqueue them (ordered by `when`), and `handleMessage` runs on the thread that owns the `Looper`.",
-        "An empty `MessageQueue` blocks with `nativePollOnce` (an epoll wait). That is exactly why a busy main thread never lets input or lifecycle callbacks in."
+        "`Handler` posts and handles messages: `sendMessage`/`post` enqueue them (ordered by `when`); `handleMessage` runs on the thread that owns the `Looper`.",
+        "An empty `MessageQueue` blocks with `nativePollOnce` (an epoll wait) — that is why a busy main thread never lets input or lifecycle callbacks in."
       ],
       "answer": "#### The three actors\n`Looper` is the pump: `Looper.loop()` pulls messages from the queue in a loop and hands each to the `Handler` that targets it. `Handler` is the both-sides API — you post work to it, and its `handleMessage` executes on the thread that created the Looper (the main thread for `Handler(Looper.getMainLooper())`). `MessageQueue` is the ordered store: messages are sorted by `when` (post time or `postDelayed` deadline) and dispatched in order.\n\n#### The blocking detail\nAn empty queue must not spin the CPU, so `next()` calls `nativePollOnce`, which blocks the thread on the kernel until a message is due or the fd wakes it. This is epoll-based and near-zero cost while idle — which is why the main thread can be \"idle\" yet still respond instantly. The flip side: while the main thread runs a long synchronous task, `next()` isn't reached, so every message (input, broadcast, lifecycle) queues up — that is the direct cause of ANRs and jank.\n\n#### Message mechanics worth naming\n- `Message` objects are recycled from a per-Looper pool — `Message.obtain()` avoids allocation.\n- **Sync vs async messages and sync barriers**: the system marks traversal and input messages async so they can jump a barrier; your `post` messages are sync and sit behind a barrier until it is removed.\n- `IdleHandler` runs when the queue is momentarily empty — useful for low-priority warm-ups.\n- `quitSafely()` drains remaining messages first; `HandlerThread` is a thread with its own `Looper` for serial background work.",
       "code": [
@@ -60,11 +60,11 @@
         "frame-pipeline",
         "rendering"
       ],
-      "q": "Trace a frame from vsync to pixels. Where does the `Choreographer` sit, and how are frames dropped?",
+      "q": "A frame from vsync to pixels — where does `Choreographer` sit, and how are frames dropped?",
       "shortAnswer": [
-        "The display refreshes at a fixed rate and `SurfaceFlinger` sends a vsync. `Choreographer` listens for that signal and drives the main thread's frame callback.",
-        "In one frame, the main thread runs input callbacks, then animation, then measure/layout/draw, and hands the RenderThread's work to `SurfaceFlinger` for composition on the next vsync.",
-        "A dropped frame is a budget miss: if the main thread does not finish before the deadline, the buffer is stale, the display shows the old frame, and the user sees jank."
+        "The display refreshes at a fixed rate and `SurfaceFlinger` sends a vsync; `Choreographer` listens for it and drives the main thread's frame callback.",
+        "In one frame, the main thread runs input callbacks, then animation, then measure/layout/draw, and hands work to `SurfaceFlinger` for composition.",
+        "A dropped frame is a budget miss: if the main thread misses the deadline, the buffer is stale and the user sees jank."
       ],
       "answer": "#### The clock\nThe display refreshes on a fixed cadence — 60, 90, 120, or 144 Hz. `SurfaceFlinger`, the system compositor, emits a vsync signal at each refresh. `Choreographer` subscribes to that signal through `DisplayEventReceiver` and calls your registered `FrameCallback` on the main thread. That is the heartbeat every app frame is scheduled against.\n\n#### The frame pipeline\nFor a typical frame: input events are dispatched, animation updates run (`postFrameCallback`), then the traversal pass does measure/layout/draw against the window, and the draw commands are handed to the **RenderThread**, which composes into a graphics buffer. `SurfaceFlinger` takes that buffer on a later vsync and composites all visible windows. Triple buffering lets the GPU and the app work on different buffers so a slightly slow frame can still slip in.\n\n#### How frames die\nA frame misses its deadline when the main thread cannot finish before the vsync arrives — a long synchronous task, a big recomposition, a GC pause, or the RenderThread backing up. The buffer is stale, so the display keeps the previous frame and the miss is a **dropped frame**. `Choreographer.FrameCallback`/`FrameMetrics` report the durations of each stage (input, animation, layout, draw) so you can see which one blew the budget.\n\n#### The interview point\nThe answer is never \"the UI is slow\" — it is that the main thread's per-frame work exceeded the vsync budget, and profiling tells you which stage overspent.",
       "code": [
@@ -110,9 +110,9 @@
         "binder-threading",
         "messenger"
       ],
-      "q": "Walk through AIDL: direction tags, `oneway` semantics, and which thread things run on.",
+      "q": "AIDL: what are direction tags and `oneway` semantics, and which thread runs what?",
       "shortAnswer": [
-        "AIDL compiles your interface into a `Binder` proxy/stub pair. The `in`/`out`/`inout` tags say whether an argument is copied into the call, back out, or both.",
+        "AIDL compiles your interface into a `Binder` proxy/stub pair; `in`/`out`/`inout` tags say whether an argument is copied in, back, or both.",
         "`oneway` methods are fire-and-forget: the caller does not block, and calls from the same thread run in order on the server's binder pool.",
         "Server callbacks arrive on a binder thread in the client process, never the main thread — so hop back to main before touching UI."
       ],
@@ -154,11 +154,11 @@
         "serializable",
         "bundle"
       ],
-      "q": "Why is `Parcelable` preferred over `Serializable` on Android, and what are Parcelable's own traps?",
+      "q": "Why is `Parcelable` preferred over `Serializable` on Android? What are Parcelable's own traps?",
       "shortAnswer": [
         "`Serializable` uses reflection to walk your object graph, so it is slow, allocates heavily, and breaks on version changes (`serialVersionUID`).",
         "`Parcelable` is hand-written serialization into a `Parcel` with an explicit `CREATOR` — built for `Binder` and `Bundle`, with no reflection.",
-        "Its traps are the reverse: keep `writeToParcel` and `CREATOR` in sync, never treat a parcel as a stable storage format, and big Bundles still hit `TransactionTooLargeException`."
+        "Its traps are the reverse: keep `writeToParcel`/`CREATOR` in sync, never treat a parcel as stable storage, and big Bundles still hit `TransactionTooLargeException`."
       ],
       "answer": "#### Serializable's costs\n`java.io.Serializable` uses reflection to discover fields and writes the whole object graph, including transient handling and superclass state. That is slow, allocation-heavy, and version-sensitive: deserialize a class whose `serialVersionUID` changed and you get `InvalidClassException`. It has no place on the Binder path or in a Bundle.\n\n#### Why Parcelable wins\n`Parcelable` is you deciding exactly what to write: `writeToParcel(dest, flags)` serializes fields into a `Parcel`, and a static `CREATOR` rebuilds the object. No reflection, minimal allocation, and the format is the compact one Binder already understands. That is why Bundles, intents, and saved-state are Parcelable-based. `@Parcelize` generates it for you.\n\n#### The traps\n- **Drift**: you add a field, forget `writeToParcel`, and deserialization silently drops it. A unit test round-tripping through a Parcel catches it.\n- **No persistence contract**: the parcel format is not guaranteed stable across app versions — never store a parcel blob and read it back in a later release.\n- **Size**: Parcelable does not shrink your payload. A big list still crosses the ~1 MB per-process Binder transaction buffer and throws `TransactionTooLargeException`. Pass ids, not payloads.\n- **`Serializable` in a Bundle works but with all of its costs** — the `Bundle` API accepts both, so the fast path is a convention, not a rule.",
       "code": [
@@ -199,11 +199,11 @@
         "heap",
         "allocation"
       ],
-      "q": "How does ART's garbage collector work, and what makes an app churn or OOM?",
+      "q": "How does ART's garbage collector work? What makes an app churn or OOM?",
       "shortAnswer": [
-        "ART uses a generational, mostly-concurrent copying GC. Young objects are allocated in a bump-pointer region and die fast, and most collection runs while your app keeps working.",
+        "ART uses a generational, mostly-concurrent copying GC. Young objects die fast in a bump-pointer region; most collection runs while your app keeps working.",
         "The pauses you feel are short stop-the-world phases inside a mostly concurrent cycle. Heavy allocation (churn) forces more cycles and more visible pauses.",
-        "OOM is not the same as a leak: it is hitting the heap limit because you keep live objects around or allocate too fast. Profiling distinguishes retained size from allocation rate."
+        "OOM is not a leak: it is hitting heap limit by keeping live objects or allocating too fast — profiling separates retained size from allocation rate."
       ],
       "answer": "#### The collector\nART runs a **generational** GC. Small objects are allocated in an allocation space using a bump pointer — nearly free. Short-lived objects (the vast majority) die in the young generation without ever being touched by a full cycle. The Concurrent Copying (CC) collector compacts live objects while the app runs, using read barriers, which keeps the heap from fragmenting — the old dalvik pain point.\n\n#### Why GC pauses happen\nThe CC collector is mostly concurrent with the mutator (your app), but it still needs brief stop-the-world phases to handle roots and stack references. Those pauses are the periodic stutter you see in a Perfetto trace as short blocks on the main thread. The trigger matters: a `kGcCauseForAlloc` — GC run because allocation *failed* — is the expensive one, and it is exactly what allocation churn produces: too many garbage objects force frequent collections, and one of them eventually interrupts your frame.\n\n#### Churn vs leak vs OOM\n- **Churn**: high allocation rate, objects die young — symptoms are frequent small pauses, and it is fixed by reusing objects, not by adding memory.\n- **Leak**: objects you no longer use stay reachable — symptoms are the heap growing steadily until OOM.\n- **OOM** (`OutOfMemoryError`) fires when a single allocation cannot be satisfied within the heap cap (`Runtime.maxMemory()`), not when the device is out of RAM. Huge bitmaps and unbounded caches hit it directly.",
       "code": [
@@ -243,7 +243,7 @@
         "ontrimmemory",
         "process-importance"
       ],
-      "q": "How does Android decide which process to kill, and what is `onTrimMemory` for?",
+      "q": "How does Android decide which process to kill? What is `onTrimMemory` for?",
       "shortAnswer": [
         "Every process gets an importance level — foreground, visible, service, cached — and an `oom_adj` score. The Low Memory Killer kills cached processes first.",
         "`onTrimMemory` is your chance to react *before* a kill: release caches while running, and drop big in-memory data when backgrounded.",
@@ -292,11 +292,11 @@
         "heap-dump",
         "reference-chain"
       ],
-      "q": "How does LeakCanary actually detect a leak, and how do you read one of its traces?",
+      "q": "How does LeakCanary detect a leak? How do you read one of its traces?",
       "shortAnswer": [
-        "LeakCanary watches a destroyed `Activity` or `Fragment` with a `WeakReference` plus a `ReferenceQueue`. After a forced GC, a reference still not enqueued means a leak, so it dumps the heap.",
+        "LeakCanary watches a destroyed `Activity`/`Fragment` via a `WeakReference` + `ReferenceQueue`; not enqueued after a forced GC means a leak → heap dump.",
         "It then walks the heap graph from that object back to every GC root and reports the shortest path — the 'leak trace'.",
-        "Reading it: find the first frame in your own code and ask who held the reference past the object's expected death. The trace names the culprit class and the path."
+        "The first frame in your own code tells who held the reference past its expected death — the trace names the culprit class."
       ],
       "answer": "#### The detection mechanism\nLeakCanary's core is a `WeakReference` trick: watch the destroyed object with a `WeakReference` that also references a `ReferenceQueue`. When the GC collects the object, the weak reference is enqueued. LeakCanary forces GCs (each followed by a short wait), and if the reference is **not** enqueued, the object is still reachable — a suspected leak — so it dumps the heap (a `.hprof` file).\n\n#### The heap dump and the trace\nA heap dump is a frozen snapshot of every object and its references. LeakCanary treats the watched object as a node and finds the **shortest path to a GC root** — a static field, a live thread, a JNI global — using the same reachability analysis a GC would. The printed trace is that path, rendered top-down: `your Activity ← your Fragment ← your adapter ← a static singleton`. The frames in the middle are the *retainers*; the first frame that is your own code is usually the fix location.\n\n#### Reading a trace — what matters\n- The **GC root** at the top tells you the lifespan: a `static` root means the object will live as long as the process.\n- The **retained size** is what the leak actually costs — a view-heavy activity leak is the expensive kind.\n- Heuristics mark known framework frames as expected; the interesting part is your own frames below them.\n\nThe practical skill is the same as the GC's: the leak is always a reference you did not clear.",
       "code": [
@@ -336,7 +336,7 @@
         "app-standby",
         "background-limits"
       ],
-      "q": "What are Doze and App Standby buckets, and how do they throttle your background work?",
+      "q": "What are Doze and App Standby buckets? How do they throttle your background work?",
       "shortAnswer": [
         "Doze is the screen-off, motionless state: your network, alarms, and jobs are deferred into maintenance windows so the device can sleep.",
         "App Standby buckets — active, working set, frequent, rare, restricted — rate how much the user engages with you and cap how often jobs and alarms run.",
@@ -380,7 +380,7 @@
         "service-restrictions",
         "foreground-service"
       ],
-      "q": "What can't you start from the background, and what are the exceptions?",
+      "q": "What can you not start from the background? What are the exceptions?",
       "shortAnswer": [
         "An app in the background cannot start an `Activity` (background activity launch) or run a background `Service` (background service launch).",
         "The exceptions are user-visible or system-granted: the user taps a notification, the app has a visible foreground service, or a high-priority FCM message arrives.",
@@ -424,7 +424,7 @@
         "fgs-types",
         "user-initiated-data-transfer"
       ],
-      "q": "Walk through foreground service types on Android 14+, and when a user-initiated data transfer job beats them.",
+      "q": "What are the foreground service types on Android 14+? When does a user-initiated data transfer job beat them?",
       "shortAnswer": [
         "Since Android 14, every foreground service must declare a `foregroundServiceType` and hold the matching `FOREGROUND_SERVICE_<TYPE>` permission, or it crashes on start.",
         "The type must honestly describe what you do: Play checks it against your app's core function, and `dataSync` and `mediaProcessing` carry runtime timeouts.",
