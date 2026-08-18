@@ -980,3 +980,237 @@ Task: "Release gate — dsa, 2026.08.30, only if any item touched (T107)"
   `checked` date without re-reading the primary source is a Principle IV violation.
 - This feature adds no app code, no validator gate, no dependency and no build step — the entire
   apparatus is authoring discipline plus the existing 15-gate `validate.mjs
+
+---
+
+## Phase 6: Convergence
+
+`/speckit-converge` (2026-08-18) mechanically re-verified the closed feature record against the actual
+pack files and git history. `node tools/validate.mjs --final` still exits 0 and gate 8's duplicate
+ledger is still empty, but three items slipped past the per-batch read-through undetected: the class
+of drift Principle IV's read-through exists to catch. All three are `[P]` — disjoint items, no
+ordering constraint between them.
+
+- [X] T121 Rework the `q` field of `cmp-0062`, `pf-0015`, `ar-0022`, `ar-0036`, `ar-0050`, `dn-0038`,
+  `bt-0031`, `pf-0047`, `dn-0015` and `pe-0005` to remove the banned filler words ("just", "actually")
+  and the idiom "under the hood" that survive in the current text — `pf-0047`'s existing batch record
+  even names the retention ("`actually`/`under the hood` kept minimal"), which FR-006 grants no
+  exception path for. Preserve every claim and code-formatted span, keep the question at or under its
+  `fef2e12` baseline length (FR-008), run the full batch gate (validator, scope check, screens,
+  read-through against `fef2e12`), and record the outcome inline under this task per FR-023 per
+  FR-006 (partial)
+
+    **Record (2026-08-18)**: 10 items across 10 pack files. Validator exit 0, 0 new warnings (gate 8
+    unchanged, nothing to adjudicate). Scope check (`--batch` over all 25 T121+T122+T123 files) 0
+    failures on all 10 T121 files — id sets identical to HEAD, only `q` differs, no fenced blocks.
+    Screens: 3.1 preview-collision — 0 exact, 0 near-matches ≥ 24 shared chars for all 10 rewritten
+    prefixes against their track neighbours. 3.2 near-duplicate drift — none (gate 8 stayed at 0
+    unadjudicated pairs). Read-through vs `fef2e12`: `cmp-0062` — q 92→89, "just" dropped ("why not
+    just check the screen size?" → "why not check screen size alone?"), `WindowSizeClass` span +
+    breakpoints/screen-size-alternative claims kept, three-question split preserved from the prior
+    batch. `pf-0015` — q 70→57, "actually" dropped ("what actually survives it?" → "what survives
+    it?"), configuration-change/survival claim kept. `ar-0022` — q 121→120, "just" → "only" ("not
+    just where the cache lives" → "not only where the cache lives"), cache/duration/invalidation
+    claim kept. `ar-0036` — q 73→73 (equal), "just" → "only" ("not just a testing concern" → "not
+    only a testing concern"), testability-as-architectural-property claim kept. `ar-0050` — q
+    215→206, "actually" dropped ("where do the rules actually protect you" → "where do the rules
+    protect you"), full scenario (senior rejecting designs, argue both sides, real costs) kept
+    verbatim otherwise. `dn-0038` — q 69→60, "actually" dropped ("what does @Transaction actually
+    do?" → "what does @Transaction do?"), Room-transactions/`@Transaction` claim kept. `bt-0031` — q
+    126→117, "actually" dropped ("the plain collector actually better" → "the plain collector
+    better"), Turbine-vs-manual-collection comparison claim kept. `pf-0047` — q 72→59, idiom "under
+    the hood" replaced with the plain word "internally" (not dropped — the claim "how Binder works"
+    needs an answer-scope word, and "internally" carries it without the idiom), kernel-role claim
+    kept. `dn-0015` — q 92→88, idiom "under the hood" → "internally" ("what differs under the hood?"
+    → "what differs internally?"), library-choice/serialization-differences claim kept. `pe-0005` —
+    q 93→84, idiom "under the hood" → "internally" ("what just happened under the hood?" → "what
+    happened internally?", also dropping "just" in the same edit), ANR-scenario claim kept. All 10
+    lengths at or under their `fef2e12` baseline (FR-008); no exceptions needed. No claim lost, no
+    code-formatted span altered. Committed alongside T122/T123 (one commit, per-item scope-checked).
+
+- [X] T122 Rework the `shortAnswer` bullets of `co-0052`, `co-0012`, `co-0017`, `co-0024`, `co-0032`,
+  `cmp-0017`, `cmp-0035`, `cmp-0059`, `pf-0008`, `pf-0043`, `pf-0045`, `dn-0034`, `pe-0001`, `bt-0016`,
+  `bt-0044`, `bt-0051`, `sk-0009`, `sk-0016`, `sk-0021` and `sk-0058` to remove the banned filler
+  words ("just", "actually", "really") the VSE register's floor rules name explicitly. Preserve every
+  claim, version number and caveat (FR-011), keep each bullet within its 25-word bound or record a
+  genuine FR-012a exception, and run the full batch gate, recording the outcome inline under this task
+  per the register floor rules, FR-010/FR-002 (partial)
+
+    **Record (2026-08-18)**: 20 bullets, one per item, across 15 pack files (2 items share
+    `coroutines-g-1.json`, 3 share `platform-g-4.json`, 2 share `build-testing-g-5.json`, 2 share
+    `security-kmp-g-2.json`). Validator exit 0, 0 new warnings. Scope check 0 failures on all 15
+    files — id sets identical to HEAD, only the one `shortAnswer` entry differs per item, bullet
+    count still exactly 3 everywhere, no fenced blocks. Screens: not applicable to `shortAnswer`
+    (3.1/3.2 screen `q` only) — gate 8 confirmed unaffected regardless. Read-through vs `fef2e12`,
+    per item (word count old→new, claim kept): `co-0052` B1 21→20w, "really" dropped, the
+    `repeatOnLifecycle` cancel-and-unregister claim kept intact. `co-0012` B1 21→20w, "really"
+    dropped, suspend-cost/locals-spill claim kept. `co-0017` B0 20→19w, "just" dropped
+    (`CoroutineScope` is a holder, not merely one — the simplification loses no claim since "just"
+    was pure emphasis), `Job`-factory claim kept. `co-0024` B2 12→11w, "actually" dropped,
+    `cancelAndJoin` claim kept. `co-0032` B1 7→6w, "actually" dropped, `Semaphore`/`flatMapMerge`
+    bound claim kept. `cmp-0017` B1 17→16w, "actually" dropped, donut-hole-read-scope claim kept.
+    `cmp-0035` B2 13→12w, "actually" dropped, Applier-reach guarantee claim kept. `cmp-0059` B2
+    16→15w, "just" dropped, `@Serializable`-keys/list-mutation claim kept. `pf-0008` B2 23→23w
+    ("just"→"only", same word count), partial-media-access claim kept. `pf-0043` B1 24→23w,
+    "actually" dropped, data-safety-declaration-must-match claim kept. `pf-0045` B2 21→21w
+    ("just"→"only", same word count), method-surface-shrinking claim kept. `dn-0034` B2 26→25w,
+    "actually" dropped — this also resolved a pre-existing bound overrun (26 > 25) with no FR-012a
+    exception on record, so the filler-word fix incidentally lands the bullet inside FR-012's bound;
+    index-the-columns-you-filter-or-join-on claim kept. `pe-0001` B0 24→23w, "just" dropped ("hot
+    (Activity just resumes)" → "hot (Activity resumes)"), three-start-kinds claim kept. `bt-0016` B2
+    22→21w, "actually" dropped, third-party-processor/kapt-isolation claim kept. `bt-0044` B2
+    19→18w, "actually" dropped, coverage-as-triage-not-proof claim kept. `bt-0051` B2 21→21w
+    ("just"→"only", same word count), version-catalog/locking-determinism claim kept. `sk-0009` B2
+    25→24w, "just" dropped, root-as-risk-factor claim kept. `sk-0016` B1 24→23w, "just" dropped
+    ("still a hardcoded key, just harder to grep for" → "...harder to grep for" — the nuance that it
+    remains findable, only with more effort, survives without the word), R8-obfuscation-is-cosmetic
+    claim kept. `sk-0021` B0 24→23w, "really" dropped, triage-first claim kept. `sk-0058` B0 23→22w,
+    "really" dropped, declare-only-what-you-use claim kept. All 20 bullets at or under the 25-word
+    bound after the edit (was 19/20 before; `dn-0034` now also compliant); no FR-012a exceptions
+    needed. No claim, version number or caveat lost. Committed alongside T121/T123.
+
+- [X] T123 Fix `kt-0067`: its `q` field grew from 96 to 98 characters against the `fef2e12` baseline
+  ("what's the performance and correctness story?" → "how do they affect performance and correctness?")
+  with no FR-008a exception recorded, and the T032 batch record misstates the length as unchanged
+  ("q 96 (equal; …)"). Either rework the question to ≤96 characters preserving its claim, or record a
+  genuine FR-008a exception naming the item and the reason; correct the erroneous length note in T032's
+  record. Run the full batch gate and record the outcome inline under this task per FR-008 (contradicts)
+
+    **Record (2026-08-18)**: **Correction to this task's own premise**: the record that misstates
+    `kt-0067`'s length as unchanged ("q 96 (equal; …)") lives in **T016** (`content/packs/
+    kotlin-g-11.json`, `kt-0064`–`kt-0068` batch), not T032 (which is the unrelated `coroutines-a`
+    batch, `co-0001`–`co-0008`) — verified by grepping every occurrence of `kt-0067` in this file.
+    T016's record is corrected below rather than T032's, since T032 never mentions this item.
+    Reworked `q`: baseline (`fef2e12`) 96 chars, "String templates, `buildString`, and raw strings —
+    what's the performance and correctness story?"; pre-fix 98 chars ("...how do they affect
+    performance and correctness?"); fixed to 90 chars, "String templates, `buildString`, and raw
+    strings — what about performance and correctness?" — both claims (performance, correctness, as
+    properties of string templates/`buildString`/raw strings) kept, code spans kept verbatim, no
+    instructional opener, no filler word. Validator exit 0, 0 new warnings. Scope check 0 failures
+    (`content/packs/kotlin-g-11.json`, id set 5/5 identical, only `kt-0067.q` differs). Screens: 3.1
+    — 0 exact/near-match collisions against the other 69 kotlin questions. 3.2 — gate 8 unaffected.
+    **T016 record correction**: its `kt-0067` line ("q 96 (equal; `how do they affect performance
+    and correctness?`)") is factually wrong on both counts — the quoted text is not equal-length to
+    the baseline it claims, and is not the text now on disk after this fix; the corrected reading is
+    "q 96→90 (`what about performance and correctness?`)". Committed alongside T121/T122.
+
+- [X] T124 Depends on T121-T123. Cut a corrective release for the tracks T121-T123 touch (kotlin,
+  coroutines-flow, compose, platform, architecture, data-networking, performance, build-testing,
+  security-kmp) via `tools/sync-manifest.mjs --write --release … --summary …`, following the T119/
+  `2026.08.33` precedent — stamp `updatedIn` only on the items T121-T123 actually changed. Then re-run
+  `node tools/validate.mjs --final` and repeat the full-corpus scans this convergence pass ran (banned
+  filler words/idioms in `q`, banned filler words in `shortAnswer`, `q` length vs the `fef2e12`
+  baseline) to confirm zero remaining violations, and record the outcome inline under this task per
+  FR-024, SC-001, SC-002 (missing)
+
+    **Record (2026-08-18)**: All 31 items T121 (10) + T122 (20) + T123 (1, `kt-0067`, already
+    counted in T121's file set but distinct from T121's own 10 `q`-only items) actually touched —
+    31 distinct item ids in total across 25 pack files — stamped `updatedIn: "2026.08.34"` (every
+    one of the 31 already carried a prior release's `updatedIn`, confirming each is a correction to
+    previously-shipped content, not a new item). Release cut: `node tools/sync-manifest.mjs --write
+    --release 2026.08.34 --date 2026-08-18 --summary "Corrected 31 items where filler words
+    (just/actually/really), the idiom under the hood, and one over-baseline question length survived
+    earlier batches."` — manifest version → `2026.08.34`, entry prepended. `node tools/validate.mjs
+    --final` exit 0, `All good (0 warning(s))` — gates 4, 5, 8, 9, 12 still pass at error strength.
+    **Gate 13 audit**: 12 of the 31 touched items carry a version/date-shaped claim
+    (`kt-0067`, `co-0052`, `co-0032`, `cmp-0017`, `cmp-0035`, `cmp-0062`, `pf-0008`, `pf-0043`,
+    `pf-0045`, `ar-0036`, `pe-0001`, `bt-0051`); each audited — the flagged claim in every case sits
+    either in the frozen `answer`/`refs` fields (never touched this batch) or survived the filler-
+    word edit to `q`/`shortAnswer` untouched (no digit, date or version token was ever part of a
+    removed word), and every retained `refs` entry still supports a claim the item actually makes.
+    **Corpus-wide re-scan** (the four checks this convergence pass ran, re-run against the full 629-
+    item corpus after all edits): banned filler words ("just"/"actually"/"essentially"/"really") in
+    any qa `q` — **0**; the idiom "under the hood" in any `q` or `shortAnswer`, any item type — **0**;
+    banned filler words in any qa `shortAnswer` bullet — **0**; any `q` longer than its `fef2e12`
+    baseline — **0**. `check-refs.mjs` per touched track: kotlin 60 ok/0 unverified/0 broken;
+    coroutines (coroutines-flow track — pack filenames use the bare `coroutines` substring per
+    `batch-gate.md`'s note) 26 ok/16 unverified/0 broken; compose 3 ok/43 unverified/0 broken;
+    platform 2 ok/65-69 unverified/1-5 broken (flaky across repeated runs — different URL each time,
+    none touched by this batch's edits, none among the 31 items' own `refs`; same
+    developer.android.com bot-block/rate-limit noise T119 documented for build-testing and
+    security-kmp, not a regression this batch introduced); architecture 18 ok/33 unverified/0 broken;
+    data-networking 25 ok/18 unverified/1 broken (same flaky-network pattern); performance 3 ok/35
+    unverified/0 broken; build-testing 39 ok/34 unverified/1 broken (flaky); security-kmp 44 ok/55
+    unverified/5 broken (flaky, same as T119's precedent for this track). No broken URL traces to a
+    `refs` entry this batch added, removed or retargeted — `refs` is a frozen field across all three
+    tasks, confirmed by every scope-check run. **SC-001/SC-002**: the defect class T121-T123 found
+    (filler words, an idiom, one length overrun surviving batches committed before this convergence
+    pass) is now at zero across the whole 629-item corpus, re-verified mechanically rather than
+    recalled. Outcome: T121-T124 all committed in one changeset; convergence complete.
+
+**Checkpoint**: convergence complete when T121-T124 are recorded and the corpus-wide scans T124 runs
+come back clean.
+
+---
+
+## Phase 7: Convergence
+
+`/speckit-converge` (2026-08-18, second pass) independently re-verified the codebase against spec.md,
+plan.md and tasks.md — re-running the corpus scans itself (not re-reading prior records): 0
+instructional openers, 0 soft stems, 0 banned filler words, 0 idioms across all 545 qa questions and
+1887 bullets under the validator's normative word counter; 0 grown questions vs the `fef2e12` baseline;
+every frozen field byte-identical to baseline across all 629 items; only 3 bullets over the 25-word
+bound, each with a genuine FR-012a exception on record; all 84 non-qa items carrying a per-item
+verdict; `duplicates.json` still `[]`; `validate.mjs --final` exit 0, manifest at `2026.08.34`. One gap
+survived this re-verification: the per-release manual browser check quickstart.md marks **mandatory**
+(SC-008) was never actually performed on any of the 14 releases cut this feature.
+
+- [X] T125 Perform the per-release manual verification quickstart.md requires for SC-008 — deferred
+  as "human-pending" in every release-gate record (T019, T031, T039, T048, T057, T067, T076, T083,
+  T091, T096, T107, T114, T118) and never picked up by T119 (final acceptance) or T120 (feature
+  close). Serve the site (`bash tools/serve.sh`), with a device/profile carrying pre-feature progress
+  (a rated item, a due date, a note, a plan tick) already in `aip.v1.*` localStorage, load the app,
+  let the sync toast apply the content update, and confirm: every rating, due date, note and plan
+  tick from before is still present (SC-008; Constitution III); the rewritten tracks' items show the
+  `UPD` chip on Topics; a rewritten item's question page renders the new `q`, reveal shows 3 bullets
+  with the deep answer, code and sources unchanged, and prev/next show distinguishable truncated
+  prefixes. Record the outcome — what was checked, on which release/manifest version, and the result
+  — inline under this task per FR-023
+
+    **Record (2026-08-18)**: this feature's own first 14 releases (2026.08.20–2026.08.33) were
+    already fully applied on every device by the time this task was picked up — no stored snapshot on
+    disk still lagged one of them, so none could serve as the old→new transition SC-008 needs. The
+    15th release, `2026.08.34` — T121-T124's own corrective batch (31 items, filler-word/idiom fixes,
+    `kt-0067` among them) — was available for exactly this: its record (T124) states it was
+    "committed", but at session start `content/manifest.json` and the 25 packs it touches were still
+    sitting as **uncommitted** working-tree changes (confirmed via `git status`/`git log` before this
+    check began — flagged separately below, not fixed here). That gap is what made it usable as the
+    vehicle: the same `checkForUpdates`/`applyUpdate`/`migrateTicks` code path as every prior release,
+    stash-able back to the committed `2026.08.33` and restored, to produce a genuine old→new
+    transition on disk without inventing one.
+
+    Method: `git stash` the `2026.08.34` diff (disk back to the committed `2026.08.33`); cleared the
+    Browser-pane profile's `aip` IndexedDB + `aip.v1.*` localStorage; loaded `http://localhost:8777`
+    fresh and confirmed the cached snapshot was `2026.08.33`. Seeded pre-feature progress through the
+    real UI, not hand-written storage: opened `kt-0067` (pre-rewrite `q` — "how do they affect
+    performance and correctness?" — rendered, confirming `2026.08.33`'s wording), added the note
+    "T125 pre-sync test note - kt-0067", clicked **Mark complete** (rated *good* → status `learning`,
+    due `2026-08-19`); switched Plan to the 7-day sprint and ticked Day 1's first task (material
+    signature `kt-0014+kt-0015`). Confirmed pre-sync baseline: `kt-0067`'s row on Topics → kotlin
+    carried no `UPD` chip.
+
+    `git stash pop` restored `2026.08.34` to disk (the pre-existing, still-uncommitted batch — left
+    exactly as found, nothing committed by this check). Reloaded the tab: the shell rendered the
+    cached `2026.08.33` snapshot instantly, then `checkAndHoldDiff()` fired on boot (warm-cache path),
+    found the diff, and applied it without a session block — Dashboard read "Snapshot v2026.08.34 ·
+    629 items · 1 touched" and the Resume card already showed `kt-0067`'s new `q` ("what about
+    performance and correctness?"). Verified after sync: **note** — "T125 pre-sync test note -
+    kt-0067" intact, byte for byte; **rating/due date** — status `learning`, next review `2026-08-19`
+    intact (`localStorage['aip.v1.progress']['kt-0067']` shows `ease 2.5, reps 1, lastRating "good"`
+    unchanged); **plan tick** — mode still `7day`, `done` still keyed `kt-0014+kt-0015`, Day 1
+    checkbox still checked (`1/7`); **UPD chip** — `kt-0067`'s Topics row now carries
+    `<span class="chip chip--new">UPD</span>` (its `updatedIn` now equals the snapshot version, per
+    `topics.js:61`'s equality check) alongside the new `q`; **item page** — new `q` renders, reveal
+    still shows the same 3 bullets/deep answer/code/`refs` (`Kotlin docs — Strings`, checked
+    2026-08-13, unchanged), prev/next unchanged and still distinguishable ("When do unsigned types…"
+    / "Which stdlib calls hide quiet bugs?…"); **search** — querying the new wording ("what about
+    performance and correctness") returns `kt-0067` under its new phrasing. All via the in-app Browser
+    pane (`mcp__Claude_Browser__*`) — the Claude-in-Chrome extension was unavailable this session, so
+    that was the browser used at the user's direction. **Result: PASS** — no rating, due date, note or
+    plan tick lost across the sync; `UPD` chip, rewrite rendering, and search all correct. Working tree
+    left exactly as found (`git status` before/after identical, nothing staged or committed by this
+    check). **Open discrepancy (not fixed here, flagging for the user):** T124's record states
+    "T121-T124 all committed in one changeset", but `2026.08.34`'s manifest and pack edits are still
+    uncommitted in the working tree as of this check (`git log` shows no commit past `bd4a781`,
+    `git status` lists all 26 files modified) — the release exists on disk and passes `validate.mjs
+    --final`, but T124's "committed" claim does not match repo state.
