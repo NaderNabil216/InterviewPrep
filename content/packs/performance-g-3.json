@@ -9,7 +9,11 @@
       "topic": "Startup",
       "level": 3,
       "type": "qa",
-      "tags": ["startup-profiles", "dex-layout", "aot"],
+      "tags": [
+        "startup-profiles",
+        "dex-layout",
+        "aot"
+      ],
       "q": "What are Startup Profiles, and how do they differ from Baseline Profiles?",
       "shortAnswer": [
         "Startup Profiles are a subset of Baseline Profiles that target DEX layout: they pack the classes your cold start touches together so fewer pages load.",
@@ -34,8 +38,16 @@
         "Believing it helps without R8 and DEX layout optimization enabled."
       ],
       "refs": [
-        { "title": "Overview of Startup Profiles", "url": "https://developer.android.com/topic/performance/startupprofiles/overview", "checked": "2026-08-13" },
-        { "title": "Create Startup Profiles | DEX layout optimizations", "url": "https://developer.android.com/topic/performance/startupprofiles/dex-layout-optimizations", "checked": "2026-08-13" }
+        {
+          "title": "Overview of Startup Profiles",
+          "url": "https://developer.android.com/topic/performance/startupprofiles/overview",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Create Startup Profiles | DEX layout optimizations",
+          "url": "https://developer.android.com/topic/performance/startupprofiles/dex-layout-optimizations",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -46,7 +58,11 @@
       "topic": "App size",
       "level": 3,
       "type": "qa",
-      "tags": ["r8", "keep-rules", "proguard"],
+      "tags": [
+        "r8",
+        "keep-rules",
+        "proguard"
+      ],
       "q": "What's the hidden cost of an over-broad keep rule, and how does R8 full mode behave?",
       "shortAnswer": [
         "R8 full mode assumes anything you didn't keep can be shrunk, optimized, and renamed — so reflective code, XML-referenced classes, and JNI entry points break.",
@@ -71,7 +87,11 @@
         "Losing mapping files so every obfuscated trace is unusable."
       ],
       "refs": [
-        { "title": "Shrink, obfuscate, and optimize your app", "url": "https://developer.android.com/build/shrink-code", "checked": "2026-08-13" }
+        {
+          "title": "Shrink, obfuscate, and optimize your app",
+          "url": "https://developer.android.com/build/shrink-code",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -82,7 +102,11 @@
       "topic": "Release health",
       "level": 3,
       "type": "qa",
-      "tags": ["r8", "crash", "debugging"],
+      "tags": [
+        "r8",
+        "crash",
+        "debugging"
+      ],
       "q": "A crash only happens on the release build. How do you debug it?",
       "shortAnswer": [
         "First de-obfuscate: pull the stack trace through `retrace` with the `mapping.txt` from that exact build — you can't debug a trace you can't read.",
@@ -107,7 +131,11 @@
         "Rebuilding release with minification off, fixing 'the crash', and shipping that config."
       ],
       "refs": [
-        { "title": "Shrink, obfuscate, and optimize your app", "url": "https://developer.android.com/build/shrink-code", "checked": "2026-08-13" }
+        {
+          "title": "Shrink, obfuscate, and optimize your app",
+          "url": "https://developer.android.com/build/shrink-code",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -118,12 +146,16 @@
       "topic": "Jank",
       "level": 3,
       "type": "qa",
-      "tags": ["render-thread", "hwui", "jank"],
+      "tags": [
+        "render-thread",
+        "hwui",
+        "jank"
+      ],
       "q": "What's the difference between UI-thread and RenderThread jank, and how do you tell them apart?",
       "shortAnswer": [
         "The UI thread runs input, composition, measure/layout/draw, and animation callbacks; the RenderThread turns your display list into GPU commands and submits frames.",
         "RenderThread jank comes from expensive draw effects — overdraw, complex shaders, large bitmap uploads, GPU pressure — while your logic is idle.",
-        "In Perfetto, a long `Choreographer#doFrame` slice is main-thread cost; a long `drawFrames` or `queueBuffer` slice on the RenderThread with an idle main thread is GPU cost."
+        "In Perfetto, a long `Choreographer#doFrame` slice means main-thread cost; a long `drawFrames`/`queueBuffer` slice on the RenderThread (main thread idle) means GPU cost."
       ],
       "answer": "#### The two threads\nThe UI thread does the app's work: input dispatch, measure/layout/draw, and it builds the **display list**. Since Android 3.0 rendering is hardware-accelerated: the RenderThread then replays that display list into GPU commands and syncs with vsync. A frame's total cost is the sum of both.\n#### UI-thread jank\nLong slices *inside* `doFrame`: parsing, sorting, inflation, recomposition, bitmaps decoded on the main thread, blocking I/O. It shows as the main thread being busy when the vsync fires.\n#### RenderThread jank\nThe main thread finishes on time, but the RenderThread can't submit within budget: a layer with a complex blend mode, a large overdraw region, a big texture upload, shader compilation, or a background thread hammering the GPU. In the trace the main thread is idle while the RenderThread's draw slices overrun the frame. Developer Options' **Profile HWUI rendering** bars put a number on this per frame; forcing `LAYER_TYPE_SOFTWARE` on a view is a quick A/B to prove a specific effect is the culprit.\n#### Attribution rule\nAlways ask which thread had the widest slice in the janky frame. The fix differs completely: remove work (main) versus remove effect complexity, overdraw, or layer cost (RenderThread). Misattributing means optimizing the wrong thread.",
       "code": [
@@ -143,8 +175,16 @@
         "Forgetting hardware acceleration is the default — software rendering is a diagnostic, not a fix."
       ],
       "refs": [
-        { "title": "Slow rendering | Android vitals", "url": "https://developer.android.com/topic/performance/vitals/render", "checked": "2026-08-13" },
-        { "title": "Inspect GPU rendering", "url": "https://developer.android.com/topic/performance/rendering/inspect-gpu-rendering", "checked": "2026-08-13" }
+        {
+          "title": "Slow rendering | Android vitals",
+          "url": "https://developer.android.com/topic/performance/vitals/render",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Inspect GPU rendering",
+          "url": "https://developer.android.com/topic/performance/rendering/inspect-gpu-rendering",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -155,12 +195,16 @@
       "topic": "Jank",
       "level": 3,
       "type": "qa",
-      "tags": ["jankstats", "field-metrics", "analytics"],
+      "tags": [
+        "jankstats",
+        "field-metrics",
+        "analytics"
+      ],
       "q": "How do you collect jank from real users and turn it into actionable signal?",
       "shortAnswer": [
         "`JankStats` (`androidx.metrics.performance`) attaches a per-frame listener to a window — you get duration, `isJank`, and your own state tags per frame.",
-        "Report aggregated frames with state tags (screen, scrolling) so the signal is attributable to a feature, and sample a small percentage of sessions to bound cost.",
-        "Pair it with Macrobenchmarks: lab numbers say a regression is possible, JankStats says which screen users actually see it on."
+        "Report aggregated frames with state tags (screen, scrolling) so the signal traces back to a feature, and sample a fraction of sessions to bound cost.",
+        "Pair it with Macrobenchmarks: lab numbers say a regression is possible, JankStats says which screen users see it on."
       ],
       "answer": "#### The API\n`JankStats.createAndTrack(window)` gives an `onFrame` callback with a `FrameData`: `frameDurationUiNanos`, `isJank`, and the `states` map you set. `isJank` is the frame budget exceeded — 16 ms at 60 Hz, scaled by refresh rate. You decide what to report: the library's threshold plus your own state context.\n#### Making it actionable\n- **Tag state**: before a journey, `performanceMetricsState.addState(\"screen\", \"feed\")` and `(\"interaction\", \"scroll\")`. Aggregating jank per state turns \"app is janky\" into \"feed scroll is 3% of frames\" — that's the screen to open Perfetto on.\n- **Sample**: report janky frames from, say, 5% of sessions — the dashboard shows rates, not raw counts.\n- **Bound work**: the callback runs on the main thread; keep it a fast counter or queue, never a network call.\n#### Where it fits\nJankStats is the *field* arm. Lab Macrobenchmarks (`FrameTimingMetric`) find regressions deterministically; JankStats confirms they reached users and which screens hurt most. It complements vitals' frozen-frames metric with per-frame detail vitals doesn't give you.",
       "code": [
@@ -180,7 +224,11 @@
         "No state tags — a jank number with no screen attribution is a dashboard with a shrug."
       ],
       "refs": [
-        { "title": "JankStats", "url": "https://developer.android.com/topic/performance/jankstats", "checked": "2026-08-13" }
+        {
+          "title": "JankStats",
+          "url": "https://developer.android.com/topic/performance/jankstats",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -191,8 +239,12 @@
       "topic": "Profiling",
       "level": 3,
       "type": "qa",
-      "tags": ["perfetto", "tracing", "trace-sections"],
-      "q": "Walk me through a Perfetto trace: how do you find the slice that caused a slow frame?",
+      "tags": [
+        "perfetto",
+        "tracing",
+        "trace-sections"
+      ],
+      "q": "In a Perfetto trace, how do you find the slice that caused a slow frame?",
       "shortAnswer": [
         "Select the frame via the frame timeline, then walk the main-thread slices inside `Choreographer#doFrame` and find the widest one — that's your primary suspect.",
         "Your own `Trace.beginSection` markers make your code show up as named slices; without them you're mapping framework slices back to code by guesswork.",
@@ -216,8 +268,16 @@
         "Profiling one journey and device, then generalizing to the field."
       ],
       "refs": [
-        { "title": "Inspect app performance with system tracing", "url": "https://developer.android.com/topic/performance/tracing", "checked": "2026-08-13" },
-        { "title": "androidx.tracing", "url": "https://developer.android.com/reference/kotlin/androidx/tracing/package-summary", "checked": "2026-08-13" }
+        {
+          "title": "Inspect app performance with system tracing",
+          "url": "https://developer.android.com/topic/performance/tracing",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "androidx.tracing",
+          "url": "https://developer.android.com/reference/kotlin/androidx/tracing/package-summary",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -228,7 +288,11 @@
       "topic": "Performance tooling",
       "level": 3,
       "type": "qa",
-      "tags": ["microbenchmark", "benchmarking", "blackhole"],
+      "tags": [
+        "microbenchmark",
+        "benchmarking",
+        "blackhole"
+      ],
       "q": "How do you write a Microbenchmark that measures the right thing?",
       "shortAnswer": [
         "Microbenchmarks isolate one method with `BenchmarkRule.measureRepeated`: the runner handles warm-up and timing, and `BlackHole.consume` stops R8 and the JIT from removing your work.",
@@ -253,8 +317,16 @@
         "Benchmarking a debug build and quoting it as performance."
       ],
       "refs": [
-        { "title": "Microbenchmark", "url": "https://developer.android.com/topic/performance/benchmarking/microbenchmark-overview", "checked": "2026-08-13" },
-        { "title": "BlackHole | androidx.benchmark", "url": "https://developer.android.com/reference/kotlin/androidx/benchmark/BlackHole", "checked": "2026-08-13" }
+        {
+          "title": "Microbenchmark",
+          "url": "https://developer.android.com/topic/performance/benchmarking/microbenchmark-overview",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "BlackHole | androidx.benchmark",
+          "url": "https://developer.android.com/reference/kotlin/androidx/benchmark/BlackHole",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -265,7 +337,11 @@
       "topic": "Performance tooling",
       "level": 3,
       "type": "qa",
-      "tags": ["macrobenchmark", "ci", "regression"],
+      "tags": [
+        "macrobenchmark",
+        "ci",
+        "regression"
+      ],
       "q": "How do you run Macrobenchmarks in CI without flaky, meaningless numbers?",
       "shortAnswer": [
         "Run them on real hardware via Gradle Managed Devices or a pinned device farm — emulators don't reproduce frame timing or thermal behavior.",
@@ -290,8 +366,16 @@
         "Benchmarking on whatever device CI happens to hand out."
       ],
       "refs": [
-        { "title": "Run benchmarks in CI", "url": "https://developer.android.com/topic/performance/benchmarking/benchmarking-in-ci", "checked": "2026-08-13" },
-        { "title": "Macrobenchmark", "url": "https://developer.android.com/topic/performance/benchmarking/macrobenchmark-overview", "checked": "2026-08-13" }
+        {
+          "title": "Run benchmarks in CI",
+          "url": "https://developer.android.com/topic/performance/benchmarking/benchmarking-in-ci",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Macrobenchmark",
+          "url": "https://developer.android.com/topic/performance/benchmarking/macrobenchmark-overview",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
@@ -302,12 +386,16 @@
       "topic": "Compose performance",
       "level": 3,
       "type": "qa",
-      "tags": ["compose", "stability", "skipping"],
+      "tags": [
+        "compose",
+        "stability",
+        "skipping"
+      ],
       "q": "What does 'unstable' mean for a Composable parameter, and why does it break performance?",
       "shortAnswer": [
         "Stability is the compiler's proof that a type's state can't change without the composable being recomposed — instability disables the skippable optimization.",
         "By default a `List` parameter, a class with `var` fields, or a type from another module is unstable, so the subtree re-runs on every recomposition.",
-        "Fix by making parameters immutable data classes, annotating `@Stable` or `@Immutable` only when actually true, and reading the compiler metrics report to see which parameters stayed unstable."
+        "Fix by making parameters immutable data classes, annotating `@Stable`/`@Immutable` only when true, and checking the compiler metrics report for unstable parameters."
       ],
       "answer": "#### What stability is\nFor Compose to **skip** a composable, it must prove the arguments are the same as last time. A parameter type is *stable* when the compiler can prove its public state can't change undetectably: an immutable `data class` of `val`s is stable. A `List`-typed parameter is unstable by default — the interface promises nothing about mutability — and a class with a `var` field is unstable because it can be mutated without notifying composition.\nWhen a parameter is unstable, the composable isn't `skippable`: every recomposition of its parent re-executes it, even when the values are identical.\n#### Finding them\nEnable the Compose compiler's metrics report (`composeCompilerReports = true`) — it prints each composable's skippable and restartable status and lists unstable parameters. That's the ground truth; guessing which parameters are unstable wastes hours.\n#### Fixing\n- Prefer immutable `data class`es with `val` properties as parameters.\n- Annotate `@Immutable` or `@Stable` only when the invariant genuinely holds — lying about a `var`-backed class creates skip bugs that surface as stale UI.\n- A `List` parameter stays unstable unless the element type is stable and the collection can't mutate; `derivedStateOf` and moving state reads down reduce how often recomposition runs at all.",
       "code": [
@@ -327,7 +415,11 @@
         "Optimizing stability without reading the compiler metrics report."
       ],
       "refs": [
-        { "title": "Compose stability | Performance", "url": "https://developer.android.com/develop/ui/compose/performance/stability", "checked": "2026-08-13" }
+        {
+          "title": "Compose stability | Performance",
+          "url": "https://developer.android.com/develop/ui/compose/performance/stability",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
       "updatedIn": "2026.08.17"
