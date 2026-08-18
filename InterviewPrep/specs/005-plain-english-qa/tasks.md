@@ -1,0 +1,734 @@
+# Tasks: Very Simple English for Questions and Short Answers
+
+**Input**: Design documents from `specs/005-plain-english-qa/` (plan.md, spec.md, research.md,
+data-model.md, contracts/, quickstart.md)
+
+**Prerequisites**: plan.md ✔ · spec.md ✔ · research.md ✔ · data-model.md ✔ · contracts/ ✔ · quickstart.md ✔
+
+**Tests**: Not requested as a test suite anywhere in spec.md — this project has no unit-test runner and
+none is added (plan.md's Technical Context, Constitution V). Verification is the mandatory **batch
+gate** (validator + scope check + two screens + the named human read-through, per batch) and the
+**release gate** (per track), both defined inline below and in `contracts/batch-gate.md`; the manual
+browser checks live in quickstart.md. The batch gate runs on every content task and is the only
+certification a batch gets (FR-020).
+
+**Repository root for all app file paths below**: `/Users/nn/InterviewPrep` (the git repo root — the
+app, **not** this Spec Kit scaffold directory). Spec Kit scaffold paths (`specs/005-plain-english-qa/…`)
+are tracked in the same repo and called out explicitly where used.
+
+**Organization**: Grouped by user story per spec.md's priorities, with one structural fusion mandated by
+the plan (R-002): a batch rewrites **both** owned fields (`q` and `shortAnswer`) of every item in one
+pack in a single pass — "splitting them would double the gates and the record-keeping without buying
+anything". So the two P1 stories (US1 questions, US2 short answers) are delivered together, track by
+track, and every qa pack batch carries **both** `[US1]` and `[US2]` labels; the P2 story (US3, the 84
+non-qa items) carries `[US3]` alone.
+
+- **US1 (P1)** — questions, full VSE register, all 545 qa items.
+- **US2 (P1)** — short answers, full VSE register, all 1635 qa bullets (3 per item, count frozen).
+- **US3 (P2)** — the plain-words half of the register on the 84 dsa/design/concept items, form preserved,
+  with a per-item verdict.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Can run in parallel (different files, no dependencies on incomplete tasks)
+- **[Story]**: Maps to spec.md's user stories (US1–US3); qa batch tasks carry both `[US1]` and `[US2]`
+  because one batch delivers both fields of its pack
+- File paths are exact and taken from the live repository as of 2026-08-18 (research.md's census,
+  re-verified: 89 packs, 629 items, every `shortAnswer` exactly 3 bullets). Item id ranges per pack are
+  listed in each task; re-check if other tasks have already landed and shifted them.
+
+---
+
+## Phase 1: Setup
+
+- [X] T001 Create the feature branch and pin the baselines: in `/Users/nn/InterviewPrep`, create `feat/005-plain-english-qa` off `main` (plan.md Branch line — the branch does not exist yet; 004's deliveries are merged on `main` at `fef2e12`, manifest `2026.08.19` — R-001's precondition holds). Verify the environment: `bash tools/serve.sh` (site **must** be served over `http://localhost:8777` — `fetch()` of local JSON is blocked over `file://`), and confirm `node tools/validate.mjs` exits 0 with `All good (0 warning(s))` (quickstart.md Prerequisites; baseline is 0 errors **and** 0 warnings at manifest `2026.08.19`). Then record the **fixed feature baseline** (R-001, FR-021) — the revision every batch's read-through compares against for the feature's whole duration, which MUST NOT change: write `git rev-parse HEAD` inline under **this task** (quickstart.md: "write the hash into the first task record"; 004 recorded it in `baseline.txt`, 005 records it here). Capture the first "immediately-before" validator run to `specs/005-plain-english-qa/verification/validate-baseline.log` — the per-batch "no new warning" gate (FR-019a) is a delta against a run recorded immediately before each batch, and this is the first one. Confirm `node tools/check-refs.mjs` exits clean as an extra sanity read.
+
+    **Record (2026-08-18)**: `git switch -c feat/005-plain-english-qa main` — branch created off `main`. **Fixed feature baseline: `fef2e12a0284f8b916f3eaffa7e55a474e69dd62`** (manifest `2026.08.19`); every batch read-through below compares against this hash, never `HEAD` (R-001). Environment: `bash tools/serve.sh` serves HTTP 200 on `http://localhost:8777` (python3 tools/serve.py, port verified). `node tools/validate.mjs` exits 0 — `All good (0 warning(s))`, 629 items across 89 pack files at baseline. First immediately-before validator run captured to `verification/validate-baseline.log` (identical to the after-baseline diff — the FR-019a reference for batch 1). `node tools/check-refs.mjs` (full, all packs): 496 unique URLs probed, run completed clean (no 4xx failures) — logged at `/tmp/checkrefs-full.log` during this task.
+
+**Checkpoint**: Environment verified clean, baseline pinned in this file. No project init or dependency
+install exists in this repo (no build step, no npm) — this phase is intentionally thin.
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: The two things every batch of all three stories depends on — the mechanical half of the
+batch gate (the scope-check script) and the standard-fixing reference batch (FR-026). **Nothing in
+Phases 3–4 begins before this phase is complete.**
+
+- [X] T002 Build the per-batch scope check at `specs/005-plain-english-qa/verification/scope-check.mjs`, adapted from `specs/004-kotlin-qa-clarity/verification/scope-check.mjs` (which was itself adapted from `specs/002-improvements/verification/fielddiff.mjs` — R-009, the third generation of the pattern). CLI: `node specs/005-plain-english-qa/verification/scope-check.mjs content/packs/<pack>.json`, run from `/Users/nn/InterviewPrep`. Per data-model.md §5, the allowed/protected split is: **allowed to differ** — `q`, `shortAnswer`, `updatedIn` (entries of `shortAnswer` may move, but **array length must stay exactly 3** — FR-015, FR-018); **must be identical** — `id` (the pack's id set, same count and values — Constitution I), `answer`, `traps`, `followUps`, `code`, `refs`, `level`, `topic`, `track`, `tags`, `addedIn`, `type`, and on non-qa items also `prompt`, `hints`, `sampleCall`, `referenceAnswer`, `framework`, `summary`, `label`, `description`. Fails the batch on: any id added/removed, any frozen field differing, any bullet-count change, any ` ``` ` appearing in `q` or `shortAnswer` (gate 15 covers both fields — inherited, not re-implemented), and any file outside the batch's pack(s) differing since the previous commit. The reference batch (T003) spans several files: the check runs once per touched file.
+
+    **Record (2026-08-18)**: `verification/scope-check.mjs` written — third generation of the 002/004 pattern. CLI as specified; `--batch <f1,f2,…>` lists a multi-file batch's pack set (the T003 case — run once per touched file, and only files outside the batch's set fail the "nothing else changed" check). ALLOWED = `q`, `shortAnswer`, `updatedIn`; everything else frozen (non-qa fields `prompt`/`hints`/`sampleCall`/`referenceAnswer`/`framework`/`summary`/`label`/`description` listed explicitly). Fails on: id add/remove, any field outside ALLOWED differing, `shortAnswer` length ≠ 3, fenced block (` ``` `) in `q`/`shortAnswer`, and any `content/packs` file outside the batch set differing from `git HEAD`. Verified live on all 10 reference-batch files (T003 record below): 0 failures each.
+
+- [X] T003 **Reference batch (R-003, FR-026)** — the first content commit of the feature, authored and accepted **before any per-pack batch**: rewrite `q` + all 3 `shortAnswer` bullets in **Very Simple English** for 10 cross-track items chosen to span the register's hardest shapes (prose only — no `updatedIn` this commit; stamps happen at release time, data-model.md §3), **qa items first, non-qa last**, one commit, scope check per touched file, then the full batch gate (steps 1–4 below). The 10 items and their packs, per R-003: | Shape stress | Item | Pack | |---|---|---| | Scenario-length question (215 chars, must come down hard) | `ar-0001` | `content/packs/architecture.json` | | Two-part question (interceptors + token refresh) | `dn-0001` | `content/packs/data-networking.json` | | Two-part question (launch modes + when they matter) | `pf-0007` | `content/packs/platform-b.json` | | Code-span-heavy question (004's register, simpler still) | `kt-0001` | `content/packs/kotlin-a.json` | | Version-claim bullet (FR-014 binds both ways: AGP 9.3, Jul 2026) | `bt-0001` | `content/packs/build-testing.json` | | Qualifier-heavy bullet near the 25-word bound (TEE/StrongBox) | `sk-0001` | `content/packs/security-kmp.json` | | Behavioral scenario (direct address in the second person) | `bh-0001` | `content/packs/behavioral.json` | | Non-qa: DSA task prompt (task form must survive) | `ds-0001` | `content/packs/dsa.json` | | Non-qa: design scenario (scenario form) | `sd-0000` | `content/packs/system-design.json` | | Non-qa: cheat-sheet description (reference form) | `cs-0001` | `content/packs/cheatsheets.json` | Once accepted, this batch is held alongside the exemplars as the **secondary authority** later batches are judged against (FR-026); the exemplars win any conflict (FR-002). Record the outcome, the read-through evidence, any recorded exception and any near-duplicate adjudication inline under this task.
+
+    **Record (2026-08-18)** — batch gate steps 1–4, in order, against baseline `fef2e12a0284f8b916f3eaffa7e55a474e69dd62`:
+    - **1. Validator**: before-run = `verification/validate-baseline.log` (`All good (0 warning(s))`, captured immediately before authoring). After-run identical — `diff` of the two logs (hosts line excluded) shows **0 new warnings**, exit 0. Gate 8 unchanged: no new near-duplicate pair, nothing to adjudicate.
+    - **2. Scope check**: run once per touched file (10 files, `--batch` = the full set). 0 failures on every file; allowed diffs only — `q` ×7 (7 rewritten questions), `shortAnswer` ×9 (9 rewritten bullet sets; `sd-0000` untouched). Id sets identical to HEAD (4/4, 4/4, 4/4, 8/8, 2/2, 3/3, 3/3, 6/6, 3/3, 3/3). No fenced blocks; no files outside the batch changed.
+    - **3. Screens**: 3.1 preview collisions — `stripMarkdown(q).slice(0, 40)` (md.js:28, exactly as `item.js:88-89` renders) of the 10 questions vs every track neighbour: **0 exact collisions, 0 near-matches ≥ 24 shared chars**. Distinctive openings: `"What layered architecture do you use? An…"`, `"How do OkHttp interceptors work? And how…"`, `"What are launch modes and task affinity?"`, `"How does Kotlin's null safety work? And …"`, `"How do you make a large Android build fa…"`, `"Where do you store auth tokens? And how …"`, `"Which six stories cover almost every beh…"`; non-qa unchanged (`"Two Sum — find indices of two numbers ad…"` etc.). 3.2 near-duplicate drift — none (validator gate 8 output identical to baseline).
+    - **4. Read-through** (per item, two questions, both held for every item):
+      - `ar-0001` (qa): q 71→70 — 2 claims (layered-architecture choice; MVVM vs MVI comparison) both present, order kept, no instruction opener; "you'd use" → "do you use" (interview ask, accepted). B0 27→25w — claims: three layers; UI=Compose+state holder; domain optional=use cases/pure Kotlin; data=repositories+data sources; dependencies point inward; data never touches the UI — all present. B1 22w — both use UDF; MVI further; one immutable state object; explicit intents; inconsistent states impossible. B2 19w — MVVM+one `StateFlow<UiState>`; MVI-lite in practice; most modern Android codebases ship. Reads simple: split into single-idea sentences, no idioms/filler, technical terms verbatim.
+      - `dn-0001` (qa): q 82→73 — 2 claims (how interceptors work; how to do token refresh right) both present. B0 28→25w — app interceptors once per call + logical request; network per round trip + redirects/retries/real headers and body. B1 22w — refresh in `Authenticator` not interceptor; called on 401; OkHttp retries for you. B2 23w — refresh stampede; ten parallel requests all 401 together; single-flight behind mutex; losers reuse new token.
+      - `pf-0007` (qa): q 71→63 — 2 claims present; banned filler "actually" removed. B0 39w (was 39) — **FR-012a recorded exception**: four launch modes, each a distinct behavioural claim (`standard` new instance every time; `singleTop` reuse at top + `onNewIntent`; `singleTask` one per task + clears above; `singleInstance` alone in own task); each mode is already a single-idea sentence at the register's sentence length and the bullet count is fixed at 3 (FR-015) — no way to split. B1 22w — `singleTop` routine (notifications/deep links/search); `singleTask`/`singleInstance` rare + smell in single-activity apps. B2 22w — flags override manifest per launch; used to build log-out-and-reset-stack.
+      - `kt-0001` (qa): q 72→64 — 2 claims present; "actually" removed. B0 22w — **the exemplar-B target verbatim** (nullability in type system; `String`/`String?` two types; compiler checks when you build). B1 20w — compiler inserts null checks at Java interop boundaries; NPEs surface at the boundary, not deep in your code. B2 25w — platform type `String!` from Java; nullability unknown; compiler relaxes checks there; that's where you still hit NPEs.
+      - `bt-0001` (qa): q 70→70 (equal — V9 holds). B0 23w — three wins (config cache, build cache, KSP2 over kapt); module structure: `implementation` over `api`, fewer modules recompile. B1 25w (was 30; first rework landed at 29 because `org.jetbrains.kotlin.android` tokenizes as 4 words under the validator counter — reworked again: "applies Kotlin's plugin itself", "leaves module build files", "current in Jul 2026") — claims: AGP 9 (Jan 2026) applies the Kotlin plugin itself; you stop adding `org.jetbrains.kotlin.android` to module build files; AGP 9.3 current as of Jul 2026. Both version-date claims kept (FR-014 both directions — refs already carried). B2 16w — measure first with a build scan or `--profile`; slow part rarely where people guess.
+      - `sk-0001` (qa): q 79→79 (equal). B0 25w — tokens in Android Keystore; keys born in hardware (TEE/StrongBox); never exported; rooted device can only use them. B1 21w — never plaintext `SharedPreferences`; never hardcode secrets in code or `BuildConfig`; anyone can recover both from the APK ("trivially recoverable" → "anyone can recover" — everyday words, claim kept). B2 22w — client hostile; APK public; real secrets server-side; short-lived revocable credentials.
+      - `bh-0001` (qa): q 86→82 — 2 claims (six stories cover almost every behavioral question; build your STAR story bank) both present; **order swapped**: "Build your…" cannot open (FR-003 instruction verb) and the full first-part phrasing blows V9's length bound, so the build part moves second ("And how do you build it?") — recorded, not a content edit. B0 23w — six not thirty; most questions reuse one of the six categories ("re-skin" → "reuse", V14). B1 21w — STAR letters with per-letter counts; action = what *you* did in first person; result with numbers + lesson. B2 17w — 80/20 failure; invert.
+      - `ds-0001` (dsa, non-qa): q reviewed, **no change needed (V18 verdict)** — task form already at standard, 56 = baseline. B0 no change. B1 24w — "storing value to index" → "storing each value's index" (same mapping, clearer); walk once; `HashMap`; complement `target - x` looked up before inserting. B2 no change. Form preserved: task stays a task, no "you", no chat tone.
+      - `sd-0000` (design, non-qa): **no change needed for all fields (V18 verdict)** — scenario/reference form already at standard (q 66 = baseline; bullets 22/23/24w, all ≤ 25). Form preserved.
+      - `cs-0001` (concept, non-qa): q no change (V18). B0 no change. B1 16w — "you must quote" → "to quote" (non-qa tier bans direct address). B2 13w — "Reach for it when you need…" → "Use it in an interview when the topic is…" (removed "you" + figurative phrasal verb "reach for", V14). Form preserved: reference stays a reference.
+    - **Outcome**: 8 of 10 items rewritten (7 qa + 1 dsa bullet set), 2 items V18 no-change verdicts; q lengths all ≤ baseline (V9: 70/73/63/64/70/79/82/56/66/49); bullets 22 of 24 at or under 25 words, **2 recorded exceptions (FR-012a): `pf-0007` bullet 0 (39w, four-mode enumeration — reason above)** and `bt-0001` bullet 1 reworked to exactly 25 (no exception needed). No near-duplicate adjudications. **Committed as the reference batch** — now the secondary authority (FR-026); exemplars win any conflict (FR-002).
+
+**Checkpoint**: The scope check exists and the register has worked examples over real item shapes. All
+90 batch records' mechanical half is now runnable; authoring can begin.
+
+---
+
+## Phase 3: User Story 1 + 2 - Questions and short answers in Very Simple English (Priority: P1) 🎯 MVP
+
+**Goal (US1)**: All 545 qa questions read as Very Simple English — short, plain, single-idea sentences,
+no instructional-verb opener, no idioms, no filler, every technical term and code-formatted span of the
+original preserved, each asking about exactly the same subject. **Goal (US2)**: All 1635 short-answer
+bullets read like a patient friend explaining — one idea per bullet, plain words, direct address ("you"),
+every claim of the baseline preserved, exactly 3 bullets per item, each still matching its item's deep
+answer.
+
+**Why one phase**: R-002 fuses the two fields into one pass per pack (the spec's own requirement
+grouping treats the qa tier as one unit), and one release per track ships both fields for the whole
+track at once (FR-024). A track is the independently shippable increment.
+
+**Independent Test (US1)**: read every rewritten question aloud at a normal pace and confirm each parses
+on the first pass with no re-read; confirm no question opens with a listed instruction verb or soft stem
+(FR-003); confirm each names the same subject and keeps every code-formatted span spelled identically
+(FR-004); confirm `node tools/validate.mjs` exits 0 after every batch and no item identifier changed
+(scope check).
+**Independent Test (US2)**: read every rewritten bullet and confirm each is a short, single-idea sentence
+in plain words with no idioms and no filler; confirm every claim of the baseline bullet still appears
+(FR-011); confirm each bullet still describes the item's deep answer (FR-013); confirm each short answer
+still has exactly 3 bullets and each bullet is ≤ 25 words or carries a recorded exception (FR-012,
+FR-012a).
+
+### The batch gate (contracts/batch-gate.md — all four steps, in order, before the batch is committed; one batch = one pack file; T003 was the multi-file exception)
+
+1. **Validator**: capture `node tools/validate.mjs` output *immediately before* the batch
+   (`> /tmp/validate-before.log`), author, run again. Required: **exit 0 and no new warning** against the
+   before-run (FR-019a — "new" is measured against a run recorded right before the batch, never a
+   remembered figure). Diagnose, don't count: a new gate 8 near-duplicate pair → adjudicate it in this
+   batch (screen 3.2); anything else → a real defect (a frozen field moved, or the register broke
+   content) → fix the batch. Gate 2b cannot fire: `answer` is frozen in this feature.
+2. **Scope check**: `node specs/005-plain-english-qa/verification/scope-check.mjs content/packs/<pack>.json`
+   (T002) — only `q`, `shortAnswer`, `updatedIn` may differ; id set identical; `shortAnswer` exactly 3
+   bullets; no fenced block in `q`/`shortAnswer`; no file outside the batch's packs touched.
+3. **Screens** (assists to step 4, not gates of their own):
+   3.1 **Preview collisions (V10, R-005)** — compare `stripMarkdown(q).slice(0, 40)` (the exact
+   normalisation `item.js:88-89` renders) of the batch's rewritten questions against **every other
+   question on the same track**; an exact-prefix collision fails, near-matches go to the eye (FR-007 —
+   "distinguish" means a reader can tell them apart).
+   3.2 **Near-duplicate drift (V16, R-008)** — gate 8 is **library-wide** (all 629 questions, any
+   track), so a rewritten question can collide with one on another track; any pair the batch newly
+   flags is adjudicated **in this batch** — verdict (`distinct` / `merged` / `accepted`) and reason
+   appended to `.claude/workflows/duplicates.json` — never deferred.
+4. **The named human read-through (FR-020)** — per item, against the **recorded feature baseline**
+   (T001's hash — never against `HEAD`, never from memory; by batch 40, HEAD is full of this feature's
+   own output, R-001). Two questions, answered separately, the batch passes only if both hold for every
+   item: **(1) Is it still true?** — claim-by-claim comparison with the baseline field (V1, V3, V6, V13);
+   **(2) Does it read simple?** — reads like Exemplar A/B's target version, not the "not the target"
+   version (FR-002). If either fails for any item, the **batch** fails and is reworked and re-gated in
+   full — no per-item exceptions, no splitting the batch (FR-020). The one thing that is *not* a failure:
+   a recorded exception under FR-008a (question longer than its baseline, V9) or FR-012a (bullet over 25
+   words, V11) — **preservation wins**, the exception names the item and the reason.
+
+**The batch record** (inline under the task, FR-023/R-012 — evidence, not ticks): pack file, item ids,
+validator delta **with diagnosis** for any new warning, scope-check result, both screens' outcomes and
+any adjudicated pair, read-through evidence (per item: number of claims compared, the source-to-claim
+mapping from V6, any mismatch repair with reason), `q.length` and per-bullet word counts new vs baseline,
+and any FR-008a/FR-012a exception with item id and reason. Then **commit the batch on its own**.
+
+**Authoring rules** (contracts/vse-register.md): full conversational register — one idea per sentence,
+~18-word sentence signal, everyday words, no idioms/phrasal verbs/double negatives/filler ("actually",
+"just", "essentially", "really"), direct address ("you"), active voice point first, contractions welcome,
+technical vocabulary verbatim (`crossinline`, `String?`, `remember { }`…), every code-formatted span of
+the original spelled identically (V5), a two-part question keeps both parts (V8), no assertion that
+needs a source the item does not carry (V15). The exemplars are normative; the floor rules are
+subordinate (FR-002).
+
+### The release gate (per qa track, after the track's last batch — contracts/batch-gate.md)
+
+1. `node tools/validate.mjs` — 0 errors, 0 warnings, whole library.
+2. `node tools/check-refs.mjs <track>` — every ref URL of the track still resolves. Use the bare
+   track name (`kotlin`, `dsa`, `system-design`), not a trailing hyphen: the tool matches pack
+   filenames by substring, and a hyphenated filter misses the hyphen-less base packs
+   (`dsa.json`, `system-design.json`, `build-testing.json`, …).
+3. **Gate 13 audit** — the validator names up to 10 version-claim items shipped by this release; audit
+   each: the claim survives in the rewritten text (V1) **and** is still supported by the item's retained
+   ref (V6). Record the audit with the release task.
+4. Cut the release — **`tools/sync-manifest.mjs` is the only writer of `content/manifest.json`**:
+   `node tools/sync-manifest.mjs --write --release <version> --summary "Questions and short answers
+   reworded in simple English (<N> items)." --date <YYYY-MM-DD>`.
+5. `node tools/validate.mjs` again — gates 6, 10, 11 and 13 only have something to say once the release
+   exists. Then the per-release manual verification (quickstart.md, SC-008): with pre-feature progress in
+   the browser, load the site after the sync toast — ratings, due dates, notes and plan ticks intact,
+   `UPD` chips on the track's Topics rows.
+
+**Dates are load-bearing (R-007).** The release date must be ≤ **2026-09-06** (gate 10, tracks whose
+oldest ref is `checked` 2026-08-07) or ≤ **2026-09-08** (build-testing, oldest 2026-08-09), and ≤
+**2026-09-13** (gate 11, `stackSnapshotChecked` 2026-08-14). A release that would fall outside a window
+requires a genuine re-verification of that track's refs — re-reading the primary sources and re-dating
+`checked` — never a re-stamped date (Principle IV). That decision is taken at each track's **calendar
+checkpoint** below, *before* its final batch, not at the release gate.
+
+---
+
+### Kotlin — 70 items · 14 packs · release `2026.08.20` · gate-10 window ≤ 2026-09-06
+
+The one track whose questions are already in 004's spoken register — its first batch answers early what
+"simpler still" means over 004's output while the reference batch is fresh (R-013). Word-bound load:
+34/210 bullets over 25 words (R-006).
+
+- [ ] T004 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **8 items** (`kt-0001`–`kt-0008`) in `content/packs/kotlin-a.json` — run the full batch gate (steps 1–4), record the outcome inline under this task.
+
+- [ ] T005 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0009`–`kt-0013`) in `content/packs/kotlin-b.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T006 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0014`–`kt-0018`) in `content/packs/kotlin-g-1.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T007 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0019`–`kt-0023`) in `content/packs/kotlin-g-2.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T008 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0024`–`kt-0028`) in `content/packs/kotlin-g-3.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T009 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0029`–`kt-0033`) in `content/packs/kotlin-g-4.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T010 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0034`–`kt-0038`) in `content/packs/kotlin-g-5.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T011 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0039`–`kt-0043`) in `content/packs/kotlin-g-6.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T012 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0044`–`kt-0048`) in `content/packs/kotlin-g-7.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T013 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0049`–`kt-0053`) in `content/packs/kotlin-g-8.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T014 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0054`–`kt-0058`) in `content/packs/kotlin-g-9.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T015 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0059`–`kt-0063`) in `content/packs/kotlin-g-10.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T016 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`kt-0064`–`kt-0068`) in `content/packs/kotlin-g-11.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T017 [US1] [US2] **FR-022c-style calendar checkpoint — kotlin (R-007)**: before the final kotlin batch (T018) is begun, compare the projected release date for `2026.08.20` against the track's windows (gate 10 ≤ **2026-09-06** — oldest kotlin ref `checked` 2026-08-07; gate 11 ≤ **2026-09-13** — `stackSnapshotChecked` 2026-08-14) and record the decision: comfortably inside both → proceed, no action; inside either window's final week → finish the track now or schedule re-verification; past a window → genuine re-verification is required and is planned as its own work before the release. Decided now, while there is still time to act — never discovered as a blocked release gate. Record the decision inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T018 [US1] [US2] **Final kotlin batch** (do not begin until T017's checkpoint is decided): rewrite `q` + `shortAnswer` for both **2 items** (`kt-0069`–`kt-0070`) in `content/packs/kotlin-g-12.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T019 [US1] [US2] **Release gate — kotlin** (the release-gate steps above; 70 items): from `/Users/nn/InterviewPrep`, `node tools/validate.mjs` (0/0), `node tools/check-refs.mjs kotlin`, gate 13 audit (recorded), then cut: `node tools/sync-manifest.mjs --write --release 2026.08.20 --summary "Questions and short answers reworded in simple English (70 items)." --date <YYYY-MM-DD>` with the date ≤ **2026-09-06** (the T017 decision governs), then validate again (gates 6/10/11/13) and run the per-release browser verification (sync toast, `UPD` chips, progress intact). Record the outcome inline under this task.
+
+**Checkpoint**: kotlin released as `2026.08.20` — all 70 kotlin items carry the full register on both
+fields; the first track of the feature ships.
+
+---
+
+### Compose — 75 items · 10 packs · release `2026.08.21` · gate-10 window ≤ 2026-09-06
+
+Heavily-trafficked qa track, front-loaded so its release ships early while the calendar has slack
+(R-013). Word-bound load: only 4/225 bullets over 25 words (R-006) — most work is sentence-splitting.
+
+- [ ] T020 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **6 items** (`cmp-0001`–`cmp-0006`) in `content/packs/compose-a.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T021 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for both **2 items** (`cmp-0007`–`cmp-0008`) in `content/packs/compose-b.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T022 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`cmp-0009`–`cmp-0011`) in `content/packs/compose-c.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T023 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`cmp-0012`–`cmp-0021`) in `content/packs/compose-g-1.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T024 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`cmp-0022`–`cmp-0031`) in `content/packs/compose-g-2.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T025 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`cmp-0032`–`cmp-0041`) in `content/packs/compose-g-3.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T026 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`cmp-0042`–`cmp-0051`) in `content/packs/compose-g-4.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T027 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`cmp-0052`–`cmp-0061`) in `content/packs/compose-g-5.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T028 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`cmp-0062`–`cmp-0071`) in `content/packs/compose-g-6.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T029 [US1] [US2] **Calendar checkpoint — compose (R-007)**: before the final compose batch (T030) is begun, repeat T017's projection for release `2026.08.21` against the windows (≤ **2026-09-06** gate 10, ≤ **2026-09-13** gate 11), decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`. If T017's decision was "re-verify", that work may already be done — this checkpoint still re-checks the projection.
+
+- [ ] T030 [US1] [US2] **Final compose batch** (do not begin until T029's checkpoint is decided): rewrite `q` + `shortAnswer` for all **4 items** (`cmp-0072`–`cmp-0075`) in `content/packs/compose-g-7.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T031 [US1] [US2] **Release gate — compose** (75 items): as T019, via `tools/sync-manifest.mjs`, with `--release 2026.08.21 --summary "Questions and short answers reworded in simple English (75 items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T029 decision governs), then validate again and run the per-release browser verification. Record the outcome inline under this task.
+
+**Checkpoint**: compose released as `2026.08.21`.
+
+---
+
+### Coroutines-Flow — 55 items · 6 packs · release `2026.08.22` · gate-10 window ≤ 2026-09-06
+
+- [ ] T032 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **8 items** (`co-0001`–`co-0008`) in `content/packs/coroutines-a.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T033 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`co-0009`–`co-0018`) in `content/packs/coroutines-g-1.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T034 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`co-0019`–`co-0028`) in `content/packs/coroutines-g-2.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T035 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`co-0029`–`co-0038`) in `content/packs/coroutines-g-3.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T036 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`co-0039`–`co-0048`) in `content/packs/coroutines-g-4.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T037 [US1] [US2] **Calendar checkpoint — coroutines-flow (R-007)**: before the final batch (T038) is begun, project release `2026.08.22` against the windows (≤ **2026-09-06** gate 10, ≤ **2026-09-13** gate 11), decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T038 [US1] [US2] **Final coroutines-flow batch** (do not begin until T037's checkpoint is decided): rewrite `q` + `shortAnswer` for all **7 items** (`co-0049`–`co-0055`) in `content/packs/coroutines-g-5.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T039 [US1] [US2] **Release gate — coroutines-flow** (55 items): as T019, via `tools/sync-manifest.mjs`, with `--release 2026.08.22 --summary "Questions and short answers reworded in simple English (55 items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T037 decision governs), then validate again and run the per-release browser verification. Record the outcome inline under this task.
+
+**Checkpoint**: coroutines-flow released as `2026.08.22`.
+
+---
+
+### Platform — 60 items · 7 packs · release `2026.08.23` · gate-10 window ≤ 2026-09-06
+
+Word-bound load is heavy here: 70/180 bullets over 25 words (R-006).
+
+- [ ] T040 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **6 items** (`pf-0001`–`pf-0006`) in `content/packs/platform.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T041 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **4 items** (`pf-0007`–`pf-0010`) in `content/packs/platform-b.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T042 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`pf-0011`–`pf-0020`) in `content/packs/platform-g-1.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T043 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`pf-0021`–`pf-0030`) in `content/packs/platform-g-2.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T044 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`pf-0031`–`pf-0040`) in `content/packs/platform-g-3.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T045 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`pf-0041`–`pf-0050`) in `content/packs/platform-g-4.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T046 [US1] [US2] **Calendar checkpoint — platform (R-007)**: before the final batch (T047) is begun, project release `2026.08.23` against the windows (≤ **2026-09-06** gate 10, ≤ **2026-09-13** gate 11), decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T047 [US1] [US2] **Final platform batch** (do not begin until T046's checkpoint is decided): rewrite `q` + `shortAnswer` for all **10 items** (`pf-0051`–`pf-0060`) in `content/packs/platform-g-5.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T048 [US1] [US2] **Release gate — platform** (60 items): as T019, via `tools/sync-manifest.mjs`, with `--release 2026.08.23 --summary "Questions and short answers reworded in simple English (60 items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T046 decision governs), then validate again and run the per-release browser verification. Record the outcome inline under this task.
+
+**Checkpoint**: platform released as `2026.08.23`.
+
+---
+
+### Build-Testing — 60 items · 7 packs · release `2026.08.24` · gate-10 window ≤ **2026-09-08**
+
+The largest word-bound load in the library: 100/180 bullets over 25 words (R-006) — expect the most
+FR-012a recorded exceptions here. Its oldest ref is `checked` 2026-08-09, so its gate-10 window closes
+**2026-09-08** (R-007).
+
+- [ ] T049 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for both **2 items** (`bt-0001`–`bt-0002`) in `content/packs/build-testing.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T050 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`bt-0003`–`bt-0012`) in `content/packs/build-testing-g-1.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T051 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`bt-0013`–`bt-0022`) in `content/packs/build-testing-g-2.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T052 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`bt-0023`–`bt-0032`) in `content/packs/build-testing-g-3.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T053 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`bt-0033`–`bt-0042`) in `content/packs/build-testing-g-4.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T054 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`bt-0043`–`bt-0052`) in `content/packs/build-testing-g-5.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T055 [US1] [US2] **Calendar checkpoint — build-testing (R-007)**: before the final batch (T056) is begun, project release `2026.08.24` against the track's windows — gate 10 closes **2026-09-08** here (oldest ref `checked` 2026-08-09), gate 11 closes **2026-09-13** — decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T056 [US1] [US2] **Final build-testing batch** (do not begin until T055's checkpoint is decided): rewrite `q` + `shortAnswer` for all **8 items** (`bt-0053`–`bt-0060`) in `content/packs/build-testing-g-6.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T057 [US1] [US2] **Release gate — build-testing** (60 items): as T019, via `tools/sync-manifest.mjs`, with `--release 2026.08.24 --summary "Questions and short answers reworded in simple English (60 items)." --date <YYYY-MM-DD>` (≤ **2026-09-08**; the T055 decision governs), then validate again and run the per-release browser verification. Record the outcome inline under this task.
+
+**Checkpoint**: build-testing released as `2026.08.24`.
+
+---
+
+### Security-KMP — 70 items · 8 packs · release `2026.08.25` · gate-10 window ≤ 2026-09-06
+
+- [ ] T058 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`sk-0001`–`sk-0003`) in `content/packs/security-kmp.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T059 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`sk-0004`–`sk-0013`) in `content/packs/security-kmp-g-1.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T060 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`sk-0014`–`sk-0023`) in `content/packs/security-kmp-g-2.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T061 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`sk-0024`–`sk-0033`) in `content/packs/security-kmp-g-3.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T062 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`sk-0034`–`sk-0043`) in `content/packs/security-kmp-g-4.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T063 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`sk-0044`–`sk-0053`) in `content/packs/security-kmp-g-5.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T064 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`sk-0054`–`sk-0063`) in `content/packs/security-kmp-g-6.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T065 [US1] [US2] **Calendar checkpoint — security-kmp (R-007)**: before the final batch (T066) is begun, project release `2026.08.25` against the windows (≤ **2026-09-06** gate 10, ≤ **2026-09-13** gate 11), decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T066 [US1] [US2] **Final security-kmp batch** (do not begin until T065's checkpoint is decided): rewrite `q` + `shortAnswer` for all **7 items** (`sk-0064`–`sk-0070`) in `content/packs/security-kmp-g-7.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T067 [US1] [US2] **Release gate — security-kmp** (70 items): as T019, via `tools/sync-manifest.mjs`, with `--release 2026.08.25 --summary "Questions and short answers reworded in simple English (70 items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T065 decision governs), then validate again and run the per-release browser verification. Record the outcome inline under this task.
+
+**Checkpoint**: security-kmp released as `2026.08.25`.
+
+---
+
+### Architecture — 50 items · 7 packs · release `2026.08.26` · gate-10 window ≤ 2026-09-06
+
+Second-heaviest word-bound load: 90/150 bullets over 25 words (R-006); also hosts the library's longest
+question (`ar-0001`, 215 chars — the reference batch already worked the shape).
+
+- [ ] T068 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **4 items** (`ar-0001`–`ar-0004`) in `content/packs/architecture.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T069 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`ar-0005`–`ar-0007`) in `content/packs/architecture-b.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T070 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`ar-0008`–`ar-0017`) in `content/packs/architecture-g-1.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T071 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`ar-0018`–`ar-0027`) in `content/packs/architecture-g-2.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T072 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`ar-0028`–`ar-0037`) in `content/packs/architecture-g-3.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T073 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`ar-0038`–`ar-0047`) in `content/packs/architecture-g-4.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T074 [US1] [US2] **Calendar checkpoint — architecture (R-007)**: before the final batch (T075) is begun, project release `2026.08.26` against the windows (≤ **2026-09-06** gate 10, ≤ **2026-09-13** gate 11), decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T075 [US1] [US2] **Final architecture batch** (do not begin until T074's checkpoint is decided): rewrite `q` + `shortAnswer` for all **3 items** (`ar-0048`–`ar-0050`) in `content/packs/architecture-g-5.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T076 [US1] [US2] **Release gate — architecture** (50 items): as T019, via `tools/sync-manifest.mjs`, with `--release 2026.08.26 --summary "Questions and short answers reworded in simple English (50 items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T074 decision governs), then validate again and run the per-release browser verification. Record the outcome inline under this task.
+
+**Checkpoint**: architecture released as `2026.08.26`.
+
+---
+
+### Data-Networking — 40 items · 5 packs · release `2026.08.27` · gate-10 window ≤ 2026-09-06
+
+Word-bound load: 71/120 bullets over 25 words (R-006).
+
+- [ ] T077 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **4 items** (`dn-0001`–`dn-0004`) in `content/packs/data-networking.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T078 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **9 items** (`dn-0005`–`dn-0013`) in `content/packs/data-networking-g-1.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T079 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **9 items** (`dn-0014`–`dn-0022`) in `content/packs/data-networking-g-2.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T080 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **9 items** (`dn-0023`–`dn-0031`) in `content/packs/data-networking-g-3.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T081 [US1] [US2] **Calendar checkpoint — data-networking (R-007)**: before the final batch (T082) is begun, project release `2026.08.27` against the windows (≤ **2026-09-06** gate 10, ≤ **2026-09-13** gate 11), decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T082 [US1] [US2] **Final data-networking batch** (do not begin until T081's checkpoint is decided): rewrite `q` + `shortAnswer` for all **9 items** (`dn-0032`–`dn-0040`) in `content/packs/data-networking-g-4.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T083 [US1] [US2] **Release gate — data-networking** (40 items): as T019, via `tools/sync-manifest.mjs`, with `--release 2026.08.27 --summary "Questions and short answers reworded in simple English (40 items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T081 decision governs), then validate again and run the per-release browser verification. Record the outcome inline under this task.
+
+**Checkpoint**: data-networking released as `2026.08.27`.
+
+---
+
+### Performance — 40 items · 6 packs · release `2026.08.28` · gate-10 window ≤ 2026-09-06
+
+- [ ] T084 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`pe-0001`–`pe-0003`) in `content/packs/performance.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T085 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **9 items** (`pe-0004`–`pe-0012`) in `content/packs/performance-g-1.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T086 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **9 items** (`pe-0013`–`pe-0021`) in `content/packs/performance-g-2.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T087 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **9 items** (`pe-0022`–`pe-0030`) in `content/packs/performance-g-3.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T088 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **9 items** (`pe-0031`–`pe-0039`) in `content/packs/performance-g-4.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T089 [US1] [US2] **Calendar checkpoint — performance (R-007)**: before the final batch (T090) is begun, project release `2026.08.28` against the windows (≤ **2026-09-06** gate 10, ≤ **2026-09-13** gate 11), decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T090 [US1] [US2] **Final performance batch** (do not begin until T089's checkpoint is decided): rewrite `q` + `shortAnswer` for the single item `pe-0040` in `content/packs/performance-g-5.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T091 [US1] [US2] **Release gate — performance** (40 items): as T019, via `tools/sync-manifest.mjs`, with `--release 2026.08.28 --summary "Questions and short answers reworded in simple English (40 items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T089 decision governs), then validate again and run the per-release browser verification. Record the outcome inline under this task.
+
+**Checkpoint**: performance released as `2026.08.28`.
+
+---
+
+### Behavioral — 25 items · 3 packs · release `2026.08.29` · gate-10 window ≤ 2026-09-06
+
+The register's second-person direct address is already native to STAR-scenario questions — lightest qa
+load (1/75 bullets over 25 words, R-006).
+
+- [ ] T092 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`bh-0001`–`bh-0003`) in `content/packs/behavioral.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T093 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **11 items** (`bh-0004`–`bh-0014`) in `content/packs/behavioral-g-1.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T094 [US1] [US2] **Calendar checkpoint — behavioral (R-007)**: before the final batch (T095) is begun, project release `2026.08.29` against the windows (≤ **2026-09-06** gate 10, ≤ **2026-09-13** gate 11), decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T095 [US1] [US2] **Final behavioral batch** (do not begin until T094's checkpoint is decided): rewrite `q` + `shortAnswer` for all **11 items** (`bh-0015`–`bh-0025`) in `content/packs/behavioral-g-2.json`, run the full batch gate, record the outcome inline under this task.
+
+- [ ] T096 [US1] [US2] **Release gate — behavioral** (25 items): as T019, via `tools/sync-manifest.mjs`, with `--release 2026.08.29 --summary "Questions and short answers reworded in simple English (25 items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T094 decision governs), then validate again and run the per-release browser verification. Record the outcome inline under this task.
+
+**Checkpoint**: behavioral released as `2026.08.29`. **All 10 qa tracks shipped — the qa tier (US1 +
+US2) is complete: 545 questions and 1635 bullets in the full register, 0 instructional openers, every
+track's release inside its freshness windows.**
+
+---
+
+## Phase 4: User Story 3 - Task prompts and reference sheets made clearer (Priority: P2)
+
+**Goal**: All 84 non-qa items (60 `dsa`, 19 `design`, 5 `concept` cheat sheets) reviewed against the
+**plain-words / short-sentences half** of the VSE register and simplified wherever that improves clarity
+(FR-016) — a coding task stays a coding task, a design scenario stays a scenario, a cheat sheet stays a
+compact reference (V17). The conversational half (direct address, chat tone) does **not** apply
+(R-011). Every item ends the feature with a verdict — **simplified** or **already simple** (FR-017a: a
+verdict, not an omission).
+
+**Why this priority**: P2 — the smallest minority of the library (84/629), already task-shaped, judged
+"a genuine part of 'most of the questions is not understandable', just a smaller one". It runs last so
+it never delays a qa release (R-013).
+
+**Independent Test** (spec.md US3): read each of the 84 prompts and their short answers; confirm each
+either was simplified or is recorded as already simple (FR-017a, SC-007); confirm task, scenario and
+reference form is intact (V17); confirm every claim survived (FR-017 binds FR-011/FR-013/FR-014 onto
+these fields); confirm `node tools/validate.mjs` exits 0 after each batch.
+
+**The batch gate** — steps 1–4 of Phase 3 apply **unchanged** (validator with zero-new-warnings delta,
+scope check with the non-qa frozen-field set from T002, both screens, the two-question read-through with
+"reads simple" judged by the plain-words half **and** form preservation). The batch record additionally
+carries the **per-item verdict** — `simplified` or `already simple` — replacing the claim-count's role on
+these batches (R-011, R-012).
+
+**The release gate (non-qa variant, R-011)** — same steps as Phase 3's, with two differences: the
+summary reads *"Task prompts and descriptions simplified (N items)."* and the release is cut **only if
+at least one item on the track was touched** — a track whose every item was recorded "already simple"
+ships **no release at all**: no edit, no stamp, no version bump (its items keep their current
+`updatedIn`). Gate-10 windows: dsa and system-design close **2026-09-08** (oldest ref `checked`
+2026-08-09); cheatsheets closes **2026-09-06**. Gate 11 binds every release at ≤ **2026-09-13**.
+
+---
+
+### DSA — 60 items · 9 packs · release `2026.08.30` · gate-10 window ≤ **2026-09-08**
+
+Word-bound load: 7/180 bullets over 25 words on the plain-words tier (R-006); questions run 13–68
+chars, median 45 — expect a mixed verdict distribution (R-011).
+
+- [ ] T097 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **6 items** (`ds-0001`–`ds-0006`) in `content/packs/dsa.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T098 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **8 items** (`ds-0007`–`ds-0014`) in `content/packs/dsa-b.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T099 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`ds-0015`–`ds-0019`) in `content/packs/dsa-c.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T100 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **7 items** (`ds-0020`–`ds-0026`) in `content/packs/dsa-g-1.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T101 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **7 items** (`ds-0027`–`ds-0033`) in `content/packs/dsa-g-2.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T102 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **7 items** (`ds-0034`–`ds-0040`) in `content/packs/dsa-g-3.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T103 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **7 items** (`ds-0041`–`ds-0047`) in `content/packs/dsa-g-4.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T104 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **7 items** (`ds-0048`–`ds-0054`) in `content/packs/dsa-g-5.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T105 [US3] **Calendar checkpoint — dsa (R-007)**: before the final batch (T106) is begun, project release `2026.08.30` against the track's windows — gate 10 closes **2026-09-08** (oldest ref `checked` 2026-08-09), gate 11 closes **2026-09-13** — decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`. Note: if every dsa item ends up "already simple", there is no release to schedule — record that instead.
+
+- [ ] T106 [US3] **Final dsa batch** (do not begin until T105's checkpoint is decided): rewrite `q` + `shortAnswer` for all **6 items** (`ds-0055`–`ds-0060`) in `content/packs/dsa-g-6.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T107 [US3] **Release gate — dsa** (60 items; the non-qa release-gate variant): if at least one dsa item was touched, `node tools/validate.mjs` (0/0), `node tools/check-refs.mjs dsa`, the gate 13 audit, then `node tools/sync-manifest.mjs --write --release 2026.08.30 --summary "Task prompts and descriptions simplified (N items)." --date <YYYY-MM-DD>` (≤ **2026-09-08**; the T105 decision governs; N = items actually touched), then validate again (gates 6/10/11/13). If **no** item was touched, record "no release" and move on — no edit, no stamp, no version bump (R-011). Record the outcome inline under this task.
+
+**Checkpoint**: dsa reviewed 60/60 with verdicts; released as `2026.08.30` only if any item was touched.
+
+---
+
+### System-Design — 19 items · 5 packs · release `2026.08.31` · gate-10 window ≤ **2026-09-08**
+
+- [ ] T108 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`sd-0000`–`sd-0002`) in `content/packs/system-design.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T109 [P] [US3] Batch: rewrite `q` + `shortAnswer` for both **2 items** (`sd-0003`–`sd-0004`) in `content/packs/system-design-b.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T110 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **4 items** (`sd-0005`–`sd-0008`) in `content/packs/system-design-g-1.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T111 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **5 items** (`sd-0009`–`sd-0013`) in `content/packs/system-design-g-2.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T112 [US3] **Calendar checkpoint — system-design (R-007)**: before the final batch (T113) is begun, project release `2026.08.31` against the track's windows — gate 10 closes **2026-09-08** (oldest ref `checked` 2026-08-09), gate 11 closes **2026-09-13** — decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T113 [US3] **Final system-design batch** (do not begin until T112's checkpoint is decided): rewrite `q` + `shortAnswer` for all **5 items** (`sd-0014`–`sd-0018`) in `content/packs/system-design-g-3.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T114 [US3] **Release gate — system-design** (19 items; the non-qa release-gate variant): as T107, via `tools/sync-manifest.mjs`, with `--release 2026.08.31 --summary "Task prompts and descriptions simplified (N items)." --date <YYYY-MM-DD>` (≤ **2026-09-08**; the T112 decision governs; N = items actually touched), or record "no release" if nothing was touched. Record the outcome inline under this task.
+
+**Checkpoint**: system-design reviewed 19/19 with verdicts; released as `2026.08.31` only if any item
+was touched.
+
+---
+
+### Cheatsheets — 5 items · 2 packs · release `2026.08.32` · gate-10 window ≤ 2026-09-06
+
+- [ ] T115 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`cs-0001`–`cs-0003`) in `content/packs/cheatsheets.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T116 [US3] **Calendar checkpoint — cheatsheets (R-007)**: before the final batch (T117) is begun, project release `2026.08.32` against the windows (≤ **2026-09-06** gate 10, ≤ **2026-09-13** gate 11), decide and record the outcome inline under this task in `specs/005-plain-english-qa/tasks.md`.
+
+- [ ] T117 [US3] **Final cheatsheets batch** (do not begin until T116's checkpoint is decided): rewrite `q` + `shortAnswer` for both **2 items** (`cs-0004`–`cs-0005`) in `content/packs/cheatsheets-b.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+- [ ] T118 [US3] **Release gate — cheatsheets** (5 items; the non-qa release-gate variant): as T107, via `tools/sync-manifest.mjs`, with `--release 2026.08.32 --summary "Task prompts and descriptions simplified (N items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T116 decision governs; N = items actually touched), or record "no release" if nothing was touched. Record the outcome inline under this task.
+
+**Checkpoint**: all 84 non-qa items reviewed with verdicts (SC-007); the feature's content work is
+complete.
+
+---
+
+## Phase 5: Polish & Cross-Cutting Concerns
+
+- [ ] T119 Run the final acceptance gate (quickstart.md "Feature completion"): from `/Users/nn/InterviewPrep`, `node tools/validate.mjs --final` must exit 0 — this promotes gates 4, 5, 8, 9 and 12 to errors, including gate 8 (0 unadjudicated near-duplicate pairs — SC-006). Then confirm the whole-feature table, all recorded, not recalled: the id set of all 89 packs is byte-identical to the T001 baseline (SC-005); all 90 batch records present with evidence-form read-throughs (FR-023); every non-qa item carries a verdict (SC-007); 0 instructional openers and 0 unsupported/unsourced version-date claims on rewritten items (SC-001, SC-004); every release registered with its summary and gate-13 audit (FR-024); `.claude/workflows/duplicates.json` holds every adjudicated pair with verdict and reason (SC-006); the release dates were decided at the per-track checkpoints, not at the gate (R-007). Record the outcome inline under this task.
+
+- [ ] T120 Close the feature record in this `tasks.md`: consolidate the 90 batch outcomes (T003, T004-T096, T097-T118), the release-gate records and the final acceptance (T119) into a coherent completion record; confirm the 629 item identifiers match the T001 baseline byte-for-byte one last time (Constitution I); and record the FR-024 consequence explicitly — each release's `releases[]` summary says plainly what changed, and every touched item carries the release version in `updatedIn`, set by the manifest tooling only. Record the outcome inline under this task.
+
+**Checkpoint**: feature complete — every batch recorded with evidence, `--final` exits 0, every release
+registered, every story independently verifiable from its records.
+
+---
+
+## Requirement → Task Coverage
+
+Every functional requirement in spec.md, and the task(s) that discharge it. Maintained so coverage is
+checkable at a glance rather than by diffing spec.md against this file by hand. **If you add an FR to
+spec.md, add its row here in the same edit.**
+
+| FR | Task(s) | | FR | Task(s) |
+|---|---|---|---|---|
+| FR-001 | T004-T096 (all qa batches) | | FR-014 | all batches (read-through, V6), T119 |
+| FR-002 | T003, all batches (step 4) | | FR-015 | T002 (scope check), all batches |
+| FR-003 | all qa batches (screen 3.1/step 4) | | FR-016 | T097-T118 |
+| FR-004 | all qa batches (V5) | | FR-017 | T097-T118 (read-through) |
+| FR-005 | all qa batches (V8) | | FR-017a | T097-T118 (verdict records) |
+| FR-006 | all batches (V14) | | FR-018 | T002, all batches (scope check) |
+| FR-007 | all qa batches (screen 3.1) | | FR-019 | all batches (step 1), T119 |
+| FR-008 | all qa batches (V9) | | FR-019a | all batches (step 1) |
+| FR-008a | all qa batches (V9 exception path) | | FR-020 | T003, all batches (step 4) |
+| FR-009 | all qa batches (V15) | | FR-021 | T001 (baseline), all batches (step 4) |
+| FR-010 | T004-T096 (all qa batches) | | | |
+| FR-011 | all batches (read-through) | | FR-022 | all batches (screen 3.2), T119 |
+| FR-012 | all batches (V11) | | FR-023 | all batches (records), T119 |
+| FR-012a | all batches (V11 exception path) | | FR-024 | T019, T031, T039, T048, T057, T067, T076, T083, T091, T096, T107, T114, T118, T120 |
+| FR-013 | all batches (V13) | | FR-025 | T119 (SC-008 evidence) |
+| | | | FR-026 | T003 |
+| | | | **SC-001** | T004-T096 |
+| | | | **SC-002** | all batches (read-through records) |
+| | | | **SC-003** | T004-T096 |
+| | | | **SC-004** | all batches (V6), release gates (gate 13), T119 |
+| | | | **SC-005** | T001, T002, all batches, T119, T120 |
+| | | | **SC-006** | all batches (screen 3.2), T119 |
+| | | | **SC-007** | T097-T118, T119 |
+| | | | **SC-008** | release gates (browser verification), T119 |
+
+## Cross-Story File Overlap
+
+Which files more than one story writes to, and the resulting ordering constraint. Surfaced here rather
+than left to be discovered by reading plan.md's file list — every row is a potential same-file conflict
+if two stories are worked concurrently.
+
+| File | Stories (tasks) | Constraint |
+|---|---|---|
+| `content/manifest.json` | 13 release tasks (T019 … T118) | Written **only** by `tools/sync-manifest.mjs --write`; versions `2026.08.20 … 2026.08.32` must be cut in ascending version order (gate 6). Never hand-edited. |
+| `.claude/workflows/duplicates.json` | every batch (screen 3.2) | Append-only ledger. Only a batch that flags a new pair writes it, but two concurrent batches adjudicating collide — commit adjudicating batches sequentially, never in parallel. |
+| `specs/005-plain-english-qa/verification/scope-check.mjs` | T002 only | New file; every batch's step 2 depends on it existing. |
+| `content/packs/*.json` (89 files) | reference batch (T003, 10 files) + their track's pack batch | T003 commits first; each of the 10 files is later re-visited by its track's batch for the remaining items. Same file, sequential commits — never concurrent (the scope check diffs against `git HEAD`, so ordering is enforced mechanically anyway). |
+| `content/packs/<track>-*.json` | within a track only | Tracks are disjoint pack sets; no pack appears in two track batches. This is what makes all 89 pack batches `[P]` with respect to each other. |
+
+## Dependencies & Execution Order
+
+### Phase Dependencies
+
+- **Setup (Phase 1)**: no dependencies — start immediately.
+- **Foundational (Phase 2)**: depends on Setup. **Blocks all three stories** (T002 gates every batch;
+  T003 fixes the standard every batch is judged against).
+- **User Stories (Phases 3–4)**: Phase 3 (US1+US2) first, track by track in R-013's order (kotlin →
+  behavioral); Phase 4 (US3) after Phase 3 — same mechanical gate, plan-level order (P2 priority, must
+  not delay a qa release; not a same-file constraint).
+- **Polish (Phase 5)**: depends on all content work being complete.
+
+### User Story Dependencies
+
+- **US1 + US2 (P1)**: depends on T001 (baseline) and T002 (scope check). Internal order per track:
+  all pack batches after T003; the track's calendar checkpoint before its **final** batch; the release
+  after the last batch. Tracks are sequential in R-013's order; batches within a track are parallel.
+- **US3 (P2)**: depends on Phase 3 completing (R-013 ordering). Internal order mirrors the qa tracks;
+  a non-qa release is cut only if any item was touched (R-011).
+
+### Within Each Track
+
+- The batch gate's steps are strictly ordered per batch: validator (before/after) → scope check →
+  screens → the named read-through → commit + record. A batch is the unit of acceptance; there are no
+  per-item exceptions (FR-020).
+- Calendar checkpoint before the final batch; release gate after the last batch, with the release date
+  decided at the checkpoint, never at the gate (R-007).
+
+### Parallel Opportunities
+
+- All 89 pack batches (T004-T096, T097-T118) touch disjoint pack files and are `[P]` — fully parallel
+  with each other **once T003 has fixed the standard**. Caution: each batch still captures its own
+  "immediately-before" validator run (FR-019a) and commits on its own; two batches adjudicating a
+  near-duplicate pair must not run concurrently (the ledger is append-only, see Cross-Story File
+  Overlap).
+- The 13 calendar-checkpoint tasks and the 13 release-gate tasks are **not** `[P]`: each checkpoint
+  gates its track's final batch, and the releases write the same `manifest.json` in version order.
+- Tracks are sequential (R-013); a track's release cuts when its last batch passes.
+
+---
+
+## Parallel Example: the kotlin track (largest qa track)
+
+```bash
+# After T003 (reference batch) is accepted and committed, launch every remaining kotlin pack together
+# — 13 disjoint files, no ordering; only T018 (final batch) must wait for T017's checkpoint:
+Task: "Batch: kotlin-a.json (8 items), full gate, record (T004)"
+Task: "Batch: kotlin-b.json (5 items), full gate, record (T005)"
+Task: "Batch: kotlin-g-1.json (5 items), full gate, record (T006)"
+# ... T007-T016, one task per pack ...
+Task: "Calendar checkpoint — kotlin (T017)"      # decided before T018 begins
+Task: "Final kotlin batch: kotlin-g-12.json (2 items) (T018)"
+Task: "Release gate — kotlin, 2026.08.20 (T019)"
+# Each batch captures its own before-run of `node tools/validate.mjs` (FR-019a) and commits alone.
+```
+
+## Parallel Example: the dsa track (largest non-qa track)
+
+```bash
+# After T003, launch the 8 non-final dsa packs together — 8 disjoint files:
+Task: "Batch: dsa.json (6 items) + verdicts (T097)"
+Task: "Batch: dsa-b.json (8 items) + verdicts (T098)"
+Task: "Batch: dsa-c.json (5 items) + verdicts (T099)"
+# ... T100-T104, one task per pack ...
+Task: "Calendar checkpoint — dsa (T105)"         # decided before T106 begins
+Task: "Final dsa batch: dsa-g-6.json (6 items) (T106)"
+Task: "Release gate — dsa, 2026.08.30, only if any item touched (T107)"
+```
+
+---
+
+## Implementation Strategy
+
+### MVP First (the qa tier — User Stories 1 and 2)
+
+1. Complete Phase 1 (Setup) — branch, baseline hash, validator clean.
+2. Complete Phase 2 (Foundational) — scope check (T002) + reference batch (T003).
+3. Complete Phase 3, kotlin track first — 14 batches, one release `2026.08.20`.
+4. **STOP and VALIDATE**: this is the feature's user request — questions and short answers in very
+   simple English — delivered on one full track, release-cut and browser-verified. Demoable.
+5. Proceed track by track; each release is an independently shippable increment.
+
+### Incremental Delivery
+
+1. Setup + Foundational → gate machinery and standard fixed.
+2. Each qa track: batches → calendar checkpoint → release (10 releases, `2026.08.20`–`2026.08.29`).
+3. Non-qa tracks: batches with verdicts → release only if touched (`2026.08.30`–`2026.08.32`).
+4. Polish: `--final` acceptance + completion record. Every track is complete before it ships
+   (FR-024) — a candidate never sees a track where some items are simple and others are not.
+
+### Parallel Team Strategy
+
+- One contributor per track is the cleanest split (tracks are sequential); within a track, up to 13
+  pack batches run in parallel once the reference batch is accepted.
+- Any contributor can run a calendar checkpoint (it is a decision record, not authoring).
+- The release gates are sequential by nature (one manifest writer) and are best done by whoever closes
+  the track.
+
+---
+
+## Notes
+
+- [P] tasks touch different files with no incomplete-task dependency between them.
+- [Story] labels map every task back to its spec.md user story for traceability; qa batch tasks carry
+  both `[US1]` and `[US2]` because R-002's one-pass-per-pack model delivers both fields in one batch.
+- No task in this feature adds, removes, renumbers or reuses an item id — content tasks only ever touch
+  `q`, `shortAnswer` and (at release time, via the manifest tooling) `updatedIn` (Constitution I,
+  FR-018).
+- **The baseline never moves** (R-001): every read-through compares against the hash recorded in T001,
+  never against `HEAD` once the feature's own batches have changed it, never from memory (FR-021).
+- The scope check compares against `git HEAD` ("what did *this batch* touch?"); the read-through
+  compares against the feature baseline ("what did *this feature* change?") — the two are different
+  questions and both are mandatory (batch-gate.md step 2 vs step 4).
+- Word bounds are review signals with a recorded-exception path, never gates: a bullet over 25 words or
+  a question longer than its baseline is reworked first; if preservation genuinely cannot fit, the item
+  is accepted with a recorded exception naming item and reason (FR-012a, FR-008). **Preservation wins
+  over every bound** — a claim is never deleted to fit a number.
+- The batch gate's mechanical half (validator + scope check + screens) never certifies a batch on its
+  own (FR-020): the two-question read-through fails independently — text can be perfectly accurate and
+  still hard to parse, and it can sound friendly while having quietly dropped a caveat.
+- Release dates are decided at each track's calendar checkpoint (before its final batch), not at the
+  release gate, because at the release gate there is no time left to spend (R-007). Re-stamping a
+  `checked` date without re-reading the primary source is a Principle IV violation.
+- This feature adds no app code, no validator gate, no dependency and no build step — the entire
+  apparatus is authoring discipline plus the existing 15-gate `validate.mjs
