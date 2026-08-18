@@ -764,7 +764,9 @@ chars, median 45 — expect a mixed verdict distribution (R-011).
 
     **Record (2026-08-18)**: release `2026.08.32` dated 2026-08-18 sits 19 days inside gate 10 (≤ 2026-09-06, oldest ref `checked` 2026-08-07) and 26 days inside gate 11 (≤ 2026-09-13). 2 of the 3 items reviewed so far (T115) were **simplified** — a release is due regardless of T117's outcome. Decision: **proceed, no action.**
 
-- [ ] T117 [US3] **Final cheatsheets batch** (do not begin until T116's checkpoint is decided): rewrite `q` + `shortAnswer` for both **2 items** (`cs-0004`–`cs-0005`) in `content/packs/cheatsheets-b.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+- [X] T117 [US3] **Final cheatsheets batch** (do not begin until T116's checkpoint is decided): rewrite `q` + `shortAnswer` for both **2 items** (`cs-0004`–`cs-0005`) in `content/packs/cheatsheets-b.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+    **Record (2026-08-18)**: 2 items, 2 edits this batch. Validator exit 0, 0 warnings. Scope check 0 failures (ids 2/2). Screens: 0 collisions, 0 near-matches ≥ 24 shared chars. Per-item verdicts (reference form preserved throughout, V17): cs-0004 — **simplified**: same "Reach for it" fix as `cs-0002`/`cs-0003` (T115) → "Use it to quote target-API dates or to plan an audit with the SDK Upgrade Assistant." (17→16 words); per-release-behavior-deltas + highlighted-APIs claims kept, B0/B1 untouched. cs-0005 — **simplified**: same fix → "Use it for build-speed questions, release hygiene, or version-catalog and `implementation` versus `api`." (14→13 words); flag-by-flag-reference + AGP-9/R8/App-Bundle-coverage claims kept, B0/B1 untouched.
 
 - [ ] T118 [US3] **Release gate — cheatsheets** (5 items; the non-qa release-gate variant): as T107, via `tools/sync-manifest.mjs`, with `--release 2026.08.32 --summary "Task prompts and descriptions simplified (N items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T116 decision governs; N = items actually touched), or record "no release" if nothing was touched. Record the outcome inline under this task.
 
