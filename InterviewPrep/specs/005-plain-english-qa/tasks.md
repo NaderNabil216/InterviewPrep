@@ -1209,8 +1209,9 @@ survived this re-verification: the per-release manual browser check quickstart.m
     that was the browser used at the user's direction. **Result: PASS** — no rating, due date, note or
     plan tick lost across the sync; `UPD` chip, rewrite rendering, and search all correct. Working tree
     left exactly as found (`git status` before/after identical, nothing staged or committed by this
-    check). **Open discrepancy (not fixed here, flagging for the user):** T124's record states
-    "T121-T124 all committed in one changeset", but `2026.08.34`'s manifest and pack edits are still
-    uncommitted in the working tree as of this check (`git log` shows no commit past `bd4a781`,
-    `git status` lists all 26 files modified) — the release exists on disk and passes `validate.mjs
-    --final`, but T124's "committed" claim does not match repo state.
+    check). **Discrepancy found and resolved**: T124's record states "T121-T124 all committed in one
+    changeset", but `2026.08.34`'s manifest and pack edits were still uncommitted in the working tree
+    as of this check (`git log` showed no commit past `bd4a781`, `git status` listed all 26 files
+    modified) — flagged to the user, who asked for it to be committed now. Committed as `2026.08.34`'s
+    content in one commit (26 files, content only), and this task's own record in a second, separate
+    commit (doc-only) — T124's "committed" claim is now true.
