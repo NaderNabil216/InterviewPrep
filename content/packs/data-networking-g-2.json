@@ -63,7 +63,7 @@
         "moshi",
         "gson"
       ],
-      "q": "kotlinx.serialization vs Moshi vs Gson — how do you choose, and what differs under the hood?",
+      "q": "kotlinx.serialization vs Moshi vs Gson — how do you choose, and what differs internally?",
       "shortAnswer": [
         "kotlinx.serialization is compile-time and reflection-free: the plugin generates `Serializer` objects for `@Serializable` classes. Parsing is fast and deterministic, and it works in KMP.",
         "Moshi is reflection-based, but with KSP codegen it produces generated adapters. Its `KotlinJsonAdapterFactory` respects Kotlin nullability and default values.",
@@ -99,7 +99,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.27"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "dn-0016",

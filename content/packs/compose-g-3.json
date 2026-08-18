@@ -126,7 +126,7 @@
       "shortAnswer": [
         "`RememberObserver` drives it: `onRemembered` after apply, `onForgotten` on removal, `onAbandoned` on discard.",
         "A discarded (optimistic) recomposition never starts its coroutine or registers its listener.",
-        "That's the guarantee: effects run only for compositions that actually reach the Applier."
+        "That's the guarantee: effects run only for compositions that reach the Applier."
       ],
       "answer": "Effects are not scheduled during composition; they are scheduled by the `RememberObserver` lifecycle. `LaunchedEffect` and `DisposableEffect` are implemented on top of it. After the composition produces a change list and the Applier applies it, `onRemembered` fires — that is the earliest a coroutine starts. When a group is removed from the slot table, `onForgotten` fires and the effect disposes. The less-known third state is `onAbandoned`: a recomposition that is thrown away before it is ever applied never reaches the Applier, and its effects never start.\n\n#### Why the abandoned case matters\nCompose may optimistically recompose several versions of a scope before applying one. Without the abandoned guard, a discarded recomposition's `LaunchedEffect` would launch a coroutine or register a listener that nothing ever disposes — a leak and a ghost callback. The ordering also explains `SideEffect`: it is a composition-side observer that runs right after every successful apply, which is why it is the correct place to publish side effects into the outside world exactly once per applied composition.",
       "followUps": [
@@ -145,7 +145,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.21"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "cmp-0036",

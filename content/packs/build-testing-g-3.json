@@ -419,7 +419,7 @@
         "flows",
         "testing"
       ],
-      "q": "Turbine versus collecting a flow manually in a test — what does each buy you, and when is the plain collector actually better?",
+      "q": "Turbine versus collecting a flow manually in a test — what does each buy you, and when is the plain collector better?",
       "shortAnswer": [
         "A plain collector — `flow.toList(seen)` in a `backgroundScope` — records emissions into a list you assert on; no dependency, when you care about values.",
         "Turbine (`flow.test { }`) adds per-await timeouts and `awaitItem`/`awaitError`/`expectNoEvents`, failing on unconsumed events — right for hot flows and emission-order assertions.",
@@ -455,7 +455,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.24"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "bt-0032",

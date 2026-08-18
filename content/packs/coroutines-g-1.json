@@ -149,7 +149,7 @@
       "q": "What does a single suspension point cost at runtime?",
       "shortAnswer": [
         "The fast path is nearly free: if the callee does not suspend, it returns the value directly instead of `COROUTINE_SUSPENDED`.",
-        "The cost shows up only when it really suspends — locals spill into fields and the work dispatches to another thread.",
+        "The cost shows up only when it suspends — locals spill into fields and the work dispatches to another thread.",
         "That is why `withContext` inside a hot loop is a measurable regression."
       ],
       "answer": "A suspension point has two paths. If the called function completes synchronously — no real suspension — it returns its value directly; the caller never sees `COROUTINE_SUSPENDED` and the state machine reuses its one instance for the whole call chain. That fast path is single-digit nanoseconds, effectively free.\n\n#### The expensive path\nWhen a function genuinely suspends, the runtime must: (1) store the current continuation plus every live local into fields of the state machine object — the 'spilled locals' of the compiled state machine; (2) return `COROUTINE_SUSPENDED` to the caller, unwinding the stack; (3) when the work completes, re-enter the state machine via a `switch (label)` dispatch to resume at the right point. If the dispatcher differs, that adds a scheduling hand-off — a Handler post or a scheduler task, microseconds.\n\n#### The interview point\nCost is concentrated at real suspensions, and re-suspension per iteration compounds it. `repeat(10_000) { withContext(Dispatchers.IO) { ... } }` allocates a child coroutine, two hand-offs and a state-machine frame per iteration. Hoist the `withContext` around the loop — or restructure so one switch happens, not ten thousand.",
@@ -177,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.22"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "co-0013",
@@ -368,7 +368,7 @@
       ],
       "q": "What does `CoroutineScope(Dispatchers.Main + SupervisorJob())` create? And what happens to it after you call `cancel()`?",
       "shortAnswer": [
-        "A `CoroutineScope` is just a holder for a `CoroutineContext`. The factory adds a `Job` if you did not supply one.",
+        "A `CoroutineScope` is a holder for a `CoroutineContext`. The factory adds a `Job` if you did not supply one.",
         "You own cancelling it, and a cancelled scope is dead permanently.",
         "`launch` on a cancelled scope returns an already-cancelled Job, and the block never runs — silently."
       ],
@@ -397,7 +397,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.22"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "co-0018",

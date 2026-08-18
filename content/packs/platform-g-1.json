@@ -195,7 +195,7 @@
         "viewmodel",
         "savedstate"
       ],
-      "q": "What happens on a configuration change? What actually survives it?",
+      "q": "What happens on a configuration change? What survives it?",
       "shortAnswer": [
         "A configuration change destroys and recreates the `Activity`, but the process stays alive — anything in memory can survive if the framework keeps it.",
         "`ViewModel` survives because it lives in a `ViewModelStore` the framework retains. Statics, singletons, and `Application` also survive — process-scoped.",
@@ -226,7 +226,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.23"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "pf-0016",

@@ -212,7 +212,7 @@
         "invalidation",
         "data-layer"
       ],
-      "q": "What gets cached in your app, for how long, and what invalidates it? What is the policy, not just where the cache lives?",
+      "q": "What gets cached in your app, for how long, and what invalidates it? What is the policy, not only where the cache lives?",
       "shortAnswer": [
         "Cache at the layer that matches data: HTTP cache for raw responses, the database as the single source of truth, in-memory for hot, short-lived reads.",
         "For user-generated data, prefer write-through over TTL: a write updates the source of truth so readers re-emit, while a TTL can serve stale data.",
@@ -249,7 +249,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.26"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "ar-0023",

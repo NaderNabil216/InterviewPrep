@@ -68,7 +68,7 @@
       "shortAnswer": [
         "Line coverage counts which code *ran*, not what the test *asserted*. A test that calls a function and checks nothing still counts as covered.",
         "An 80% gate therefore games itself: teams add shallow tests to hit the number, and the metric stops meaning anything about confidence.",
-        "Use coverage as a triage tool that names untested modules, and gate instead on what the suite actually proves."
+        "Use coverage as a triage tool that names untested modules, and gate instead on what the suite proves."
       ],
       "answer": "#### What coverage actually measures\nLine and branch coverage answer one question: did this line execute during the run? They say nothing about whether its behavior was verified. A function whose result is ignored is 100% covered. The metric rewards *reaching* code, not *asserting* about it.\n\n#### Why the gate backfires\nA number a team is measured on gets optimized. The cheap way to raise coverage is shallow tests — no assertions, or assertions that can hardly fail. The suite grows, the number rises, and the confidence it once implied evaporates. As Goodhart's law puts it, a measure stops being a good measure once people start aiming at it. A coverage percentage as a merge gate is precisely that situation.\n\n#### What to use instead\n- Branch coverage or mutation-style checks on the risky seams, which actually exercise false branches.\n- Coverage *deltas* per PR, flagging newly-added code that shipped with no assertions.\n- A written contract: every ViewModel and use case has tests, repositories have integration tests against real Room, the design system has screenshot tests.\n\nCoverage's real value is discovery: open the report and find the module nobody tests. Keep it as an exploration tool, not a number to defend.",
       "code": [
@@ -100,7 +100,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.24"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "bt-0045",
@@ -403,7 +403,7 @@
       "shortAnswer": [
         "Commit the Gradle wrapper — `gradle/wrapper/gradle-wrapper.jar` and `gradle-wrapper.properties` — with the version and `distributionSha256Sum` pinned, so every machine runs the same Gradle.",
         "Declare JDK toolchains in the build and provision them with the foojay-resolver plugin, so CI and laptops compile on the same JVM whatever is preinstalled.",
-        "Centralize dependency versions in a version catalog and enable dependency locking, so resolution — not just the toolchain — is deterministic."
+        "Centralize dependency versions in a version catalog and enable dependency locking, so resolution — not only the toolchain — is deterministic."
       ],
       "answer": "#### The wrapper\nThe wrapper is the build's entry point and the first reproducibility lever. Commit `gradle-wrapper.jar` and `gradle-wrapper.properties`, and pin the distribution checksum with `distributionSha256Sum` so a tampered or mismatched Gradle fails fast. Never let CI install its own Gradle version; every machine — laptop and pipeline — should run `./gradlew` from the repo.\n\n#### JDK toolchains\n\"Works on my machine\" is usually a JDK difference: code that compiles on 21 and dies on 17. Declare toolchains in the build — `java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }` — and let the foojay-resolver plugin provision the matching JDK in CI and on developers. The compiler then runs on the same JVM everywhere, independent of what the host had installed, and builds no longer depend on which JDK happened to be on `PATH`.\n\n#### Versions and locking\nA version catalog (`libs.versions.toml`) centralizes versions so the build script and every module agree on one number per library. For full determinism, Gradle dependency locking records the resolved graph in lockfiles, so resolution cannot drift the day someone publishes a new patch. CI then builds against a graph that is pinned at every level: Gradle, JDK, and dependencies.\n\n#### Verify in CI\nFinally, CI should fail when a change bumps the wrapper or a toolchain without intent — the pin is only honest if drift is caught.",
       "code": [
@@ -435,7 +435,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.24"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "bt-0052",

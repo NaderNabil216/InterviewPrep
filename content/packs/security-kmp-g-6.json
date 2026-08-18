@@ -217,7 +217,7 @@
       ],
       "q": "When should an app ask for a runtime permission? How do one-time grants and least privilege change the design?",
       "shortAnswer": [
-        "Declare only what the app really uses, and request at the point of use — never as an onboarding splash for something unrelated.",
+        "Declare only what the app uses, and request at the point of use — never as an onboarding splash for something unrelated.",
         "One-time grants and auto-reset mean a grant is a per-session fact: re-check on resume and degrade gracefully instead of nagging.",
         "Prefer system pickers over broad permissions — the Photo Picker, for example, needs no storage permission at all."
       ],
@@ -252,7 +252,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.25"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "sk-0059",

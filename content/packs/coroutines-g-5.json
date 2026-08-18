@@ -182,7 +182,7 @@
       "q": "Why was `launchWhenStarted { }` deprecated? What replaced it?",
       "shortAnswer": [
         "`launchWhenStarted` only freezes the **consumer** at STOP. The producer keeps running — Room observers, location callbacks, and sockets stay registered, filling a buffer nobody reads.",
-        "`repeatOnLifecycle(Lifecycle.State.STARTED)` cancels the whole collection at STOP and runs the block again at the next START, which really unregisters the producer.",
+        "`repeatOnLifecycle(Lifecycle.State.STARTED)` cancels the whole collection at STOP and runs the block again at the next START, which unregisters the producer.",
         "`flowWithLifecycle` is the operator form of the same mechanism — nest several flows in one `repeatOnLifecycle` block."
       ],
       "answer": "#### What launchWhenStarted did\nIt ran the block on a pausing dispatcher: below `STARTED` the dispatcher queues continuations instead of executing them. The coroutine is not cancelled — it is frozen at a suspension point, and everything upstream of it stays alive:\n\n- A `callbackFlow` never reaches `awaitClose`, so the `LocationListener`, receiver or sensor callback stays registered.\n- A Room `Flow` keeps its `InvalidationTracker` observer, so every write still re-runs the query.\n- Buffered elements pile up and flush as a burst of stale emissions on the next START.\n- The frozen continuation still holds everything it captured — views, adapters, the binding — until `DESTROYED`.\n- A block with no suspension point in it never pauses at all.\n\nIt was deprecated in `lifecycle-runtime-ktx` 2.4.\n\n#### repeatOnLifecycle\nA `suspend fun` on `Lifecycle`. Launch it once; it suspends until `DESTROYED`, starting a fresh child coroutine each time the state reaches the target and cancelling that child when the state falls below. The cancellation is genuine: `awaitClose` runs, observers are removed.\n\nTwo things people miss. Code placed after the call in the same `launch` block is unreachable until destroy. And the block re-runs from the top on every foreground, so a **cold** upstream refetches on every app switch — make it hot with `stateIn(WhileSubscribed(5_000))` and let `repeatOnLifecycle` manage only the subscription.\n\n`flowWithLifecycle` wraps the same machinery for a single flow: identical semantics, but N flows cost N coroutines and N channels against one block with N children. In Compose it is `collectAsStateWithLifecycle`.",
@@ -221,7 +221,7 @@
         }
       ],
       "addedIn": "2026.08.7",
-      "updatedIn": "2026.08.22"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "co-0053",

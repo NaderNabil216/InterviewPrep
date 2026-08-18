@@ -63,7 +63,7 @@
       "shortAnswer": [
         "Request at the point of need via `ActivityResultContracts.RequestPermission`, and explain why first if denied once. Three outcomes: granted, denied, permanently denied (send to Settings).",
         "For media, the modern answer is usually **no permission at all** — use the **Photo Picker**, which needs none and gives the user control.",
-        "Android 14+ supports **partial** media access ('Select photos'), so your UI must handle 'the user granted three images', not just granted or denied."
+        "Android 14+ supports **partial** media access ('Select photos'), so your UI must handle 'the user granted three images', not only granted or denied."
       ],
       "answer": "#### The flow\n1. **Check** — `ContextCompat.checkSelfPermission`.\n2. **Rationale** — `shouldShowRequestPermissionRationale` is true after a prior denial. Explain *before* asking again.\n3. **Request** — the Activity Result API (`registerForActivityResult`); the old `onRequestPermissionsResult` is deprecated.\n4. **Permanent denial** — denied *and* rationale now false = \"don't ask again\". Stop prompting; deep-link to settings and degrade gracefully.\n\n#### Rules that trip people up\n- Permissions can be **revoked while backgrounded**; re-check before use, never cache a grant.\n- **Auto-reset**: inactive apps get unused permissions revoked.\n- Requesting an undeclared permission fails silently.\n- Never request everything at app start — grant rates tank and review flags it.\n\n#### Media, the modern way\n- **Photo Picker** (`ActivityResultContracts.PickVisualMedia`) — system UI, **no permission required**, backported via Play services. Default for \"let the user pick an image\".\n- Library-wide access: `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` / `READ_MEDIA_AUDIO` (Android 13+ replaced `READ_EXTERNAL_STORAGE`).\n- Android 14+ adds `READ_MEDIA_VISUAL_USER_SELECTED` — **partial access**: the user picks specific items only; treat partial grants as a first-class state and let users add more.\n- App-specific files need no permission.\n\n#### Other permissions worth naming\n- `POST_NOTIFICATIONS` — runtime since Android 13; request it *in context*, not at launch.\n- Location: coarse vs fine; background location has a separate, heavily-reviewed flow.\n- Exact alarms: `SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM`, restricted and Play-reviewed.\n\n#### Android 17\nLocal network access is blocked by default for apps targeting 17, behind the new `ACCESS_LOCAL_NETWORK` permission — prefer privacy-preserving pickers over scanning.",
       "code": [
@@ -95,7 +95,7 @@
         }
       ],
       "addedIn": "2026.08.4",
-      "updatedIn": "2026.08.23"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "pf-0009",

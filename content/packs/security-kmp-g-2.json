@@ -110,7 +110,7 @@
       "q": "R8 renames and strips your code. Why is obfuscation defense in depth rather than real security?",
       "shortAnswer": [
         "R8 shrinks dead code, optimizes, and renames classes and members — the APK gets smaller, but strings and behavior survive verbatim.",
-        "String literals, URLs, JSON keys, and algorithms read plainly after decompilation; a hardcoded key is still a hardcoded key, just harder to grep for.",
+        "String literals, URLs, JSON keys, and algorithms read plainly after decompilation; a hardcoded key is still a hardcoded key, harder to grep for.",
         "Treat it as one cheap layer that raises the cost of analysis, then put the real controls elsewhere — server-side secrets, integrity checks, short-lived tokens."
       ],
       "answer": "#### What R8 actually does\nR8 (`minifyEnabled true` on the release build type) does three jobs. **Shrinking** removes dead code and merges classes. **Optimization** inlines and simplifies. **Obfuscation** renames classes, methods, and fields to short meaningless identifiers, and resource shrinking renames resources. The result: a smaller package with a destroyed symbol table.\n\n#### What it does not do\nObfuscation does not rename strings, encrypt data, or hide logic. Every string literal, URL, and JSON field name stays byte-for-byte (and fields used by reflection are pinned by keep rules anyway). A decompiler turns the renamed call graph back into readable structure in hours — the identifiers are gone, the behavior is not. A secret in the code is still recoverable; obfuscation just adds a step.\n\n#### The honest framing\nR8 is **defense in depth**, and a good one because it is nearly free when shipped alongside shrinking. It raises the cost for a casual analyst and shrinks the install. But it is not a security boundary: nothing should be designed on the assumption that R8 protects it. Real controls — secrets server-side, Play Integrity, revocable tokens — carry the load. The operational costs are real too: upload mapping files for de-obfuscating stack traces, and keep rules that don't accidentally strip something a library needs via reflection.",
@@ -138,7 +138,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.25"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "sk-0017",
@@ -334,7 +334,7 @@
       ],
       "q": "A security researcher reports a vulnerability in your app. How do you handle it from report to ship?",
       "shortAnswer": [
-        "Triage first: reproduce the issue, confirm which versions are affected and what an attacker can really do, and assign severity before saying anything publicly.",
+        "Triage first: reproduce the issue, confirm which versions are affected and what an attacker can do, and assign severity before saying anything publicly.",
         "Fix through the normal release pipeline — regression test, patch, staged rollout — and hold public details until a meaningful share of users can update.",
         "Coordinate disclosure timing with the reporter, publish an advisory with a CVE where warranted, and do a root-cause review so the whole bug class dies."
       ],
@@ -368,7 +368,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.25"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "sk-0022",

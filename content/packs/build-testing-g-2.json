@@ -169,7 +169,7 @@
       "shortAnswer": [
         "kapt lets Java annotation processors run on Kotlin code: it compiles Kotlin, generates Java stubs, then runs javac over them — 2-3× KSP's wall time.",
         "KSP2 reads Kotlin symbols from the compiler frontend — no stubs, faster, multiplatform. Migration: swap `kapt(\"...\")` for `ksp(\"...\")`, drop `kotlin-kapt`.",
-        "The blocker is third-party processors with no KSP provider. Those keep you on kapt, isolated to the module that actually needs them."
+        "The blocker is third-party processors with no KSP provider. Those keep you on kapt, isolated to the module that needs them."
       ],
       "answer": "#### The tax\nkapt exists to run *Java* annotation processors on Kotlin code. It compiles your Kotlin, generates a Java stub for every file, then runs javac over the stubs — a full second compilation. That double compilation is the tax: typically two to three times KSP's wall time, and single-platform, so it blocks Kotlin Multiplatform modules entirely. Stub generation also degrades on Kotlin-only constructs such as companion-object constants, which is why some processors see missing values.\n\n#### KSP2\nKSP2 reads Kotlin symbols directly from the compiler frontend — no stubs, faster, multiplatform — and it became the default for new projects on the Kotlin 2.x line. Room, Hilt, Moshi, Glide and most Google libraries already ship KSP processors. Migration is mechanical: apply the KSP Gradle plugin, swap every `kapt(\"...\")` for `ksp(\"...\")`, and delete the `kotlin-kapt` plugin from the module.\n\n#### What still blocks you\nThe holdout is the long tail of third-party processors with no KSP provider. You cannot force them from your side; the pragmatic move is to keep kapt only in the module that needs that one processor — kapt and KSP coexist fine across modules — file an issue upstream, and retire kapt there once a provider ships.",
       "code": [
@@ -201,7 +201,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.24"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "bt-0017",

@@ -200,7 +200,7 @@
       "q": "What is donut-hole skipping? And how do you engineer one on purpose?",
       "shortAnswer": [
         "The parent recomposes, but every child skips because its arguments didn't change.",
-        "The 'hole' is wherever the changing state is actually read, so the cost collapses to that scope.",
+        "The 'hole' is wherever the changing state is read, so the cost collapses to that scope.",
         "Passing the changing value down as a parameter, or reading it high up via `CompositionLocal`, closes the hole."
       ],
       "answer": "When the parent restarts and each child's `$changed` bits report unchanged arguments, the children take the `skipToGroupEnd()` path — the parent's body runs but the subtree cost collapses to a bitmask test per child. The expensive work sits only in the scopes that actually read the changing state, and everything around it is a cheap 'hole' of skipped groups.\n\n#### Building one on purpose\nThe recipe is to isolate reads: hold the volatile state high (in a ViewModel or a top composable), read it once, and pass stable data down. Children that receive stable parameters skip. Two patterns engineer it deliberately — content slots: `Scaffold(topBar = { TopBar() })` where a changing lambda is hoisted out so it does not re-instantiate per recomposition; and `() -> T` parameters that let a child decide when to recompose itself.\n\n#### What closes the hole\nPassing the changing value down as a parameter makes its readers non-skippable on change. A non-skippable child defeats it. And a `CompositionLocal` read high in the tree invalidates the local's readers — wide scopes again — which is why locals should hold rarely-changing config.",
@@ -220,7 +220,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.21"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "cmp-0018",

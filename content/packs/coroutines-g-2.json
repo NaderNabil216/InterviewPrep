@@ -238,7 +238,7 @@
       "shortAnswer": [
         "`cancel()` only moves the Job to Cancelling and arms the next suspension point to throw.",
         "A loop with no suspension runs to completion anyway. Add `ensureActive()` or check `isActive`.",
-        "`cancel()` returns immediately, so use `cancelAndJoin()` when you need it actually finished."
+        "`cancel()` returns immediately, so use `cancelAndJoin()` when you need it finished."
       ],
       "answer": "Cancellation never stops code mid-instruction. `cancel()` transitions the Job to `Cancelling` and arranges for the *next suspension point* to throw a `CancellationException`. A coroutine that never suspends — `while (true) { crunch() }` — simply never notices; it runs to the end of its block.\n\n#### Making a hot loop cooperative\n- `ensureActive()` — a suspend call (usable inside a `suspend` context) that throws `CancellationException` immediately if the job is cancelled. Best for a tight loop.\n- `isActive` — a plain check returning `false` after cancellation; clean way to exit a loop: `while (isActive) { ... }`.\n- `yield()` — additionally hands the dispatcher a chance to run other coroutines; use it when the loop is long enough to starve siblings.\n\n#### The finishing trap\n`cancel()` returns instantly; it does not wait for the coroutine to reach its next suspension point. Code that needs to know the work really ended — tests, resource release — must call `cancelAndJoin()`. A test that calls `cancel()` and immediately asserts completion is the classic flaky test.",
       "code": [
@@ -265,7 +265,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.22"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "co-0025",

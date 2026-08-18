@@ -110,7 +110,7 @@
       "q": "What changed with local-network access and Play data safety?",
       "shortAnswer": [
         "On Android 13+, `CHANGE_NETWORK_STATE`/`CHANGE_WIFI_STATE` no longer grant access to local network devices; Android 16 gates that behind `NEARBY_WIFI_DEVICES`, a runtime permission.",
-        "Play requires a data-safety declaration covering what you collect, transmit, and share — and it must match what your code and libraries actually do.",
+        "Play requires a data-safety declaration covering what you collect, transmit, and share — and it must match what your code and libraries do.",
         "The declaration is self-attested, not code-scanned: you sign it, Google can audit, and a mismatch is a policy violation that risks removal."
       ],
       "answer": "#### Local network access\nHistorically `CHANGE_WIFI_STATE`/`CHANGE_NETWORK_STATE` implied local-network reachability. That grant is gone: targeting Android 13+, `NEARBY_WIFI_DEVICES` (the `neverForLocation` variant) is the way to *control* nearby Wi-Fi devices, and Android 16 moves actual discovery/connection behind the runtime-access flag so the user gets a real consent moment. The practical consequence: apps that talk to a home IoT hub or a printer must migrate from the old permissions to `NEARBY_WIFI_DEVICES` — declared with `android:usesPermissionFlags=\"neverForLocation\"` when you do not use it for location — and handle the runtime grant. This is exactly the class of change that a `targetSdk` bump silently trips: you compile fine, and local-device features stop working on new devices.\n\n#### Play data safety\nEvery Play listing needs a **Data safety** section: which data you collect (types), whether it is shared, encrypted, or deletable, and your security practices. The declaration is self-attested, but Play cross-checks it against your app's behavior and libraries (e.g. analytics SDKs that collect identifiers count even if you do not read them). Honest, specific declarations beat vague ones: over-declaring shrinks installs, under-declaring is a policy strike. The two go together in interviews as 'permission hygiene meets policy' — the OS grants data access, Play polices how you use it.",
@@ -143,7 +143,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.23"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "pf-0044",
@@ -211,7 +211,7 @@
       "shortAnswer": [
         "One dex file cannot hold more than 64K method references — crossing that limit means multidex: `classes.dex`, `classes2.dex`, `classes3.dex`, and so on.",
         "Since `minSdk >= 21`, multidex is automatic in AGP — no `MultiDex.install` call — and the cost is startup: loading and verifying many dex files.",
-        "2026's mitigations are DEX **compression** and `dex-merger` tooling, but the deeper answer is shrinking your method surface, not just splitting it."
+        "2026's mitigations are DEX **compression** and `dex-merger` tooling, but the deeper answer is shrinking your method surface, not only splitting it."
       ],
       "answer": "#### The limit\nThe dex format addresses methods with 16 bits, so one dex file can reference at most 65,536 methods. Hit it and `DexIndexOverflowException` fails the build. Dependencies are the usual cause — a few heavy libraries (Retrofit + OkHttp + a DI framework + protobuf) blow through it fast.\n\n#### Multidex\nMultidex splits the app into a primary dex and a chain of secondary dexes. On `minSdk >= 21` (ART), this is the default and automatic — AGP emits the split classes at build and ART handles them natively, so there is no `MultiDex.install()` application call needed (that only applies to legacy Dalvik, `minSdk < 21`).\n\n#### The real cost: startup\nEvery extra dex file is one more thing the JIT/AOT must load, verify, and profile. The primary dex holds the classes the `Application`/first frames need, and keeping dependencies like your DI graph out of the boot path is a genuine startup technique (`startup profile`, shrinker `keep` rules, `--dex-merging`). The build-side lever is **DEX compression** (AGP's `android.dexOptions`/`compressedDex` equivalents and `dex-merger`) which trades install size for load time on capable devices.\n\n#### The strategic answer\nMultidex is a symptom. The 2026 approach is: keep dependencies honest (R8 shrinks aggressively), avoid monolithic frameworks in the hot path, and treat the primary dex as a curated startup surface. And since Android 12+ has 16 KB page-aligned dex via the runtime, the load-time cost of many small dexes is a real, measurable startup tax — measure it with a profile.",
       "code": [
@@ -238,7 +238,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.23"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "pf-0046",
@@ -301,7 +301,7 @@
         "mmap",
         "ipc"
       ],
-      "q": "How does Binder work under the hood? What is the kernel's role?",
+      "q": "How does Binder work internally? What is the kernel's role?",
       "shortAnswer": [
         "Binder is a kernel driver — `/dev/binder` — mediating cross-process calls: the caller writes transaction into shared `mmap`'d buffer, and the kernel wakes the target.",
         "Each process `mmap`s a small kernel region; the kernel copies the caller's parcel in once and the receiver reads it — one copy, no socket.",
@@ -332,7 +332,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.23"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "pf-0048",

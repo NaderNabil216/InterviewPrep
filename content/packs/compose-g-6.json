@@ -14,7 +14,7 @@
         "adaptive",
         "window-size-class"
       ],
-      "q": "What is `WindowSizeClass`? What are the breakpoints? And why not just check the screen size?",
+      "q": "What is `WindowSizeClass`? What are the breakpoints? And why not check screen size alone?",
       "shortAnswer": [
         "Widths: compact < 600 dp, medium 600–840, expanded ≥ 840. Heights: compact < 480, medium 480–900, expanded ≥ 900.",
         "Read it with `currentWindowAdaptiveInfo()`.",
@@ -37,7 +37,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.21"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "cmp-0063",

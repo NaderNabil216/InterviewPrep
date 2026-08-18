@@ -149,7 +149,7 @@
       "q": "You need at most 4 concurrent uploads. `limitedParallelism(4)`, `Semaphore(4)`, or `flatMapMerge(concurrency = 4)`?",
       "shortAnswer": [
         "`limitedParallelism` caps how many tasks are **dispatched at once**, not how many run concurrently — a suspended upload releases its slot.",
-        "`Semaphore(4)` or `flatMapMerge(4)` actually bound logical concurrency.",
+        "`Semaphore(4)` or `flatMapMerge(4)` bound logical concurrency.",
         "That is why: IO grows elastically to 64 threads, and `Default` shares the same pool."
       ],
       "answer": "`limitedParallelism(4)` creates a *view* over the shared `CoroutineScheduler` that allows at most 4 tasks to be dispatched onto threads at once. That bounds active threads, not logical concurrency: an upload that suspends while awaiting a socket has no task running on a thread, so its slot is free and a fifth upload starts. If 'at most 4 concurrent' means four in-flight logical operations, `limitedParallelism` does not give it to you.\n\n#### What actually bounds concurrency\n- `Semaphore(4)` — each upload acquires before starting; a suspended upload still holds its permit, so you truly cap in-flight work.\n- `flatMapMerge(concurrency = 4)` — caps how many inner flows run at once; the natural tool for a flow of URLs.\n\n#### The pool model worth explaining\n`Dispatchers.IO` is a view over the shared `CoroutineScheduler` with a CPU-permit layer plus an elastic 64-thread limit (`kotlinx.coroutines.io.parallelism`) for blocking calls. `Default` shares the same underlying pool. A blocking call inside `Default` starves the pool, which is why blocking goes through `IO`. For a genuine single-thread confinement you can use `limitedParallelism(1)` — that one *does* bound execution because only one task can run at a time. And `Executor.asCoroutineDispatcher()` — which you must `close()` — is the escape hatch when you need a real custom pool.",
@@ -177,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.22"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "co-0033",

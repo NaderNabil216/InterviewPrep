@@ -146,7 +146,7 @@
         "buildString",
         "templates"
       ],
-      "q": "String templates, `buildString`, and raw strings — how do they affect performance and correctness?",
+      "q": "String templates, `buildString`, and raw strings — what about performance and correctness?",
       "shortAnswer": [
         "`\"$a$b\"` compiles to invokedynamic via `StringConcatFactory` on JVM 9+, not a StringBuilder chain. `s += x` in a loop is O(n²).",
         "`trimIndent`/`trimMargin` run at runtime on every evaluation. Hoist them out of hot paths.",
@@ -177,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.20"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "kt-0068",

@@ -116,7 +116,7 @@
       "shortAnswer": [
         "A table without an index stores rows in a heap. A lookup must check every row — a full scan that grows as the table grows.",
         "An index is a separate sorted structure holding the indexed column's values with pointers back to rows. SQLite jumps straight to matches instead of scanning.",
-        "The trade-off: every insert and update must also keep each index fresh. So index the columns you actually filter or join on — not every column."
+        "The trade-off: every insert and update must also keep each index fresh. So index the columns you filter or join on — not every column."
       ],
       "answer": "#### The problem\nA table without an index stores rows in a heap. To find rows matching `WHERE team = ?`, SQLite visits **every row** — a full table scan. Double the rows, double the work; at a million rows a scan is a noticeable pause.\n\n#### The fix\nAn index is a separate, **sorted** structure holding the indexed column's values with pointers back to the rows. Lookups now jump straight to the matching entries — like the index at the back of a book. A scan that visited every row becomes a search that visits a handful.\n\n#### The catch\nNothing is free: every insert and update must also keep each index fresh, so more indices mean slower writes and more storage. Index the columns you actually `WHERE`, `JOIN`, `ORDER BY`, or enforce unique on — not every column.\n\n#### What Room does\nYou declare indices on the entity: `@Entity(indices = [Index(\"teamId\")])`. The primary key is always indexed automatically — it's SQLite's rowid alias. For a small table the scan is cheap and an index is overkill; for a table that grows, the index is the difference between instant and slow.",
       "code": [
@@ -142,7 +142,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.27"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "dn-0035",
@@ -295,7 +295,7 @@
         "transaction",
         "atomicity"
       ],
-      "q": "Why use transactions in Room, and what does @Transaction actually do?",
+      "q": "Why use transactions in Room, and what does @Transaction do?",
       "shortAnswer": [
         "A transaction wraps statements so they commit atomically — all apply, or none. A crash or exception mid-way rolls back to the state before it began.",
         "`@Transaction` on a DAO method runs the whole method inside `beginTransaction`/`setTransactionSuccessful`/`endTransaction` on one connection. `withTransaction` is the coroutine equivalent.",
@@ -326,7 +326,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.27"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "dn-0039",

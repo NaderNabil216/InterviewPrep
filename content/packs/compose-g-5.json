@@ -269,7 +269,7 @@
       "shortAnswer": [
         "`rememberNavBackStack(HomeKey)` returns an observable list of `NavKey`s.",
         "`NavDisplay(backStack, onBack = { backStack.removeLastOrNull() }, entryProvider = entryProvider { entry<Detail> { ... } })` renders it.",
-        "Keys are `@Serializable` data classes, so arguments are constructor parameters and navigation is just list mutation."
+        "Keys are `@Serializable` data classes, so arguments are constructor parameters and navigation is list mutation."
       ],
       "answer": "Navigation 3 replaces the string-route system with observable state. The back stack is a plain `List<NavKey>`: `val backStack = rememberNavBackStack(HomeKey)`. Navigating is list mutation — `backStack += DetailKey(id)` pushes, `backStack.removeLastOrNull()` pops.\n\n#### Rendering\n`NavDisplay(backStack = backStack, onBack = { backStack.removeLastOrNull() })` observes the list and renders entries. The `entryProvider` maps a key to its content: `entryProvider { entry<Detail> { DetailScreen(entry.key.id) } }`, using `@Serializable` data class keys so the argument `id` is a constructor parameter — no string route, no `navArgs`, no cast.\n\n#### What you inherit for free\nBecause keys are serializable, the back stack can be persisted across process death — `rememberNavBackStack` restores it. Two senior notes: `NavDisplay`'s `contentType` and transitions are configured around the key type, and pushing a key that is already on the stack inserts a *new* entry unless you guard it — the list is a model, not a deduped stack. That visibility — the back stack as ordinary state you can read, react to, and mutate — is the whole point of Nav3.",
       "followUps": [
@@ -288,7 +288,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.21"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "cmp-0060",

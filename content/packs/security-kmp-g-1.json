@@ -263,7 +263,7 @@
       "shortAnswer": [
         "Every client-side check runs on the attacker's machine, where it can be hooked or spoofed — root detection is a losing arms race.",
         "The realistic pattern: cheap, fragile signals — test-keys, su binaries, known packages — feed a risk score, alongside Play Integrity's device verdict verified server-side.",
-        "Treat root as a risk factor to weigh and degrade around, never something to block on — a blocking client just gets its check stripped."
+        "Treat root as a risk factor to weigh and degrade around, never something to block on — a blocking client gets its check stripped."
       ],
       "answer": "#### Why it's fragile\nRoot detection runs on the attacker's machine. Any check you write — `ro.build.tags` containing `test-keys`, an `su` binary on PATH, the Magisk package, overlayfs traces, `/system/xbin` — can be read, hooked (Frida, LSPosed), spoofed, or bypassed by Zygisk deny-lists while the real app runs elsewhere. A rooted attacker controls the responses; a bypass is an afternoon of work. Treat any single check as noise, not proof.\n\n#### What still earns a place\nUse the checks as **cheap signals in a stack**, not a binary gate: test-keys property, known-bad package names, su binary locations, suspicious mounts, and your own APK signature at runtime. Fail closed where the cost is low — require re-authentication or block one high-value action — and log the score server-side with a version tag. Accept false positives: some legitimate users run admin tools, custom ROMs, or a corporate MDM that trips your heuristics.\n\n#### The platform answer\nThe strongest signal available is Play Integrity's device-integrity verdict — bootloader state and Play services health — which is Google-signed and server-verifiable, and far harder to fake than a file check. But even it can be gamed with device farming, so it remains a risk indicator, not identity.\n\n#### The realism the interview tests\nThe right framing: root detection is a **risk indicator feeding a server-side risk engine**, never a statement of truth, never enforced purely on the device. Anyone promising 'we detect root and block' client-side is describing a demo, not a defense.",
       "code": [
@@ -295,7 +295,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.25"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "sk-0010",

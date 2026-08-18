@@ -16,7 +16,7 @@
       ],
       "q": "How do you diagnose and improve app startup time?",
       "shortAnswer": [
-        "Know the three start kinds: **cold** (new process), **warm** (process alive, new Activity), **hot** (Activity just resumes). Only cold start is worth optimizing hard.",
+        "Know the three start kinds: **cold** (new process), **warm** (process alive, new Activity), **hot** (Activity resumes). Only cold start is worth optimizing hard.",
         "Measure with `Macrobenchmark` plus `StartupTimingMetric` on a release build — never a debug build, never a stopwatch.",
         "Biggest levers: **Baseline Profiles** (AOT-compile the startup path, typically 20-30% faster), less work in `Application.onCreate`, and lazy library init."
       ],
@@ -50,7 +50,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.28"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "pe-0002",

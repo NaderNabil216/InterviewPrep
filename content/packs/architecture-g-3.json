@@ -408,7 +408,7 @@
         "dependency-injection",
         "seams"
       ],
-      "q": "Why is testability an architectural property, not just a testing concern?",
+      "q": "Why is testability an architectural property, not only a testing concern?",
       "shortAnswer": [
         "Testability is decided at design time: a class is testable when its dependencies can be replaced by fakes — they are injected, not constructed inside.",
         "Logic tied to the Android framework — Context, Activity, threads — needs an emulator or Robolectric; pure Kotlin logic runs in a plain JVM test in milliseconds.",
@@ -444,7 +444,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.26"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "ar-0037",

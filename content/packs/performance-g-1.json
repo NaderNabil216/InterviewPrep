@@ -63,7 +63,7 @@
         "main-thread",
         "responsiveness"
       ],
-      "q": "Your app freezes and Android shows 'App isn't responding'. What happened under the hood?",
+      "q": "Your app freezes and Android shows 'App isn't responding'. What happened internally?",
       "shortAnswer": [
         "ANR means 'Application Not Responding' — the system shows a dialog when your main thread can't answer input in time.",
         "The classic timeouts: 5 s for input dispatch, 10 s for a foreground BroadcastReceiver, 20 s for a foreground Service.",
@@ -94,7 +94,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.28"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "pe-0006",

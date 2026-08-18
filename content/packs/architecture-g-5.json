@@ -122,7 +122,7 @@
         "pragmatism",
         "technical-debt"
       ],
-      "q": "A senior on your team keeps rejecting designs with 'that's not Clean Architecture.' Argue both sides honestly: where do the rules actually protect you, and where does following them hurt — with the real costs named?",
+      "q": "A senior on your team keeps rejecting designs with 'that's not Clean Architecture.' Argue both sides honestly: where do the rules protect you, and where does following them hurt — with the real costs named?",
       "shortAnswer": [
         "The dependency rule blocks a real failure mode: business rules welded to `Context` and `NavController` — UI change rewrites the logic, database change rewrites the UI.",
         "The dogma hurts when a thin feature becomes entities, use cases, mappers, an adapter — four files tracing one query, junior learning layers instead of shipping.",
@@ -159,7 +159,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.26"
+      "updatedIn": "2026.08.34"
     }
   ]
 }
