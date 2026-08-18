@@ -236,7 +236,7 @@
       "q": "Design modularization for a large Android app",
       "shortAnswer": [
         "Split a 15-plus-minute monolith into buildable, ownable modules for ~200 engineers across 40 teams, without blowing up build times or creating dependency hell.",
-        "Layer downward — `:app` shell, `:feature:*`, pure-Kotlin `:domain`, `:core:*`, `:libs:*` — ban feature-to-feature dependencies, and split `api()` from `implementation()` with lint enforcement.",
+        "Layers: `:app` shell, `:feature:*`, `:domain`, `:core:*`, `:libs:*`. Ban feature-to-feature deps; split `api()`/`implementation()` with lint.",
         "Grading focuses on build-time engineering — configuration caching, remote build cache, release-only R8 — plus a bottom-up migration that stays green and enforced acyclicity."
       ],
       "prompt": "Design the module structure for an app with ~200 engineers across 40 teams: split a monolith into buildable, ownable modules without blowing up build times or creating dependency hell.\n\nAssume an existing large app that builds in 15+ minutes, circular dependencies, and no enforced boundaries. **Set a 45-minute timer and talk out loud.** Tick the requirements as you genuinely cover them.",
