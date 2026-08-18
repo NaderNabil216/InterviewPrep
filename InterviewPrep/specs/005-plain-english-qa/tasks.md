@@ -399,7 +399,9 @@ The largest word-bound load in the library: 100/180 bullets over 25 words (R-006
 FR-012a recorded exceptions here. Its oldest ref is `checked` 2026-08-09, so its gate-10 window closes
 **2026-09-08** (R-007).
 
-- [ ] T049 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for both **2 items** (`bt-0001`–`bt-0002`) in `content/packs/build-testing.json`, run the full batch gate, record the outcome inline under this task.
+- [X] T049 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for both **2 items** (`bt-0001`–`bt-0002`) in `content/packs/build-testing.json`, run the full batch gate, record the outcome inline under this task.
+
+    **Record (2026-08-18)**: 2 items. Validator exit 0, 0 new warnings. Scope check 0 failures (ids 2/2). Screens: 0 collisions, 0 new near-duplicates. Read-through vs `fef2e12`: bt-0001 — q 70→66 (two-part split); config-cache/build-cache/KSP2 + AGP 9-applies-Kotlin + 9.3-current-Jul-2026 + measure-first claims kept, bullets untouched (B0 23w, B1 25w — `org.jetbrains.kotlin.android`-split token trap counts; B2 16w). bt-0002 — q kept 47 (`Describe` not FR-003-banned; two-part kept); test-pyramid + fakes-over-mocks + never-mock-SUT claims kept (B0 trimmed to 25w after 26w draft — `UI/E2E`-split token trap, `fast`/`thin` dropped; B1/B2 kept 21w/17w). No exceptions. Committed.
 
 - [ ] T050 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`bt-0003`–`bt-0012`) in `content/packs/build-testing-g-1.json`, run the full batch gate, record the outcome inline under this task.
 
