@@ -490,7 +490,9 @@ FR-012a recorded exceptions here. Its oldest ref is `checked` 2026-08-09, so its
 Second-heaviest word-bound load: 90/150 bullets over 25 words (R-006); also hosts the library's longest
 question (`ar-0001`, 215 chars — the reference batch already worked the shape).
 
-- [ ] T068 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **4 items** (`ar-0001`–`ar-0004`) in `content/packs/architecture.json`, run the full batch gate, record the outcome inline under this task.
+- [X] T068 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **4 items** (`ar-0001`–`ar-0004`) in `content/packs/architecture.json`, run the full batch gate, record the outcome inline under this task.
+
+    **Record (2026-08-18)**: 4 items. Validator exit 0, 0 warnings. Scope check 0 failures (ids 4/4). Screens: 0 collisions. Read-through vs `fef2e12`: ar-0001 — q 70→66 (`And` dropped, two-part split); three-layer + UDF/MVI + MVI-lite claims kept (B0 trimmed to 24w, `the` dropped before UI). ar-0002 — q 74→70 (`Explain`→`How do ... work`, `in 2026` dropped, two-part split); component hierarchy + scope annotations + Hilt/Koin claims kept, bullets untouched (17/22/18w). ar-0003 — q unchanged (79 ≤ 79); DB-as-truth + outbox-queue + conflict-policy claims kept, bullets untouched (25/25/22w). ar-0004 — q 80→67 (`and what does it actually buy you`→`What does it buy you`, two-part split); feature-first + api/impl + real-wins claims kept (B0 27→25, `core:*` code run split 2 tokens; dropped `the`/backticks → `shared core modules`).
 
 - [ ] T069 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`ar-0005`–`ar-0007`) in `content/packs/architecture-b.json`, run the full batch gate, record the outcome inline under this task.
 

@@ -15,9 +15,9 @@
         "mvi",
         "layers"
       ],
-      "q": "What layered architecture do you use? And how do MVVM and MVI compare?",
+      "q": "What layered architecture do you use? How do MVVM and MVI compare?",
       "shortAnswer": [
-        "Three layers: **UI** (Compose + state holder), **domain** (optional — use cases, pure Kotlin), and **data** (repositories + data sources). Dependencies point inward; data never touches the UI.",
+        "Three layers: **UI** (Compose + state holder), **domain** (optional — use cases, pure Kotlin), and **data** (repositories + data sources). Dependencies point inward; data never touches UI.",
         "MVVM and MVI both use unidirectional data flow. MVI goes further: **one immutable state object** plus **explicit intents** makes inconsistent states impossible.",
         "MVVM with one `StateFlow<UiState>` is MVI-lite in practice. And that is what most modern Android codebases ship."
       ],
@@ -65,7 +65,7 @@
         "koin",
         "di"
       ],
-      "q": "Explain Hilt's components and scopes. How does it compare to Koin in 2026?",
+      "q": "How do Hilt's components and scopes work? How does it compare to Koin?",
       "shortAnswer": [
         "Hilt builds a component hierarchy that mirrors Android lifecycles: `SingletonComponent` → `ActivityComponent` → `FragmentComponent`, each with a matching scope.",
         "Scope annotations (`@Singleton`, `@ActivityRetainedScoped`, `@ViewModelScoped`, `@ActivityScoped`) control **instance reuse**; without a scope, every injection creates a new instance.",
@@ -163,9 +163,9 @@
         "gradle",
         "scale"
       ],
-      "q": "How would you modularize a large Android app, and what does it actually buy you?",
+      "q": "How would you modularize a large Android app? What does it buy you?",
       "shortAnswer": [
-        "Split by **feature** first, then by **layer inside the feature** (`feature:search:ui`, `feature:search:data`). Shared `core:*` modules hold the design system, network, database, and common models.",
+        "Split by feature first, then by layer inside feature (`feature:search:ui`, `feature:search:data`); shared core modules hold design system, network, database, common models.",
         "Use **api/impl separation**: modules depend on an `api` module that holds interfaces, so changing an implementation does not recompile its consumers.",
         "The real wins are build times, enforced boundaries, and independent team ownership — not architectural purity."
       ],
