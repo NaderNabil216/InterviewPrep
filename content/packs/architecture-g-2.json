@@ -65,9 +65,9 @@
       ],
       "q": "Your Retrofit DTO, your Room entity, and your domain model look identical. Do you still keep three types and three mappers?",
       "shortAnswer": [
-        "Separate types pay when the layers are genuinely different: the DTO mirrors the wire format, the entity mirrors the schema, and the domain model is what everything else shares.",
-        "Mapping happens at the boundary, where you normalize — snake_case to camelCase, ISO-8601 strings to `Instant`, 0/1 flags to booleans — so a wire or schema change never ripples through the app.",
-        "If the models really are identical today, do not write three mappers for three copies — keep one model and split it the moment a layer diverges."
+        "Separate types pay when layers differ: the DTO mirrors the wire format, the entity mirrors the schema, the domain model is what everything else shares.",
+        "Mapping happens at the boundary — snake_case to camelCase, ISO-8601 to `Instant`, 0/1 to booleans — so wire or schema change never ripples.",
+        "If the models are identical today, do not write three mappers for three copies — keep one model and split it the moment a layer diverges."
       ],
       "answer": "#### What each type is for\nThe **DTO** is a hostage of the server: field names, nullability, and types mirror the wire format, and it version-drifts with the API. The **entity** mirrors your schema: primary keys, indices, `pendingSync` flags. The **domain model** is the boundary's contract — shaped by neither JSON nor SQL, but by what the app means. A **UI model** is what Compose renders: flattened, with formatted strings and derived flags.\n\n#### Where mapping lives\nKeep mappers at the boundary and one-way: `Dto.toDomain()`, `Entity.toDomain()`, and `domain.toEntity()` in the data layer; a thin mapper or derived state in the UI layer. Never let a DTO escape the data layer — the moment one does, a server rename becomes a UI compile error.\n\n#### The collapse argument\nThree identical models plus three mappers is ceremony with a real cost — every rename is three edits. If nothing diverges, one model is honest. But keep the mapping functions so the seam exists, because the server *will* add, drop, or rename a field, and that is exactly when the split pays for itself.",
       "code": [
@@ -112,11 +112,11 @@
         "result",
         "layering"
       ],
-      "q": "How do errors cross your layer boundaries — what does the data layer surface, and what does the UI actually see?",
+      "q": "How do errors cross your layer boundaries? What does the data layer surface? What does the UI see?",
       "shortAnswer": [
-        "The repository turns implementation failures into a small sealed error type: a 401 becomes `Unauthorized`, a timeout becomes `Network`. No Retrofit or SQLite type leaks upward.",
-        "The domain layer returns that same sealed type, and the ViewModel turns it into state: an `error: ErrorMessage?` the UI renders, with retry as a first-class action.",
-        "Two rules matter more than the type itself. Never swallow a failure into 'empty data', and never catch `CancellationException` into a result — that breaks structured concurrency."
+        "A repository turns implementation failures into a sealed error type: 401 becomes `Unauthorized`, timeout becomes `Network`. No Retrofit or SQLite type leaks upward.",
+        "The domain layer returns the same sealed type; the ViewModel turns it into state — `error: ErrorMessage?` the UI renders, retry a first-class action.",
+        "Two rules matter more than the type. Never swallow a failure into 'empty data', never catch `CancellationException` into a result — that breaks structured concurrency."
       ],
       "answer": "#### The rule\nAn exception is an implementation detail. Each layer boundary is where you translate, so the error vocabulary shrinks as it climbs: `IOException` and `HttpException(401)` become a sealed `DomainError` in the data layer; the use case folds it into a result; the ViewModel maps `DomainError` onto `UiState.error` plus a retry action.\n\n#### What the UI sees\nState, not throws. The ViewModel produces `error: ErrorMessage?`; the composable renders a message and a retry button, and retry is not a special path — it re-runs the same action and moves back to loading.\n\n#### Where people fail\n- **Swallowing**: catching the failure and returning `emptyList()` turns 'offline' into 'no data' — indistinguishable and uncorrectable.\n- **`CancellationException`**: catching it, or letting `runCatching` absorb it, breaks structured concurrency. Always rethrow it before wrapping anything else.\n- **Error sprawl**: one enum per HTTP status. Collapse to what the UI can act on — retryable, auth, not-found, validation — and keep HTTP detail server-side.\n\n#### Concretes\nMap once, near the boundary, inside the repository. Keep transport exceptions (`HttpException`, `SQLiteConstraintException`) out of the domain package entirely.",
       "code": [
@@ -162,10 +162,10 @@
         "sync",
         "outbox"
       ],
-      "q": "Walk through your sync protocol: how does an idempotency key prevent duplicates on retry, and where does the outbox fit?",
+      "q": "How does an idempotency key prevent duplicates on retry? Where does the outbox fit in your sync protocol?",
       "shortAnswer": [
-        "The outbox is a queue of pending writes a worker drains. Each row carries a client sequence number for ordering and an idempotency key, so the server spots a replay.",
-        "An idempotency key names the *operation*, not the entity. The server stores key → result and returns it on a repeat, so a retry after an ambiguous timeout cannot duplicate.",
+        "The outbox is a queue of pending writes a worker drains. Each row carries client sequence number and idempotency key; the server spots a replay.",
+        "An idempotency key names the *operation*, not the entity. The server stores key, returns it on a repeat, so retry after ambiguous timeout cannot duplicate.",
         "A client-generated UUID names the *entity*; the idempotency key is what makes delivery at-least-once rather than at-most-once-or-twice."
       ],
       "answer": "#### The outbox\nWrites land in a local table flagged `pendingSync`, ordered by a monotonically increasing sequence. A WorkManager worker drains the queue with exponential backoff, and each row carries a **client sequence number** so the server can apply operations in the order the user made them — out-of-order apply is where most sync bugs hide.\n\n#### Idempotency keys\nEvery operation is sent with an **idempotency key** — a fresh random UUID generated once at write time and never regenerated on retry. The server stores `key → response` for a window (hours to days) and, on a request with the same key, returns the stored response instead of applying the mutation again. That is what makes delivery **at-least-once**: retries after timeouts, where the first request may actually have succeeded, become harmless. Contrast the **client-generated entity UUID**: it names the row, so a retried create becomes an upsert; the key names the operation and guards even non-entity mutations like 'increment counter'.\n\n#### Failure handling\nA definitive 4xx marks the row failed and surfaces a retry affordance; network and 5xx retry. A 409 means the server's version moved — fall to your conflict policy.\n\n#### Conflict policy\nSingle-writer rows: last-write-wins with a *server* clock. Multi-writer: field-level merge or a version vector. Deletions are tombstones, never hard deletes.",
@@ -212,10 +212,10 @@
         "invalidation",
         "data-layer"
       ],
-      "q": "What gets cached in your app, for how long, and what invalidates it? Walk through policy, not just where the cache lives.",
+      "q": "What gets cached in your app, for how long, and what invalidates it? What is the policy, not just where the cache lives?",
       "shortAnswer": [
-        "Cache at the layer that matches the data: an HTTP cache for raw responses, the database as the single source of truth, and in-memory only for hot, short-lived reads.",
-        "For user-generated data, prefer write-through invalidation over a TTL: a write updates the source of truth so readers re-emit, while a TTL can serve data you already have fresher.",
+        "Cache at the layer that matches data: HTTP cache for raw responses, the database as the single source of truth, in-memory for hot, short-lived reads.",
+        "For user-generated data, prefer write-through over TTL: a write updates the source of truth so readers re-emit, while a TTL can serve stale data.",
         "Define staleness per data type: freshness windows for feeds, conditional revalidation for profiles, and never-cache for anything carrying auth or PII."
       ],
       "answer": "#### Pick the cache that matches the data\nThe **HTTP cache** (OkHttp, sized and on-disk) holds raw responses you are not re-shaping — static content, images. It honors `Cache-Control` and `ETag` and costs one line to enable. The **database is the real cache** for app data: the UI always reads from Room, and a refresh is a write into it. **In-memory** caches (`StateFlow` results, Coil's memory cache) are for hot, short-lived reads and die with the process.\n\n#### Invalidation policy\nFor user-generated data, **write-through** beats TTL: the write updates the row, Room's `Flow` re-emits, and every screen is correct immediately. TTL is the default only for data you cannot invalidate — remote feeds. When you do use a TTL, pair it with revalidation (`ETag` / `If-None-Match`) so an unchanged body is not redownloaded; a 304 is nearly free.\n\n#### The rules that prevent bugs\nInvalidate the specific query, or keep a version key per dataset — never nuke the whole cache. Never HTTP-cache responses carrying authorization headers or PII. Never read through to the network from the UI; that is a repository's job. Track `lastSyncedAt` so the UI can show 'updated 2 h ago' honestly.",
@@ -262,10 +262,10 @@
         "service-locator",
         "manual-di"
       ],
-      "q": "Compare constructor injection with a service locator, and tell me why a global singleton isn't your dependency solution.",
+      "q": "Compare constructor injection with a service locator. Why is a global singleton not a dependency solution?",
       "shortAnswer": [
         "Constructor injection makes dependencies plain constructor parameters. The graph is readable, and a test passes fakes without touching the class.",
-        "A service locator is a global registry — `AppContainer.get<Analytics>()` — that any caller can reach. It hides what a class depends on, and tests hit the same global.",
+        "A service locator is a global registry — `AppContainer.get<Analytics>()` — any caller can reach; it hides what a class depends on.",
         "Global singletons carry every locator problem and add more: hidden state, no per-test reset, and construction-order traps."
       ],
       "answer": "#### Constructor injection\nDependencies arrive as constructor parameters: `class FeedViewModel(val repo: FeedRepository)`. The caller builds the object, so a test passes a fake repository and production passes the real one — no change inside `FeedViewModel`. The dependency graph is literally readable in the constructors.\n\n#### Service locator\nA globally reachable registry: `FeedRepository = locator[FeedRepository::class]`, or a plain `object AppGraph`. Callers fetch on demand, anywhere, so nothing *tells* you a class depends on the repository until it calls the locator. Tests cannot avoid the global either, and the locator becomes the thing every test secretly depends on. It is convenient, and it is how dependency relationships quietly rot.\n\n#### Why not singletons\nA Kotlin `object` or a `by lazy` global is the same disease with less ceremony: hidden dependencies, state that outlives tests, no way to build two instances (two API configurations, two scopes), and initialization-order traps.\n\n#### What the interviewer wants\nConstructor injection as the default, with the **composition root** — the one place that builds the graph by hand, with no framework — doing all the wiring.",
@@ -312,11 +312,11 @@
         "testing",
         "compile-errors"
       ],
-      "q": "What are the Hilt compile errors you actually hit, how do you fix them, and how do you replace a binding in a test?",
+      "q": "What Hilt compile errors do you hit? How do you fix them? How do you replace a binding in a test?",
       "shortAnswer": [
-        "The canonical error is `[Dagger/MissingBinding]` — a type cannot be provided. The fix: a missing `@Provides`/`@Binds`, a missing qualifier, or a class without an `@Inject` constructor.",
-        "Hilt also fails on unannotated entry points (no `@AndroidEntryPoint`), modules without `@InstallIn`, and `[Dagger/DuplicateBindings]` when two bindings claim the same key.",
-        "In tests, `@UninstallModules` plus `@TestInstallIn(replaces = ...)` swaps a real module for a fake, and `@BindValue` binds a double you constructed in the test."
+        "The error is `[Dagger/MissingBinding]` — type cannot be provided. Fix a missing `@Provides`/`@Binds`, qualifier, `@Inject` constructor.",
+        "Hilt fails: unannotated entry points (no `@AndroidEntryPoint`), modules without `@InstallIn`, and `[Dagger/DuplicateBindings]` when two bindings claim same key.",
+        "In tests, `@UninstallModules` removes a module and `@TestInstallIn(replaces = ...)` swaps it for a fake; `@BindValue` binds a test-built double."
       ],
       "answer": "#### The compile errors you will actually see\n- **`[Dagger/MissingBinding]`** — 'cannot be provided without an `@Provides`-annotated method'. Some type nobody binds is in the graph: add a `@Provides` or `@Binds`, or give the class's constructor `@Inject`. When the missing type takes arguments, chase them — the error names only the outer type.\n- **`[Dagger/DependencyCycle]`** — A needs B and B needs A. Break it by injecting `Provider<A>` or restructuring.\n- **`[Dagger/DuplicateBindings]`** — two bindings for the same type and qualifier. Fix with qualifiers or by dropping one.\n- A `@Module` without `@InstallIn` surfaces as bindings not found. Missing `@HiltAndroidApp` or `@AndroidEntryPoint` fails at build with a clear 'annotate the Application/component' message.\n\n#### Reaching the graph from Hilt-unowned code\nA `ContentProvider`, a `JobService` — anything Hilt cannot construct — gets an `@EntryPoint` interface, reached via `EntryPointAccessors.fromApplication(context, FooEntryPoint::class.java)`.\n\n#### Testing with replacement bindings\nSet `customTestRunner = HiltTestApplication`; `@UninstallModules(FooModule::class)` plus `@TestInstallIn(components = [...], replaces = [FooModule::class])` provides the fake, and `@BindValue` binds a double you built in the test. Remember `hiltRule.inject()` in `@Before`.",
       "code": [
@@ -367,9 +367,9 @@
         "hilt",
         "manual-di"
       ],
-      "q": "Koin, Hilt, or hand-rolled manual DI — how would you pick for a greenfield app, and what does the choice cost at team scale?",
+      "q": "Koin, Hilt, or hand-rolled DI: how do you pick for a greenfield app? What does the choice cost at team scale?",
       "shortAnswer": [
-        "Hilt verifies the graph at build time via KSP. You pay in build time, and it is Android-only — the right default for an Android-only team app.",
+        "Hilt verifies the graph at build time via KSP. You pay in build time, and it is Android-only — right default for an Android-only team app.",
         "Koin wires at runtime from a Kotlin DSL and works across KMP. Its annotation + KSP path wins back most of the compile-time safety.",
         "Manual DI is a container you write yourself: no dependencies, everything explicit. Nothing verifies the wiring and the plumbing repeats, so it caps out early."
       ],
@@ -469,9 +469,9 @@
       ],
       "q": "How do you model a plugin architecture — contributors added without touching core — using DI multibindings?",
       "shortAnswer": [
-        "Multibindings let many bindings register under one key: `@IntoSet` collects contributors into a `Set`, and `@IntoMap` with a key annotation collects them into a `Map`.",
+        "Multibindings let many bindings register under one key: `@IntoSet` collects into a `Set`; `@IntoMap` keyed into a `Map`.",
         "Each plugin module adds its contributor with a single binding, so core injects `Set<Contributor>` and iterates — plugins are additive and compile-time registered.",
-        "`@IntoSet` gives no order, so carry an explicit `order` or a sortable key. Test the host with a hand-built set, and replace contributors via test modules."
+        "`@IntoSet` gives no order, so carry `order` or sortable key. Test host with a hand-built set, replace contributors via test modules."
       ],
       "answer": "#### The shape\nDefine a contract — `interface RatingStrategy { fun apply(candidate: Candidate): Double }`. Core depends only on that interface; each feature module registers an implementation with `@Provides @IntoSet`. Core injects `Set<RatingStrategy>` and iterates. Adding a plugin is one new binding in one module: no edit to core, no runtime registration, no reflection. That is the whole plugin architecture — discovery at compile time instead of runtime.\n\n#### Map multibindings\nWhen contributors are addressed by key, use `@IntoMap` with a `@MapKey` annotation — Hilt supports string, int, long, class, and enum keys — and inject `Map<FeatureKey, Contributor>`. Keyed access is how a host dispatches: `handlers[event.type]`.\n\n#### The subtleties\n- **Order**: `@IntoSet` makes no promise about iteration order. If order matters — grading contributors applied in sequence — carry `order: Int` and sort at consumption.\n- **Empty set**: an injected `Set<...>` defaults to empty, so core works with zero plugins; don't inject a nullable collection.\n- **Tests**: build the host with an explicit set, or replace one contributor with `@TestInstallIn(replaces = ...)`; `@BindValueIntoSet` binds a test double into a set.\n\n#### When it is overkill\nMultibindings pay off when plugins come from different teams or modules. For five fixed contributors, an explicit list in the composition root is clearer.",
       "code": [
