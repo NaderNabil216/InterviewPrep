@@ -15,7 +15,7 @@
         "task",
         "intent"
       ],
-      "q": "What are launch modes and task affinity? When does each matter?",
+      "q": "What are launch modes and task affinity, when do they matter?",
       "shortAnswer": [
         "`standard` makes a new instance every time. `singleTop` reuses the instance if it is already **at the top** and delivers `onNewIntent`. `singleTask` keeps one instance per task and clears everything above it. `singleInstance` sits alone in its own task.",
         "`singleTop` is what you use routinely: notifications, deep links, search. `singleTask` and `singleInstance` are rare and usually a smell in single-activity apps.",
@@ -59,9 +59,9 @@
         "privacy",
         "photo-picker"
       ],
-      "q": "Walk through the runtime permission flow and the modern media-access story.",
+      "q": "What is the runtime permission flow? What is the modern media-access story?",
       "shortAnswer": [
-        "Request at the point of need, use `ActivityResultContracts.RequestPermission`, and explain why first if denied once. Handle three outcomes: granted, denied, and permanently denied (send them to Settings).",
+        "Request at the point of need via `ActivityResultContracts.RequestPermission`, and explain why first if denied once. Three outcomes: granted, denied, permanently denied (send to Settings).",
         "For media, the modern answer is usually **no permission at all** — use the **Photo Picker**, which needs none and gives the user control.",
         "Android 14+ supports **partial** media access ('Select photos'), so your UI must handle 'the user granted three images', not just granted or denied."
       ],
@@ -108,10 +108,10 @@
         "app-links",
         "security"
       ],
-      "q": "How do deep links and App Links work, and how do you stop another app hijacking yours?",
+      "q": "How do deep links and App Links work? How do you stop another app hijacking yours?",
       "shortAnswer": [
-        "A **deep link** is any intent filter on a scheme like `myapp://`. Any app can register the same scheme, so the user may see a chooser dialog, and it is not secure for anything sensitive.",
-        "An **Android App Link** is an `https` deep link **verified** by an `assetlinks.json` file on your domain. Verified links open your app directly, and no other app can claim them.",
+        "A **deep link** is any intent filter on a scheme like `myapp://`; any app can register the same scheme — not secure for anything sensitive.",
+        "An **Android App Link** is an `https` deep link **verified** by `assetlinks.json` — opens your app directly; no other app can claim it.",
         "Always verify with `android:autoVerify=\"true\"`, and always treat deep-link parameters as untrusted input."
       ],
       "answer": "#### Deep link vs App Link\n- **Custom scheme** (`myapp://item/42`): trivial to set up, and **any** app can declare the same filter. There's no ownership — unsuitable for anything sensitive.\n- **App Link** (`https://example.com/item/42` with `android:autoVerify=\"true\"`): at install time Android fetches `https://example.com/.well-known/assetlinks.json` and checks it lists your package name and signing-certificate fingerprint. On a match, it opens your app **with no chooser dialog**; no other app can intercept it.\n\n#### assetlinks.json\nThe `assetlinks.json` lists your `package_name` and `sha256_cert_fingerprints`; it must be served over HTTPS, with no redirects, as `application/json`. With **Play App Signing**, use Play's signing fingerprint, not your upload key — the most common silent failure. Debug with `adb shell pm get-app-links` and `pm verify-app-links`.\n\n#### Security — treat the payload as hostile\nA deep link is an attacker-controllable entry point:\n- **Validate and sanitize every parameter.** `myapp://open?url=…` feeding a WebView is a classic open-redirect / XSS vector.\n- **Never perform a privileged action from a link** — no `myapp://delete-account`, no auth-token via URL.\n- Re-check auth state on arrival; a link can land the user where they shouldn't be.\n- No secrets in link parameters — they end up in logs, browser history, and referrers.\n- Keep the receiving component's `exported` surface minimal.\n\n#### Process death interaction\nA deep link often *starts* your process — the target screen must be reconstructible from the link parameters alone, as with surviving process death.",
@@ -158,11 +158,11 @@
         "fragment",
         "basics"
       ],
-      "q": "Walk through the Activity and Fragment lifecycles. What belongs in each callback?",
+      "q": "Activity and Fragment lifecycles — what belongs in each callback?",
       "shortAnswer": [
-        "Activity: `onCreate` → `onStart` → `onResume` → (running) → `onPause` → `onStop` → `onDestroy`. The screen is visible between `onStart` and `onStop`, and interactive between `onResume` and `onPause`.",
-        "Pair acquisition and release symmetrically: register in `onStart`, unregister in `onStop`; start the camera or sensors in `onResume`, stop them in `onPause`.",
-        "Fragments add a **separate view lifecycle**: the Fragment can outlive its View on the back stack. That is why you use `viewLifecycleOwner` for anything view-related."
+        "Activity: `onCreate` → `onStart` → `onResume` → (running) → `onPause` → `onStop` → `onDestroy`. Visible between `onStart`/`onStop`, interactive between `onResume`/`onPause`.",
+        "Pair acquisition and release: register in `onStart`, unregister in `onStop`; start the camera or sensors in `onResume`, stop them in `onPause`.",
+        "Fragments add a **separate view lifecycle**: the Fragment outlives its View on the back stack — use `viewLifecycleOwner` for anything view-related."
       ],
       "answer": "#### Activity\n| Callback | Meaning | Put here |\n|---|---|---|\n| `onCreate` | Created once per instance | Inflate/`setContent`, wire ViewModels, restore state |\n| `onStart` | Becoming visible | Register lifecycle-scoped observers, broadcast receivers |\n| `onResume` | Interactive, in foreground | Start camera, sensors, animations, exclusive resources |\n| `onPause` | Losing focus (may still be visible) | Release exclusive resources; keep it **fast** — the next activity waits |\n| `onStop` | No longer visible | Unregister receivers, stop heavy updates, persist data |\n| `onDestroy` | Finishing or config change | Final cleanup; check `isChangingConfigurations` |\n\n`onSaveInstanceState` runs before the activity becomes killable (after `onPause`, around `onStop`) — **not** a lifecycle event, but restoring after unexpected death.\n\n#### Multi-window changes things\nSince split-screen, an activity can be **visible but not focused**, so `onPause` no longer means \"hidden\". Stopping rendering there freezes your app in split-screen — use `onStop` for \"actually hidden\".\n\n#### Fragment: two lifecycles\nFragment instance: `onAttach` → `onCreate` → … → `onDestroy` → `onDetach`.\nFragment **view**: `onCreateView` → `onViewCreated` → `onDestroyView`.\n\nOn the back stack, the **view is destroyed but the instance survives**. Observing with `this` outlives the view — returning gives a second observer and a leaked reference. Hence:\n- `viewLifecycleOwner` for anything touching views,\n- null out `ViewBinding` in `onDestroyView`.\n\n#### The modern framing\nIn a Compose single-activity app, most of this collapses: `DisposableEffect` handles enter/leave composition, `collectAsStateWithLifecycle` lifecycle-aware collection. Interviewers still ask — process behaviour hasn't changed.",
       "code": [
