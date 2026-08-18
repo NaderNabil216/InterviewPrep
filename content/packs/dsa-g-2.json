@@ -344,7 +344,7 @@
         }
       ],
       "sampleCall": "kClosest(arrayOf(intArrayOf(3,3), intArrayOf(-2,4)), 1).map { it.toList() }.toString()",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.30"
     }
   ]
 }

@@ -438,7 +438,7 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.17",
+      "updatedIn": "2026.08.30",
       "sampleCall": "run {\n    val a = ListNode(1); val b = ListNode(2); val c = ListNode(3)\n    a.next = b; b.next = c; c.next = b          // cycle: b is the entry\n    val rev = reverse(ListNode(1).apply { next = ListNode(2).apply { next = ListNode(3) } })\n    val vals = buildList { var n = rev; while (n != null) { add(n.v); n = n.next } }\n    \"$vals / cycleAt=${detectCycle(a)?.v}\"\n}"
     }
   ]

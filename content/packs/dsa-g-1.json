@@ -199,7 +199,7 @@
         }
       ],
       "sampleCall": "lengthOfLongestSubstringKDistinct(\"eceba\", 2)",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.30"
     },
     {
       "id": "ds-0024",
@@ -247,7 +247,7 @@
         }
       ],
       "sampleCall": "subarraySum(intArrayOf(1, 1, 1), 2)",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.30"
     },
     {
       "id": "ds-0025",

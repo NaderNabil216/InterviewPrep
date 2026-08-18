@@ -289,7 +289,7 @@
         }
       ],
       "sampleCall": "findRedundantConnection(arrayOf(intArrayOf(1,2), intArrayOf(1,3), intArrayOf(2,3))).contentToString()",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.30"
     },
     {
       "id": "ds-0047",
