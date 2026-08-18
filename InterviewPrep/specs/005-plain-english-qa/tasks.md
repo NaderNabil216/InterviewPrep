@@ -672,7 +672,9 @@ ships **no release at all**: no edit, no stamp, no version bump (its items keep 
 Word-bound load: 7/180 bullets over 25 words on the plain-words tier (R-006); questions run 13–68
 chars, median 45 — expect a mixed verdict distribution (R-011).
 
-- [ ] T097 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **6 items** (`ds-0001`–`ds-0006`) in `content/packs/dsa.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+- [X] T097 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **6 items** (`ds-0001`–`ds-0006`) in `content/packs/dsa.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+    **Record (2026-08-18)**: 6 items, 0 edits this batch. Validator exit 0, 0 warnings. Scope check: 0 diffs, 0 failures (ids 6/6, identical to HEAD — nothing to touch). Screens: 0 collisions, 0 near-matches ≥ 24 shared chars. Per-item verdicts (plain-words/short-sentences half only, R-011; task form preserved throughout, V17): ds-0001 — **already simple** (delivered by T003 reference batch: q reviewed no-change, B1 reworded "storing each value's index"; carried forward unchanged here). ds-0002 — **already simple**: task title + bullets already plain, technical terms verbatim (`prev >= left`, Big-O), no filler, all ≤22 words. ds-0003 — **already simple**: "Design an LRU cache…" task form intact, bullets already plain and ≤25 words, no filler. ds-0004 — **already simple**: task form intact, bullets already plain (operator names verbatim), ≤23 words, no filler. ds-0005 — **already simple**: task form intact, bullets already plain, ≤25 words, no filler. ds-0006 — **already simple**: task form intact, bullets already plain, ≤25 words, no filler.
 
 - [ ] T098 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **8 items** (`ds-0007`–`ds-0014`) in `content/packs/dsa-b.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
 
