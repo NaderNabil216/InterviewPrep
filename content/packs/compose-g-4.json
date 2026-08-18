@@ -14,7 +14,7 @@
         "layout",
         "constraints"
       ],
-      "q": "Explain `Constraints`. Why is my child with `Modifier.size(48.dp)` rendering at 200 dp?",
+      "q": "What are `Constraints`? Why is a child with `Modifier.size(48.dp)` rendering at 200 dp?",
       "shortAnswer": [
         "`Constraints` carries min/max width and height from parent to child down the tree.",
         "`size` asks for a size, but the parent's constraints still clamp it. `requiredSize` overrides them.",
@@ -50,7 +50,7 @@
         "layout",
         "intrinsics"
       ],
-      "q": "Why does measuring a child twice throw, and what do intrinsics really cost?",
+      "q": "Why does measuring a child twice throw? And what do intrinsics cost?",
       "shortAnswer": [
         "One measure per child keeps Compose layout O(n) — unlike nested `LinearLayout` weights, which could blow up exponentially.",
         "Measuring the same `Measurable` twice in one pass throws at runtime.",
@@ -86,7 +86,7 @@
         "subcompose",
         "performance"
       ],
-      "q": "What does `SubcomposeLayout` actually cost, and when is `BoxWithConstraints` the wrong answer?",
+      "q": "What does `SubcomposeLayout` cost? And when is `BoxWithConstraints` the wrong answer?",
       "shortAnswer": [
         "It defers composition into the layout phase. A lazy list can't prefetch that content, and state reads there count as layout.",
         "`BoxWithConstraints` is a `SubcomposeLayout`, so it's a real jank source inside a list item.",
@@ -122,7 +122,7 @@
         "lookahead",
         "shared-element"
       ],
-      "q": "How do `LookaheadScope` and shared-element transitions actually work?",
+      "q": "How do `LookaheadScope` and shared-element transitions work?",
       "shortAnswer": [
         "Lookahead first measures and places the final layout in a pre-pass. Then the real pass animates current values toward those targets.",
         "`SharedTransitionLayout` with `sharedElement`/`sharedBounds` and matching keys inside an `AnimatedVisibilityScope` drives the shared animation.",
@@ -158,7 +158,7 @@
         "lists",
         "lazy"
       ],
-      "q": "`LazyColumn` vs `Column(Modifier.verticalScroll())` — when is the lazy one the wrong choice?",
+      "q": "`LazyColumn` vs `Column(Modifier.verticalScroll())` — when is lazy the wrong choice?",
       "shortAnswer": [
         "Lazy composes only the visible window plus a reuse pool, so it wins for long or unbounded lists.",
         "For a short fixed screen it adds machinery and loses simple `weight()` and intrinsics.",
@@ -195,7 +195,7 @@
         "reuse",
         "prefetch"
       ],
-      "q": "How do item reuse and prefetch work inside a lazy layout?",
+      "q": "How do item reuse and prefetch work in a lazy layout?",
       "shortAnswer": [
         "Slots come from a pool keyed by `contentType`. A reused slot keeps its node structure but drops its state.",
         "In a mixed feed, `contentType` turns an expensive rebuild into a cheap rebind.",
@@ -231,10 +231,10 @@
         "nested-scroll",
         "toolbar"
       ],
-      "q": "Implement a collapsing toolbar with `NestedScrollConnection`.",
+      "q": "Collapsing toolbar with `NestedScrollConnection` — how?",
       "shortAnswer": [
         "Override `onPreScroll`/`onPostScroll`/`onPreFling`/`onPostFling` and return the `Offset`/`Velocity` you consumed.",
-        "The child gets what's left — sign conventions are what trip people up.",
+        "The child gets what's left — sign conventions are easy to get wrong.",
         "Keep the offset in a `Float` read inside a `graphicsLayer`/`layout` lambda, so the header never recomposes per frame."
       ],
       "answer": "A collapsing toolbar is a nested-scroll consumer. `Modifier.nestedScroll(connection)` plugs your `NestedScrollConnection` into the scroll chain. The list scrolls and offers its deltas through the callbacks: `onPreScroll` runs before the child consumes, `onPostScroll` after. Your `connection` returns the `Offset` it consumed, and the remainder flows on to the child. A positive vertical delta as the finger moves down means the list would scroll down; to collapse the header on a downward scroll you consume the delta before it reaches the list, driving the header offset and letting the list stay put until the header is gone.\n\n#### The details that matter\n`onPreFling`/`onPostFling` handle the velocity handoff — consumed velocity stops the list; what you return is passed on. Sign conventions flip based on direction; the canonical implementation clamps the offset to the header height and applies `FlingBehavior` math to settle it.\n\n#### Performance\nThe offset should live in a plain `Float` read inside `graphicsLayer { translationY = offset }` or a `layout` lambda — the header repositions without recomposing, matching the deferred-read pattern. The structural note: two nested same-direction scrollables throw instead of silently dividing the scroll.",
@@ -267,7 +267,7 @@
         "nested-scroll",
         "interop"
       ],
-      "q": "How does nested scroll work across the Compose/View boundary?",
+      "q": "How does nested scroll cross the Compose/View boundary?",
       "shortAnswer": [
         "`rememberNestedScrollInteropConnection()` lets a Compose scrollable act as a nested-scroll child of a View parent like `CoordinatorLayout`.",
         "The reverse — a scrolling View inside a Compose scrollable — has no bridge. The View must enable nested scrolling itself.",
@@ -303,7 +303,7 @@
         "lazylayout",
         "virtualization"
       ],
-      "q": "When would you drop down to `LazyLayout`?",
+      "q": "When would you use `LazyLayout`?",
       "shortAnswer": [
         "`LazyLayout` plus a `LazyLayoutItemProvider` is the engine under `LazyColumn`, `LazyGrid`, and Pager.",
         "Drop down to it when the visible window isn't a simple linear range — an infinite calendar, a timeline, a tiled canvas.",
@@ -339,7 +339,7 @@
         "text",
         "font-scaling"
       ],
-      "q": "Why `sp` for text and `dp` for everything else — and what changed with non-linear font scaling?",
+      "q": "Why `sp` for text and `dp` for everything else? And what changed with non-linear font scaling?",
       "shortAnswer": [
         "`sp` follows the user's font-size preference; `dp` doesn't.",
         "Since Android 14 the sp-to-px curve is non-linear, so `sp * fontScale` no longer gives the right size.",
