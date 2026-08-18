@@ -722,7 +722,9 @@ chars, median 45 — expect a mixed verdict distribution (R-011).
 
 ### System-Design — 19 items · 5 packs · release `2026.08.31` · gate-10 window ≤ **2026-09-08**
 
-- [ ] T108 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`sd-0000`–`sd-0002`) in `content/packs/system-design.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+- [X] T108 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`sd-0000`–`sd-0002`) in `content/packs/system-design.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+    **Record (2026-08-18)**: 3 items, 0 edits this batch. Validator exit 0, 0 warnings. Scope check: 0 diffs, 0 failures (ids 3/3, identical to HEAD). Screens: 0 collisions; **1 pre-existing near-match (`sd-0001`/`sd-0002`, sharing "Design an offline-capable ")** — neither item touched, not batch-introduced. Per-item verdicts (scenario form preserved throughout, V17): sd-0000 — **already simple**: delivered by T003 reference batch (all fields "no change needed", V18); carried forward unchanged here (q 66 ≤ 66; bullets 22/23/24, all ≤25). sd-0001 — **already simple**: scenario form intact, bullets already plain, ≤25 words, no filler. sd-0002 — **already simple**: scenario form intact, bullets already plain, ≤24 words, no filler.
 
 - [ ] T109 [P] [US3] Batch: rewrite `q` + `shortAnswer` for both **2 items** (`sd-0003`–`sd-0004`) in `content/packs/system-design-b.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
 
