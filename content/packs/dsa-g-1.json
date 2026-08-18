@@ -168,7 +168,7 @@
       "shortAnswer": [
         "Find the length of the longest substring containing at most `k` distinct characters.",
         "Grow the right edge, adding to a frequency map; while the distinct count exceeds `k`, shrink `left` until the invariant holds.",
-        "This window shrinks on an invariant, not a schedule — the template for every 'at most' question. Each char moves once: O(n) time, O(k) space."
+        "This shrinks on an invariant, not a schedule — the template for any 'at most' question. Each char moves once: O(n) time, O(k) space."
       ],
       "prompt": "Given a string and an integer `k`, return the length of the longest substring that contains at most `k` distinct characters.\n\nWhere the fixed window shrinks on a schedule, this one shrinks on an invariant: the window is valid only while the number of distinct chars is ≤ k. That makes it the template for every \"at most\" window question.",
       "hints": [
@@ -215,7 +215,7 @@
       "q": "Subarray Sum Equals K — count subarrays summing to a target",
       "shortAnswer": [
         "Count contiguous subarrays whose sum equals a target `k`, in an array that may contain negatives.",
-        "A range sum is a difference of prefix sums, so sweep once, counting how many earlier prefixes equal `prefix - k`, seeded with `{0: 1}`.",
+        "A range sum is a difference of prefix sums: sweep, counting how many earlier prefixes equal `prefix - k`, seeded with `{0: 1}`.",
         "The gotcha is negatives: a sliding window fails because sums aren't monotonic. Time O(n), space O(n) — contrast with O(n²) brute force."
       ],
       "prompt": "Given an `IntArray` (can contain negatives) and a target `k`, return the *number* of contiguous subarrays whose sum equals `k`.\n\nSubarray sum is range sum, and range sum is a difference of prefix sums. The trick that separates juniors here: instead of checking every `(i, j)` pair of prefix sums, count how many earlier prefixes equal `prefix - k` as you sweep once. The presence of negatives means a sliding window does *not* work.",
