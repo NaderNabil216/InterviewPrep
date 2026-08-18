@@ -496,6 +496,8 @@ question (`ar-0001`, 215 chars — the reference batch already worked the shape)
 
 - [ ] T069 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`ar-0005`–`ar-0007`) in `content/packs/architecture-b.json`, run the full batch gate, record the outcome inline under this task.
 
+    **Record (2026-08-18)**: 3 items. Validator exit 0, 0 warnings. Scope check 0 failures (ids 3/3). Screens: 0 collisions. Read-through vs `fef2e12`: ar-0005 — q unchanged (78 ≤ 78); StateFlow/LiveData-replay bug + pending-effect-list + SharedFlow(replay=0) claims kept (B0 28→23, restructured tail: `— so you navigate twice or show the snackbar again`→`— the snackbar shows twice or navigation fires`). ar-0006 — q 61→54 (`Defend both sides.`→`Both sides?`); both-sides arguments kept (B0 26→25 `one`/`several` dropped; B1 27→25 `rightly`/`a` dropped; B2 26→25 `them` dropped). ar-0007 — q unchanged (88 ≤ 88); no-rollback + flags/rollout/kill-switch + vitals claims kept (B2 19→18, `actually` dropped).
+
 - [ ] T070 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`ar-0008`–`ar-0017`) in `content/packs/architecture-g-1.json`, run the full batch gate, record the outcome inline under this task.
 
 - [ ] T071 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`ar-0018`–`ar-0027`) in `content/packs/architecture-g-2.json`, run the full batch gate, record the outcome inline under this task.
