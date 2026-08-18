@@ -14,7 +14,7 @@
         "internals",
         "slot-table"
       ],
-      "q": "What actually happens during recomposition, and what is the slot table?",
+      "q": "What happens during recomposition? And what is the slot table?",
       "shortAnswer": [
         "Composables don't return UI. They write into the slot table — a gap buffer the Composer reads and updates as it walks the tree.",
         "Each call site gets a stable identity from its place in the source (positional memoization), so `remember` knows which slot belongs to it.",
@@ -63,10 +63,10 @@
         "performance",
         "strong-skipping"
       ],
-      "q": "What makes a composable skippable, and what changed with strong skipping mode?",
+      "q": "What makes a composable skippable? And what changed with strong skipping mode?",
       "shortAnswer": [
         "A composable is skippable when all its parameters are **stable** and unchanged since the last composition — Compose then reuses the old result.",
-        "Stable means Compose can detect changes and `equals` is consistent. Primitives, `String`, function types, and `@Immutable`/`@Stable` types qualify; `List` doesn't, because it could be a `MutableList`.",
+        "Stable: Compose detects changes, `equals` is consistent. Primitives, `String`, `@Immutable`/`@Stable` qualify; `List` doesn't — maybe a `MutableList`.",
         "Strong skipping (default since Compose 1.7) compares unstable parameters by *instance* equality and auto-memoizes lambdas, dropping most manual `remember` boilerplate."
       ],
       "answer": "#### The skipping rule\nAt each call the compiler compares parameters against the previous composition. If every parameter is stable and unchanged, the call is skipped; one unstable parameter historically made the whole composable non-skippable, so it re-ran on every parent recomposition.\n\n#### What is stable\nPrimitives, `String`, enums, function types; classes whose public properties are all `val` of stable types; anything annotated `@Immutable` (never changes) or `@Stable` (mutations observable by Compose, e.g. backed by `mutableStateOf`); and `State<T>`. Not stable: `List`, `Map`, `Set` — read-only *interfaces*, not immutable types — classes with `var` properties of unstable types, and classes from modules not compiled with the Compose compiler, a common cause when your domain model lives in a pure-Kotlin module.\n\nFixes: `kotlinx.collections.immutable`'s `ImmutableList`/`PersistentList`, `@Immutable` on data holders, or a stability configuration file.\n\n#### Strong skipping mode\nDefault since Compose compiler 1.7, it made composables with unstable parameters skippable by comparing those parameters with **instance equality** (`===`), and auto-remembers lambdas so `{ viewModel.onClick(item.id) }` no longer breaks skipping. The underlying model still matters: recreate your unstable `List` every emission and instance equality fails — stability work is now about *not reallocating* rather than annotations.\n\n#### Measuring, not guessing\nCompose compiler metrics reports (`reportsDestination`) list exactly which composables are skippable and which params are unstable; Layout Inspector shows live recomposition counts; composition tracing puts composable names on the Perfetto timeline.",
@@ -112,7 +112,7 @@
         "remember",
         "saveable"
       ],
-      "q": "`remember` vs `rememberSaveable` vs ViewModel — where does each piece of state belong?",
+      "q": "`remember` vs `rememberSaveable` vs ViewModel — where does each one belong?",
       "shortAnswer": [
         "`remember` survives recomposition only — values are lost on rotation and process death.",
         "`rememberSaveable` also survives rotation and process death: values go in the saved-state Bundle, so they must be Bundle-able or use a `Saver`.",
@@ -161,7 +161,7 @@
         "launchedeffect",
         "derivedstateof"
       ],
-      "q": "Walk through the side-effect APIs. When is each one correct?",
+      "q": "What are the side-effect APIs? When is each one correct?",
       "shortAnswer": [
         "`LaunchedEffect(key)` runs coroutine work tied to the composition. Changing the key cancels the old coroutine and starts a new one.",
         "`DisposableEffect(key)` is for work that needs cleanup, like listeners. `SideEffect { }` pushes Compose state into non-Compose objects after each successful composition.",
@@ -205,7 +205,7 @@
         "performance",
         "layout"
       ],
-      "q": "Explain the three Compose phases and how deferred state reads improve performance.",
+      "q": "What are the three Compose phases? How do deferred state reads help performance?",
       "shortAnswer": [
         "The three phases: Composition (what to show), Layout (measure and place), Drawing (render). A frame may run only some of them.",
         "A state value read during composition recomposes when it changes. Read only in a layout or draw lambda, it changes without any recomposition.",
@@ -254,10 +254,10 @@
         "nav",
         "2026"
       ],
-      "q": "What is Navigation 3 and how does it differ from Navigation Compose (Nav2)?",
+      "q": "What is Navigation 3? How does it differ from Navigation Compose (Nav2)?",
       "shortAnswer": [
         "Nav3 makes the back stack **observable state that you own** — a `SnapshotStateList` of keys — instead of hiding it inside a `NavController`.",
-        "The whole stack is readable, so one layout can render several destinations at once. Adaptive list-detail becomes natural, not bolted on.",
+        "The whole stack is readable, so one layout can render several destinations at once. Adaptive list-detail becomes natural, not an add-on.",
         "Nav3 went stable in Nov 2025. The Apr 2026 release shipped Nav3 1.1.1 with `navigationevent` 1.1.0 for predictive back."
       ],
       "answer": "#### The core change\nIn Nav2 the back stack lives inside `NavController` and you manipulate it through commands (`navigate`, `popBackStack`). Nav3 inverts this: **you** hold the back stack as ordinary Compose state — `val backStack = rememberNavBackStack(HomeKey)` passed to `NavDisplay(backStack, onBack = { backStack.removeLastOrNull() }, entryProvider = …)`. Navigating is `backStack.add(DetailKey(id))`. Popping is `backStack.removeLastOrNull()`. There is no separate navigation DSL state to keep in sync with app state.\n\n#### What this unlocks\n- **Adaptive layouts.** A scene strategy can read the last *two* entries and render them side by side on a wide screen, collapsing to one on a phone. In Nav2 this needed a parallel mechanism.\n- **Type-safe keys** — destinations are data classes/objects, so arguments are just constructor parameters. No string routes, no manual argument encoding.\n- **Testability** — the back stack is a list; assert on it directly.\n- **Custom transitions and predictive back** via `navigationevent`.\n\n#### Migration reality\nNav2 remains supported and is still the majority of production code. In an interview, the strong answer is: know the model difference, know that Nav3 is stable, and be able to say *why* the ownership inversion matters (adaptive UI + state consistency) rather than just naming the API.\n\n#### Scoping\nEach entry can own a `ViewModel` scoped to it. The Nav3 model makes the scope explicit rather than tied to an opaque `NavBackStackEntry` lookup.",

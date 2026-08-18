@@ -259,7 +259,9 @@ fields; the first track of the feature ships.
 Heavily-trafficked qa track, front-loaded so its release ships early while the calendar has slack
 (R-013). Word-bound load: only 4/225 bullets over 25 words (R-006) — most work is sentence-splitting.
 
-- [ ] T020 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **6 items** (`cmp-0001`–`cmp-0006`) in `content/packs/compose-a.json`, run the full batch gate, record the outcome inline under this task.
+- [X] T020 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **6 items** (`cmp-0001`–`cmp-0006`) in `content/packs/compose-a.json`, run the full batch gate, record the outcome inline under this task.
+
+    **Record (2026-08-18)**: 6 items. Validator exit 0, 0 new warnings. Scope check 0 failures (ids 6/6). Screens: 0 collisions, 0 new near-duplicates. Read-through vs `fef2e12`: cmp-0001 — q 71→62 (`actually` dropped, two-part kept); B0 slot-table gap-buffer claim kept, B1 positional-memoization kept, B2 out-of-order/parallel/discarded runs kept. cmp-0002 — q 78→78 (two-part split); B1 `function types` trimmed to hit 25 (Stable: detect+`equals` consistent; primitives/`String`/`@Immutable`/`@Stable` qualify; `List` could be a `MutableList`), B2 strong-skipping 1.7 + instance equality + auto-memoization claims kept. cmp-0003 — q 86→75 (`each one`); all three survival claims + Bundle/Saver kept. cmp-0004 — q 60→56 (`Walk through` → instruction-free); all four API claims + `SideEffect` after-successful-composition kept. cmp-0005 — q 82→80 (V9: first draft 83 > 82 — reworded to `help performance`); phases claim + deferred-read/no-recomposition + lambda-modifier claims kept. cmp-0006 — q 75→72 (`And` dropped, two-part kept); observable back stack/`SnapshotStateList`/whole-stack-readable + Nov 2025 stable + Apr 2026 Nav3 1.1.1/`navigationevent` 1.1.0 claims kept; `bolted on` → `add-on`. No exceptions. Committed.
 
 - [ ] T021 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for both **2 items** (`cmp-0007`–`cmp-0008`) in `content/packs/compose-b.json`, run the full batch gate, record the outcome inline under this task.
 
