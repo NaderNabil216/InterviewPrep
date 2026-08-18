@@ -17,8 +17,8 @@
       "q": "Current Android stack — version matrix (Aug 2026)",
       "shortAnswer": [
         "One-pager of current versions: Kotlin, AGP, Compose, Navigation 3, and Android Studio.",
-        "Covers Play policy dates you must quote: target API 36 by 2026-08-31, 16 KB pages by 2027-02-01.",
-        "Reach for it when you need current numbers or Multiplatform status in an interview."
+        "Covers Play policy dates to quote: target API 36 by 2026-08-31, 16 KB pages by 2027-02-01.",
+        "Use it in an interview when the topic is current numbers or Multiplatform status."
       ],
       "answer": "Numbers interviewers expect a current candidate to know roughly. Verified 2026-08-07.\n\n#### Language & build\n- **Kotlin 2.4.10** stable (2.4.20-RC, Aug 2026). The 2.3 line stabilized nested type aliases, explicit backing fields, an unused-return-value checker, and data-flow-based exhaustiveness for `when`. K2 is long since the only compiler.\n- **AGP 9.3.0** (Jul 2026). AGP 9.x **applies the Kotlin plugin itself** — you no longer add `org.jetbrains.kotlin.android` to module build files. AGP 9.0 (Jan 2026) was the breaking migration.\n- **Android Studio Quail 3** (2026.1.3) stable line.\n- **KSP2** is the annotation-processing path; kapt is legacy and blocks build speed.\n\n#### UI\n- **Compose BOM 2026.06.01**, compose core **1.11.4**.\n- **Navigation 3** is stable (1.1.0 stable Apr 2026, 1.1.1 patch Apr 2026; 1.2 in alpha). Back stack is plain observable state you own.\n- **Material 3 Expressive** is the current design direction.\n- **compose-material3-adaptive 1.1+** adds predictive back and pane expansion for list-detail.\n\n#### Platform\n- **Android 16** and **Android 17** are both released; Android 17 QPR betas are in flight.\n- Android 17 highlights: **local network access blocked by default** (new `ACCESS_LOCAL_NETWORK` permission), tighter background-audio restrictions.\n\n#### Play policy — dates that matter\n- **2026-08-31**: new apps and updates must target **API 36** (Android 16). Existing apps must target at least API 35 to stay listed. Extension available to **2026-11-01**.\n- **2027-02-01**: app updates without **16 KB page size** support can no longer be released. (New apps/updates targeting Android 15+ have needed it since 2025-11-01.)\n\n#### Multiplatform\n- **Compose Multiplatform for iOS is stable**; CMP **1.11** line stable, 1.12 in beta.\n- Room, DataStore, ViewModel, Lifecycle, and Paging are KMP-ready.\n- Kotlin/Native runs the modern GC — the old frozen-object memory model is gone.",
       "refs": [
@@ -66,7 +66,7 @@
       "shortAnswer": [
         "Quick reference for `Dispatchers`, `coroutineScope` versus `supervisorScope`, and `async`/`await` behavior.",
         "Flow section: `StateFlow` versus `SharedFlow`, `flowOn`, `stateIn`, and `flatMapLatest` for search-as-you-type.",
-        "Reach for it when cancellation semantics, lifecycle-aware collection, or `runTest` testing come up."
+        "Use it when cancellation semantics, lifecycle-aware collection, or `runTest` testing come up."
       ],
       "answer": "#### Dispatchers\n- `Main` — UI thread. `Main.immediate` skips re-dispatch if already on it.\n- `Default` — CPU work, pool sized to core count.\n- `IO` — blocking IO, elastic up to 64 threads (shares threads with Default).\n- `Unconfined` — starts in the caller's thread, resumes wherever; test/edge use only.\n\n#### Scope & job rules\n- `coroutineScope { }` — suspends until children finish; a child failure cancels siblings and rethrows.\n- `supervisorScope { }` — a child failure does **not** cancel siblings.\n- `SupervisorJob()` in a scope's context does the same for scope-level children.\n- Cancelling a parent cancels all children. Cancelling a child does not affect the parent (with SupervisorJob) or cancels it (with regular Job).\n\n#### async / await\n- `async` starts immediately (`CoroutineStart.LAZY` to defer), returns `Deferred`.\n- Exceptions from `async` surface at `await()` — but with a regular `Job` they *also* propagate to the parent immediately.\n- `withContext` switches dispatcher and returns a value; not a concurrency primitive.\n\n#### Cancellation\n- Cooperative: only suspension points check for it. Tight CPU loops need `ensureActive()` or `yield()`.\n- `CancellationException` is normal control flow — never swallow it in a broad `catch (e: Exception)`; rethrow it.\n- Cleanup that suspends must run in `withContext(NonCancellable)`.\n\n#### Flow essentials\n- Cold by default: the producer block runs per collector.\n- `flowOn(dispatcher)` changes the **upstream** context only.\n- `StateFlow` — always has a value, conflated, no replay config, distinct-until-changed built in.\n- `SharedFlow` — configurable `replay`, `extraBufferCapacity`, `onBufferOverflow`; no initial value.\n- `stateIn(scope, SharingStarted.WhileSubscribed(5_000), initial)` — the 5 s keeps the upstream alive across configuration changes but tears it down when the user really leaves.\n- `flatMapLatest` cancels the previous inner flow (search-as-you-type); `flatMapMerge` runs them concurrently; `flatMapConcat` serializes.\n\n#### Collecting on Android\n- `viewLifecycleOwner.lifecycleScope.launch { repeatOnLifecycle(STARTED) { flow.collect { } } }` in Views.\n- `collectAsStateWithLifecycle()` in Compose — the lifecycle-aware default; plain `collectAsState()` keeps collecting in the background.\n\n#### Testing\n- `runTest { }` with a `TestDispatcher`; virtual time skips delays.\n- `advanceUntilIdle()`, `runCurrent()` to control scheduling.\n- Inject the dispatcher; never hardcode `Dispatchers.IO` inside a class you want to test.\n- Turbine (`flow.test { awaitItem() }`) for flow assertions.",
       "refs": [
@@ -82,7 +82,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.32"
     },
     {
       "id": "cs-0003",
@@ -98,7 +98,7 @@
       "shortAnswer": [
         "Explains the three phases — composition, layout, drawing — and deferring state reads to the latest phase.",
         "Covers `LaunchedEffect`, `remember`, `rememberSaveable`, and stability rules like why `List` is unstable.",
-        "Reach for it when asked about skipping, strong skipping mode, or `LazyColumn` keys and `contentType`."
+        "Use it when asked about skipping, strong skipping mode, or `LazyColumn` keys and `contentType`."
       ],
       "answer": "#### The three phases\n1. **Composition** — *what* to show. Runs your `@Composable` functions, builds/updates the slot table.\n2. **Layout** — *where*. Measure children, decide own size, place children. Single-pass, no multi-pass measuring.\n3. **Drawing** — *how*. Issues draw commands.\n\nOptimization rule: **defer state reads to the latest phase that needs them.** Reading a scroll offset in a lambda-taking modifier (`Modifier.offset { }`, `graphicsLayer { }`) skips recomposition entirely and only re-runs layout/draw.\n\n#### Effect APIs\n- `LaunchedEffect(key)` — coroutine tied to composition; cancels and restarts when key changes.\n- `DisposableEffect(key)` — non-coroutine setup with an `onDispose { }` cleanup. Listeners, callbacks.\n- `SideEffect { }` — runs after **every successful** composition; publish Compose state to non-Compose objects.\n- `rememberCoroutineScope()` — a scope tied to the composition, for launching from event callbacks (`onClick`).\n- `rememberUpdatedState(value)` — capture the latest value inside a long-running effect without restarting it.\n- `produceState` — bridge a non-Compose async source into `State`.\n- `derivedStateOf` — when a **frequently changing** state maps to a **rarely changing** derived value (e.g. `scrollOffset > 0` → `showFab`). Not for cheap 1:1 transforms.\n- `snapshotFlow { }` — turn Compose state reads into a `Flow`.\n\n#### remember vs rememberSaveable\n- `remember` survives recomposition, not configuration change or process death.\n- `rememberSaveable` also survives config change and process death (Bundle-backed; needs a `Saver` for custom types).\n- Neither replaces a ViewModel for state that must outlive the screen.\n\n#### Stability & skipping\n- A composable is **skippable** if all its parameters are stable and unchanged.\n- Stable = `@Immutable`/`@Stable`, primitives, `String`, function types, or a class whose public `val`s are all stable.\n- **`List` is unstable** (the interface could be a `MutableList`). Use `ImmutableList` from kotlinx.collections.immutable, or mark the holder `@Immutable`.\n- **Strong skipping mode** (default since Compose 1.7) makes composables with unstable params skippable using instance equality, and memoizes lambdas — dramatically reducing the old `remember { }`-the-lambda boilerplate.\n- Diagnose with the Compose compiler metrics report, Layout Inspector recomposition counts, or composition tracing in Perfetto.\n\n#### Lazy lists\n- Always give `key = { it.id }` — otherwise reorders re-compose everything and animations break.\n- `contentType` lets Compose reuse slots across heterogeneous item types.\n- Never nest a scrollable in the same direction without `LazyColumn`'s own APIs.",
       "refs": [
@@ -119,7 +119,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.32"
     }
   ]
 }

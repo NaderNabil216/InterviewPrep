@@ -313,7 +313,7 @@
       "shortAnswer": [
         "Return the `k` points closest to the origin by Euclidean distance, in any order.",
         "Keep a max-heap of size `k` keyed by squared distance, evicting the farthest when the heap exceeds `k`.",
-        "The comparator gotcha: compare full squared distances and add a coordinate tie-break so equal distances can't throw. O(n log k) versus O(n log n) sort."
+        "The comparator gotcha: compare squared distances, add a coordinate tie-break so equal distances can't throw. O(n log k) vs O(n log n) sort."
       ],
       "prompt": "Given `points: List<IntArray>` and an integer `k`, return the `k` points closest to the origin `(0,0)` (Euclidean distance; order among them doesn't matter).\n\nTwo good answers: sort all points by distance (O(n log n)) or keep a size-k max-heap (O(n log k)). The interviewer wants to see you pick the heap for large inputs and justify it. In Kotlin, `PriorityQueue` with a comparator — and a tie-break on coordinates so it's total.",
       "hints": [
@@ -344,7 +344,7 @@
         }
       ],
       "sampleCall": "kClosest(arrayOf(intArrayOf(3,3), intArrayOf(-2,4)), 1).map { it.toList() }.toString()",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.30"
     }
   ]
 }

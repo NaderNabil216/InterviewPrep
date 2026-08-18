@@ -15,9 +15,9 @@
         "transitive-deps",
         "versions"
       ],
-      "q": "Two libraries in your graph need different versions of the same artifact. What does Gradle do, and how do you make it pick yours?",
+      "q": "Two libraries in your graph need different versions of the same artifact. What does Gradle do? How do you make it pick yours?",
       "shortAnswer": [
-        "Gradle resolves the whole graph in one pass and picks the highest version that satisfies every constraint. A direct declaration in your own module always beats a transitive one.",
+        "Gradle resolves the graph in one pass and picks the highest version satisfying every constraint. A direct declaration in your module beats a transitive one.",
         "When no version satisfies everyone, resolution fails with an error that lists the paths, so you can see exactly who asked for what.",
         "To fix it, add the version you want explicitly, tighten with a `constraints` block or `strictly`, and confirm the winner with `dependencyInsight`."
       ],
@@ -51,7 +51,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0014",
@@ -65,10 +65,10 @@
         "buildsrc",
         "build-logic"
       ],
-      "q": "How do you share build logic across many modules, and why is buildSrc the wrong home once it grows?",
+      "q": "How do you share build logic across many modules? Why is buildSrc the wrong home once it grows?",
       "shortAnswer": [
-        "A convention plugin centralizes shared configuration — the Android DSL, Kotlin options, testing, lint — and modules apply it with `plugins { id(\"...\") }`. A new module then inherits the house style from two lines.",
-        "buildSrc works but recompiles as one unit and is uncacheable: any edit invalidates the configuration and build caches, costs seconds on every invocation, and can't be shared or versioned across builds.",
+        "A convention plugin centralizes shared configuration — the Android DSL, Kotlin options, testing, lint — and modules apply it with `plugins { id(\"...\") }`.",
+        "buildSrc works but recompiles as one unit and is uncacheable: any edit invalidates configuration and build caches, costing seconds, and can't be shared or versioned.",
         "The scalable home is an included build, `includeBuild(\"build-logic\")`. Its plugins are versioned, compiled and cached independently, and reusable across repos."
       ],
       "answer": "#### The plugin, not the script\nThe convention-plugin pattern is a Gradle plugin that centralizes shared configuration — the Android DSL, Kotlin compiler options, testing setup, lint, Dagger. Modules apply it with `plugins { id(\"...\") }`, so a new module inherits the whole house style in two lines, and a change is reviewed once instead of across fifty build scripts.\n\n#### Why buildSrc scales badly\nbuildSrc is compiled automatically and is a *hard dependency of every build*. Any edit recompiles it, and because its outputs are not cacheable, that recompile cascades into the configuration cache and the build cache — every developer and CI run pays seconds per invocation even for an unrelated change. It also cannot be versioned or shared between separate builds, so a two-repo company duplicates it and drifts.\n\n#### The included build\nThe scalable home is a separate `build-logic` project registered with `includeBuild(\"build-logic\")` in the root settings file. Each plugin is published internally through the `gradlePlugin { }` DSL inside that build, resolved like any dependency, compiled and cached independently, and reusable across repos. Gradle's own guidance moved here explicitly: buildSrc is fine for small projects, but once the plugin set grows, an included build is the way.",
@@ -101,7 +101,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0015",
@@ -115,11 +115,11 @@
         "build-scans",
         "multi-module"
       ],
-      "q": "A multi-module Android build is slow. How do you find the slowest part, and what structural choices fix it?",
+      "q": "A multi-module Android build is slow. How do you find the slowest part? What structural choices fix it?",
       "shortAnswer": [
-        "Start from a build scan — `./gradlew assembleDebug --scan`. It splits configuration versus execution time, lists each task's duration, shows cache hit rates, and traces the critical path, so you stop guessing.",
-        "Most multi-module slowness is unnecessary recompilation. An `api` dependency leaks types onto every consumer, so editing one module recompiles everything downstream; `implementation` limits it to one.",
-        "Keep modules coarse enough to earn their overhead, apply only the plugins each needs, turn on parallel, caching, and the configuration cache — then re-run the scan to prove the critical path moved."
+        "Start with a build scan — `./gradlew assembleDebug --scan`: it splits configuration vs execution time, task durations, cache hit rates, and the critical path.",
+        "Most multi-module slowness is unnecessary recompilation: `api` leaks types onto every consumer, so editing one module recompiles everything downstream; `implementation` limits it.",
+        "Keep modules coarse enough to earn their overhead, apply only the plugins each needs, enable parallel, caching, and the config cache — then re-run the scan."
       ],
       "answer": "#### Measure first\nBefore touching structure, run `./gradlew :app:assembleDebug --scan`. A build scan breaks time into configuration versus execution, lists every task with its duration, shows cache hit and from-cache rates, and traces the **critical path** — the chain of tasks the build cannot shorten. `--profile` writes the same breakdown to `build/reports/profile`. If configuration dominates, the fix is convention plugins and the configuration cache; if execution dominates, it is task reruns.\n\n#### Why tasks rerun\nThe dominant cost in multi-module builds is unnecessary recompilation. A module's Kotlin compile reruns whenever any input changes — and an `api` dependency leaks its types onto consumers, so editing a shared module recompiles everything downstream. `implementation` confines the blast radius to one module. The same logic applies to tests: a module's test task should not sit on the critical path of `assembleDebug`.\n\n#### Structural levers\nKeep modules coarse enough to earn their overhead, apply only the plugins each needs — a plain Kotlin module should not apply AGP — and enable `org.gradle.parallel`, `org.gradle.caching`, and the configuration cache. Then re-run the identical scan and confirm the critical path actually moved. The scan is the before-and-after instrument; without it you are optimizing assumptions.",
       "code": [
@@ -151,7 +151,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0016",
@@ -165,11 +165,11 @@
         "build-speed",
         "annotation-processing"
       ],
-      "q": "Why is kapt a build-time tax, and how do you move a module to KSP2?",
+      "q": "Why is kapt a build-time tax? How do you move a module to KSP2?",
       "shortAnswer": [
-        "kapt exists so Java annotation processors can run on Kotlin code. It compiles your Kotlin, generates a Java stub for every file, then runs javac over the stubs — typically two to three times KSP's wall time.",
-        "KSP2 reads Kotlin symbols directly from the compiler frontend, with no stubs, is faster, and is multiplatform. Migration is mechanical: add the KSP plugin, swap `kapt(\"...\")` for `ksp(\"...\")`, and drop the `kotlin-kapt` plugin.",
-        "The blocker is third-party processors with no KSP provider. Those keep you on kapt, isolated to the module that actually needs them."
+        "kapt lets Java annotation processors run on Kotlin code: it compiles Kotlin, generates Java stubs, then runs javac over them — 2-3× KSP's wall time.",
+        "KSP2 reads Kotlin symbols from the compiler frontend — no stubs, faster, multiplatform. Migration: swap `kapt(\"...\")` for `ksp(\"...\")`, drop `kotlin-kapt`.",
+        "The blocker is third-party processors with no KSP provider. Those keep you on kapt, isolated to the module that needs them."
       ],
       "answer": "#### The tax\nkapt exists to run *Java* annotation processors on Kotlin code. It compiles your Kotlin, generates a Java stub for every file, then runs javac over the stubs — a full second compilation. That double compilation is the tax: typically two to three times KSP's wall time, and single-platform, so it blocks Kotlin Multiplatform modules entirely. Stub generation also degrades on Kotlin-only constructs such as companion-object constants, which is why some processors see missing values.\n\n#### KSP2\nKSP2 reads Kotlin symbols directly from the compiler frontend — no stubs, faster, multiplatform — and it became the default for new projects on the Kotlin 2.x line. Room, Hilt, Moshi, Glide and most Google libraries already ship KSP processors. Migration is mechanical: apply the KSP Gradle plugin, swap every `kapt(\"...\")` for `ksp(\"...\")`, and delete the `kotlin-kapt` plugin from the module.\n\n#### What still blocks you\nThe holdout is the long tail of third-party processors with no KSP provider. You cannot force them from your side; the pragmatic move is to keep kapt only in the module that needs that one processor — kapt and KSP coexist fine across modules — file an issue upstream, and retire kapt there once a provider ships.",
       "code": [
@@ -201,7 +201,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "bt-0017",
@@ -215,10 +215,10 @@
         "source-sets",
         "gradle"
       ],
-      "q": "Walk me through product flavors, build types, and how a variant's source set and dependencies come together.",
+      "q": "What are product flavors and build types, and how do a variant's source sets and dependencies come together?",
       "shortAnswer": [
-        "A build type describes how a build is packaged — debug is debuggable, release shrinks and signs. Product flavors describe what it contains, like free versus paid.",
-        "AGP crosses every flavor with every build type, producing variants like `freeDebug` and `paidRelease`, each with its own merged source set, manifest, and APK.",
+        "A build type describes how a build is packaged — debug is debuggable, release shrinks and signs. Flavors describe what it contains: free vs paid.",
+        "AGP crosses every flavor with every build type, producing variants like `freeDebug` and `paidRelease`, each with a merged source set, manifest, and APK.",
         "Dependencies use the same naming — `debugImplementation`, `freeImplementation`, `freeDebugImplementation` — so LeakCanary or an ads SDK ships only to the variants that want it."
       ],
       "answer": "#### The matrix\nA build type describes *how* a build is packaged: `debug` is debuggable with no shrinking; `release` shrinks, obfuscates, and signs. Product flavors describe *what* it contains: `free` versus `paid`, or a `dev` API endpoint versus `prod`. AGP crosses every flavor with every build type, producing `freeDebug`, `freeRelease`, `paidDebug`, `paidRelease` — each a full variant with its own APK and merged resources. Add one dimension per axis with `flavorDimensions`, and every combination is built, so keep dimensions few: each one multiplies build time.\n\n#### Source sets\nEvery variant merges source sets in a fixed order: `main`, then the flavor, then the build type, then the full variant. `app/src/paidDebug/` overrides `app/src/paid/` overrides `app/src/main/`. That gives four granularity levels for code and resources — a paid-only Billing screen lives in the paid source set, not behind a runtime `if`.\n\n#### Variant-aware dependencies\nThe same naming extends to dependencies: `freeImplementation(...)`, `debugImplementation(...)`, `freeDebugImplementation(...)`, plus `androidTestImplementation` for tests. A crash reporter ships to every variant, LeakCanary only to `debugImplementation`, billing only to `paid`. The manifest can differ per variant too — permissions included only for the flavors that need them.",
@@ -251,7 +251,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0018",
@@ -265,10 +265,10 @@
         "keystore",
         "security"
       ],
-      "q": "Walk me through signing a release build, and what Play App Signing changes about key management.",
+      "q": "How do you sign a release build, and what does Play App Signing change about key management?",
       "shortAnswer": [
-        "An APK's signature is how the OS and the store verify an update comes from the same developer. A mismatched key gives `INSTALL_FAILED_UPDATE_INCOMPATIBLE` on the device and a rejected upload in the Play Console.",
-        "The signing config lives in `build.gradle.kts`, but the keystore and passwords never go in VCS. Inject them from environment variables or a gitignored `gradle.properties`.",
+        "An APK's signature lets the OS and the store verify an update comes from the same developer. A mismatched key fails install or upload.",
+        "The signing config lives in `build.gradle.kts`; the keystore and passwords never go in VCS — inject from env vars or a gitignored `gradle.properties`.",
         "Play App Signing separates your upload key from the app signing key Google holds. That's what makes key recovery and rotation possible at all."
       ],
       "answer": "#### Why signing exists\nA signature is how Android and the store trust that an update comes from the same developer. A mismatched key produces `INSTALL_FAILED_UPDATE_INCOMPATIBLE` on the device and a rejected upload in the Play Console. The signing config is declared in `build.gradle.kts` — store file, alias, passwords — but the keystore and its secrets must never be committed: inject them from environment variables or a gitignored `gradle.properties`, and never lose the only copy of a key you cannot recover.\n\n#### Play App Signing\nWith Play App Signing you upload an **upload key** and Google re-signs with the app signing key it holds in custody. The real key never leaves Google's infrastructure, which buys two things: you can *recover* a lost upload key by signing a proof APK and requesting a reset in the console, and the app signing key can be **rotated** without breaking existing installs. Rotation propagates over a few days; Play pauses uploads during the window, and devices already running updates signed with the old key stay installed.\n\n#### Rotation mechanics\nThe console exports the new key, you re-sign a test APK, and Play verifies it before propagation. Because the store blocks new uploads until propagation completes, rotate deliberately — in a low-release window, not mid-campaign. Android 9+ also supports in-app rotation via APK Signature Scheme v3, but for store apps Play App Signing is the normal route.",
@@ -301,7 +301,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0019",
@@ -315,11 +315,11 @@
         "shrink",
         "consumer-rules"
       ],
-      "q": "You add a library, the release crashes after shrinking. How do R8 rules work, and what are consumer rules?",
+      "q": "You add a library; the release crashes after shrinking. How do R8 rules work? What are consumer rules?",
       "shortAnswer": [
         "R8 shrinks, optimizes, and obfuscates. Shrinking deletes classes and members no live code references, including anything reached only by reflection, Gson, or JNI.",
-        "Rules are patterns. `-keep` pins a class or member, `-keepclassmembers` keeps selected members of matching classes, and `-keepattributes` preserves metadata like annotations and signatures.",
-        "A library ships its `consumerProguardFiles` inside the AAR, and they're merged into every consuming app's R8 run automatically. The library declares its reflective surface; consumers shrink safely."
+        "Rules are patterns: `-keep` pins a class or member, `-keepclassmembers` keeps selected members of matching classes, `-keepattributes` preserves metadata.",
+        "A library ships `consumerProguardFiles` in the AAR, merged into every consuming app's R8 run automatically — the library declares its reflective surface."
       ],
       "answer": "#### What R8 actually removes\nR8 has three jobs: **shrink** (delete unreachable classes and members), **optimize** (rewrite code), and **obfuscate** (rename). The classic failure is a release-only crash: code reached only by reflection, `Class.forName`, Gson or serialization, or JNI looks unreachable to R8, which proves it unused and deletes it. Debug builds run with shrinking off, so the code is there — the crash is the shrinker, not the library.\n\n#### The rules\nA `-keep` pins a class or member so it survives: `-keep class com.example.ApiClient { *; }`. `-keepclassmembers` keeps selected members of any matching class — the classic `@SerializedName` fields — and `-keepattributes` preserves metadata the runtime needs, like `Signature`, `Annotation`, `InnerClasses`, and `EnclosingMethod`. Rules are patterns, so write the narrowest rule that protects the reflective surface; `-dontwarn` suppresses missing-class warnings but should not be a reflex.\n\n#### Consumer rules\nWhen your library builds, its `consumerProguardFiles` are packaged into the AAR and **merged into every consuming app's R8 run automatically**. App authors cannot know your reflective surface, so declaring it in the library is the contract: keep what your library needs reflectively, and consumers shrink safely. Skip it, and every consumer discovers your crashes for you.",
       "code": [
@@ -351,7 +351,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0020",
@@ -365,9 +365,9 @@
         "aar",
         "gradle"
       ],
-      "q": "How do you publish an Android library module to a Maven repository, and what ships in the artifact?",
+      "q": "How do you publish an Android library module to a Maven repository? What ships in the artifact?",
       "shortAnswer": [
-        "You publish an AAR, not source. The `maven-publish` plugin registers a publication from the module's release component, and the POM carries your dependencies so consumers resolve them transitively.",
+        "You publish an AAR, not source. `maven-publish` registers a publication from the release component; the POM carries your dependencies so consumers resolve them transitively.",
         "Maven Central adds GPG signing, a sources jar, and a staging flow through Sonatype before anything is released.",
         "The modern shape is `singleVariant(\"release\") { withSourcesJar() }`, and the artifact ships consumer ProGuard rules embedded, so shrinking never breaks on the consumer side."
       ],
@@ -401,7 +401,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0021",
@@ -415,11 +415,11 @@
         "dependency-verification",
         "security"
       ],
-      "q": "What does it take to make an Android build reproducible, and how do you guard against a compromised dependency?",
+      "q": "What does it take to make an Android build reproducible? How do you guard against a compromised dependency?",
       "shortAnswer": [
-        "A reproducible build means identical inputs yield byte-identical outputs. Gradle's reproducible-archive flags remove timestamps and entry order, and R8 plus AGP output is deterministic — the remaining leaks are times and absolute paths baked into artifacts.",
-        "Gradle's dependency verification pins every resolved artifact to a SHA-256 in `gradle/verification-metadata.xml`, checked on every download. A tampered or hijacked dependency then fails the build loudly.",
-        "The full defense layers verification on top of locking and repository hygiene: lock dynamic versions, keep repositories to `google()` and `mavenCentral()`, and treat generated metadata like code to review."
+        "A reproducible build means identical inputs yield byte-identical outputs: Gradle's reproducible-archive flags remove timestamps and entry order, and R8 + AGP output is deterministic.",
+        "Gradle's dependency verification pins every resolved artifact to a SHA-256 in `gradle/verification-metadata.xml`, checked on every download — tampering fails the build loudly.",
+        "The full defense layers verification on locking and repository hygiene: lock dynamic versions, keep to `google()` and `mavenCentral()`, review generated metadata like code."
       ],
       "answer": "#### Reproducibility\nReproducible means identical inputs produce byte-identical outputs. In Gradle: set `isPreserveFileTimestamps = false` and `isReproducibleFileOrder = true` on archive tasks so timestamps and entry order stop leaking; R8 and AGP output is deterministic, so what remains is build IDs, absolute paths, and times baked into generated code or resources. Then `clean assemble` twice must hash to the same AAB — assert it in CI. Reproducibility is what makes verification meaningful: if the artifact is deterministic, you can prove what shipped.\n\n#### The threat and the tool\nThe supply-chain risk is a compromised dependency — a hijacked account, a malicious version, a poisoned mirror. Gradle's **dependency verification** (`gradle/verification-metadata.xml`) pins every resolved artifact to a SHA-256 that Gradle checks at download time and fails the build on any mismatch. It is trusted once when generated with `--write-verification-metadata`, then committed and reviewed like source — a new dependency version shows up as a metadata diff.\n\n#### The layered defense\nChecksums alone are not enough. **Dependency locking** freezes dynamic versions so `latest.release` cannot silently move; keep the repository allowlist to `google()` and `mavenCentral()`; ban `mavenLocal()` and `flatDir` from shared builds; pin plugin versions in the catalog; and generate a CycloneDX SBOM at release so consumers can audit what you shipped. Each layer is cheap, and together they turn a hijacked dependency into a loud failure instead of a silent supply.",
       "code": [
@@ -456,7 +456,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0022",
@@ -470,11 +470,11 @@
         "ci",
         "quality"
       ],
-      "q": "How do you add custom lint rules, and how do you adopt lint in CI without drowning in legacy issues?",
+      "q": "How do you add custom lint rules? How do you adopt lint in CI without drowning in legacy issues?",
       "shortAnswer": [
-        "Lint is pluggable. A custom `IssueRegistry` with detectors runs in the same report as the built-in checks, wired into a module with `lintChecks(project(\":lint-rules\"))`.",
-        "A baseline snapshots today's issues so lint reports only new ones. You adopt lint on legacy code without a mass-cleanup gate, and the baseline shrinks as teams fix the backlog.",
-        "In CI you gate on lint: fail the build on errors, promote your team's rules to error severity, and regenerate the baseline deliberately — it's a debt ledger, not a muffler."
+        "Lint is pluggable. A custom `IssueRegistry` with detectors runs in the same report as the built-in checks, wired via `lintChecks(project(\":lint-rules\"))`.",
+        "A baseline snapshots today's issues so lint reports only new ones — adopt lint without a mass-cleanup gate; the baseline shrinks as fixes land.",
+        "In CI, gate on lint: fail on errors, promote your team's rules to error severity, regenerate the baseline deliberately — a debt ledger, not a muffler."
       ],
       "answer": "#### What lint gives you\nLint is a static-analysis framework: `./gradlew lint` runs hundreds of built-in checks and emits HTML and XML reports. It is also pluggable — a custom `IssueRegistry` with detectors runs in the same report as the built-ins, wired into a module with `lintChecks(project(\":lint-rules\"))`. Detectors can scan whole files (`SourceCodeScanner`) or visit specific nodes and call `report()` with a precise location. Each rule declares an id, severity, explanation, and category, so it behaves exactly like a built-in: warnings, errors, and quickfixes.\n\n#### Adopting on legacy code\nA baseline is the mechanism that makes lint adoptable: `lint { baseline = file(\"lint-baseline.xml\") }` snapshots the existing issues, and lint then reports only *new* ones. CI fails on regressions without requiring a mass-cleanup gate, and the baseline shrinks as teams fix the backlog. Regenerate it deliberately — it is a debt ledger, not a muffler.\n\n#### Gating in CI\nGate on the variant that matters: run `./gradlew :app:lintDebug` with `abortOnError = true`, and promote your team's rules to `Severity.ERROR` so they actually block a PR. Tune severities per module — a check that always fails gets disabled, which is worse than a check that never fires.",
       "code": [
@@ -501,7 +501,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     }
   ]
 }

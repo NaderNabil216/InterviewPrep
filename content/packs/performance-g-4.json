@@ -9,12 +9,16 @@
       "topic": "Compose performance",
       "level": 3,
       "type": "qa",
-      "tags": ["compose", "recomposition", "composition"],
+      "tags": [
+        "compose",
+        "recomposition",
+        "composition"
+      ],
       "q": "Composition is taking too long. How do you find and fix expensive recompositions?",
       "shortAnswer": [
         "Measure first: enable composition tracing and read recomposition counts in the Layout Inspector, or the compiler metrics report — find the composable that re-runs most.",
         "Expensive composition is work inside the body — building lists, parsing, allocation, reading state too high in the tree — not the recomposition itself.",
-        "Fix by moving state reads down to the leaf that renders them, using `remember` and `derivedStateOf` for derived values, and keeping parameters stable so scopes skip."
+        "Fix by moving state reads down to the leaf, using `remember`/`derivedStateOf` for derived values, and keeping parameters stable so scopes skip."
       ],
       "answer": "#### Find it, don't guess\nLayout Inspector shows per-composable **recomposition counts** live; the Compose compiler metrics report lists each composable's skippable and restartable status. The suspect is a composable whose body runs expensive work on every recomposition, or a subtree recomposing because a state read sits at the root.\n#### What makes composition expensive\nRecomposition re-runs the function body. It's expensive when the body *does work*:\n- Constructing collections (`sortedBy`, `filter`, building maps) inline.\n- Reading `MutableState` high in the tree — a whole-screen state collected at the root — so every change recomposes everything beneath.\n- Heavy allocation per recomposition (GC pressure during the frame).\n- Unstable parameters forcing a big subtree to re-run every time.\n#### The fixes\n- **Move state down**: only the leaf that renders the value should read it.\n- **`derivedStateOf` + `remember`**: derived values recompute only when their inputs change, not on every recomposition.\n- **Stable parameters**: immutable types make composables skippable, so subtrees skip.\n- **Split composables**: a large body isolates recomposition scope; small composables limit what re-runs.\nIn lazy lists, `key` and `contentType` keep item identity so item scopes recompose correctly instead of the whole list. Recomposition is not layout or draw — but a composition that triggers a big layout change is still expensive, so measure both phases.",
       "code": [
@@ -34,11 +38,19 @@
         "Measuring composition without measuring layout — the fix can just move the cost."
       ],
       "refs": [
-        { "title": "Compose performance", "url": "https://developer.android.com/develop/ui/compose/performance", "checked": "2026-08-13" },
-        { "title": "Inspect composables with the Layout Inspector", "url": "https://developer.android.com/studio/debug/layout-inspector", "checked": "2026-08-13" }
+        {
+          "title": "Compose performance",
+          "url": "https://developer.android.com/develop/ui/compose/performance",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Inspect composables with the Layout Inspector",
+          "url": "https://developer.android.com/studio/debug/layout-inspector",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     },
     {
       "id": "pe-0032",
@@ -46,11 +58,15 @@
       "topic": "Memory",
       "level": 3,
       "type": "qa",
-      "tags": ["heap-dump", "leakcanary", "memory-profiler"],
+      "tags": [
+        "heap-dump",
+        "leakcanary",
+        "memory-profiler"
+      ],
       "q": "How do you find a memory leak from a heap dump, and what do leak paths look like?",
       "shortAnswer": [
-        "Capture a heap dump from the Memory Profiler (or `am dumpheap`), filter to the object type that should be gone — an Activity — and inspect retained instances.",
-        "A leak is a reference chain from a GC root to the object: a singleton holding an Activity, an inner class or lambda holding its outer, or an unregistered listener.",
+        "Capture a heap dump from the Memory Profiler (or `am dumpheap`), filter to the object type that shouldn't exist — an Activity — and inspect retained instances.",
+        "A leak is a chain from a GC root: a singleton holding an Activity, an inner class/lambda holding its outer, or an unregistered listener.",
         "LeakCanary automates capture and prints the shortest strong-reference path, which beats clicking through dozens of fields in a heap viewer."
       ],
       "answer": "#### Capturing\nIn the Memory Profiler, press **Dump Java heap**, then inspect the instance list for your class — say `MainActivity`. If instances remain after you finish or rotate, click one: the **Reference** view shows the chain from a GC root to that instance. Every retained path is a potential leak; the *shortest strong reference* is your bug.\n`adb shell am dumpheap <pid> /data/local/tmp/dump.hprof` captures headlessly for CI — take two dumps (before and after a lifecycle event) and diff instance counts.\n#### The shapes to recognize\n- **Static or singleton → Activity**: an `object` cache or a `Companion` holding a `Context` or a `View`.\n- **Inner class or lambda captures its outer**: a callback or `Handler` on `Looper.getMainLooper()` stored long-lived outlives the Activity and drags its whole view tree with it.\n- **Unregistered listener**: a broadcast receiver or observer registered without a matching unregister.\nLeakCanary automates the capture on debug builds and prints the reference path in a notification — the fastest route when you don't know where to click.\n#### Retained vs live\nCompare retained sizes across snapshots rather than absolute heap size: a legitimate cache grows. The signal is instances of something that should be dead, not total bytes.",
@@ -71,11 +87,19 @@
         "Assuming a big retained object is the leak without checking the reference path."
       ],
       "refs": [
-        { "title": "Inspect memory with the Memory Profiler", "url": "https://developer.android.com/studio/profile/memory-profiler", "checked": "2026-08-13" },
-        { "title": "LeakCanary", "url": "https://square.github.io/leakcanary/", "checked": "2026-08-13" }
+        {
+          "title": "Inspect memory with the Memory Profiler",
+          "url": "https://developer.android.com/studio/profile/memory-profiler",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "LeakCanary",
+          "url": "https://square.github.io/leakcanary/",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     },
     {
       "id": "pe-0033",
@@ -83,11 +107,15 @@
       "topic": "ANR & responsiveness",
       "level": 3,
       "type": "qa",
-      "tags": ["anr", "main-thread", "binder"],
+      "tags": [
+        "anr",
+        "main-thread",
+        "binder"
+      ],
       "q": "The app shows 'App isn't responding' in the field but you can't reproduce it. How do you find the cause?",
       "shortAnswer": [
-        "Play Console's ANR data ships with the system trace and stack dump; pull `/data/anr/traces.txt` (or `adb shell kill -3`) to see the main-thread stack at the moment.",
-        "Look for the classic patterns: blocked on I/O, a deadlock on a lock, waiting on a binder call to system_server, or a BroadcastReceiver over-running `onReceive`.",
+        "Play Console's ANR data ships with a trace/stack dump; pull `/data/anr/traces.txt` (or `adb shell kill -3`) for the main-thread stack.",
+        "Look for the classic patterns: blocked on I/O, a deadlock, waiting on a binder call to system_server, or a BroadcastReceiver over-running `onReceive`.",
         "Then reproduce the condition — StrictMode in debug, a Perfetto trace with input and binder categories — and fix the specific wait rather than 'make it faster'."
       ],
       "answer": "#### Getting the evidence\nAn input ANR fires when the main thread misses the 5 s input-dispatch deadline. The system writes a trace to `/data/anr/traces.txt`; Play Console attaches the same stack dump to field ANRs. When you can reproduce, `adb shell kill -3 <pid>` dumps traces on demand. Read the **main-thread** stack first — everything else is context.\n#### The patterns in the stack\n- `Blocked waiting on a lock` — a deadlock or a long critical section, with two threads holding each other's monitors.\n- `syscall` or file I/O — a blocking read on the main thread.\n- **Binder** — waiting on `system_server` or a content provider; sometimes the *system* is slow and the whole device ANRs, not just your app.\n- `BroadcastReceiver.onReceive` doing heavy work — the 10 s foreground, 60 s background timeout.\n- Static init or provider init — an expensive first touch at startup.\n#### The reproducible fix\nTurn the field symptom into a lab condition: enable StrictMode (it catches the I/O class), run the journey under a Perfetto trace with `input`, `view`, and `binder_driver` categories, and find the wide main-thread slice. ANR is never \"the network is slow\" — it's the main thread *waiting* on something. Fix the wait: move it off-thread, shorten the lock, or don't hold the main thread at all.",
@@ -108,10 +136,14 @@
         "Ignoring that ANRs can be device-wide when system_server is the blocker."
       ],
       "refs": [
-        { "title": "App responsiveness | Android vitals", "url": "https://developer.android.com/topic/performance/vitals/anr", "checked": "2026-08-13" }
+        {
+          "title": "App responsiveness | Android vitals",
+          "url": "https://developer.android.com/topic/performance/vitals/anr",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     },
     {
       "id": "pe-0034",
@@ -119,11 +151,15 @@
       "topic": "Network performance",
       "level": 3,
       "type": "qa",
-      "tags": ["network", "connection-reuse", "prefetch"],
-      "q": "When is prefetching a win, and when is it just waste? What does connection reuse actually buy you?",
+      "tags": [
+        "network",
+        "connection-reuse",
+        "prefetch"
+      ],
+      "q": "When is prefetching a win, and when is it waste? What does connection reuse buy you?",
       "shortAnswer": [
         "Connection reuse — keep-alive and HTTP/2 multiplexing — avoids a TCP plus TLS handshake per request; OkHttp pools connections by default, so one client instance matters.",
-        "Prefetch wins when the data is near-certainly consumed soon and the latency is hidden; it's waste when the screen changes, the payload is rarely used, or it's stale by render.",
+        "Prefetch wins when data is likely used soon and latency is hidden; it's waste if screen changes, payload is rarely used, or stale by render.",
         "Measure consumed prefetches over total prefetches — a low ratio is you spending battery and bandwidth for nothing."
       ],
       "answer": "#### Connection reuse\nEvery fresh TCP connection costs an RTT for the handshake, plus TLS handshakes — on a 200 ms-latency network that's often more than the request body. Reuse fixes it: HTTP/1.1 **keep-alive** reuses a connection for multiple requests; HTTP/2 **multiplexes** many concurrent streams over one connection; HTTP/3 does the same over QUIC. OkHttp keeps a `ConnectionPool` automatically — the mistake is creating a new `OkHttpClient` per request, which throws the pool away. A single long-lived client is the cheapest performance fix in most apps.\n#### Prefetch: the economics\nPrefetching trades battery, bandwidth, and cache pressure for perceived latency. It wins when:\n- The user will almost certainly see the data (the next page of a feed they're scrolling).\n- The fetch lands before the interaction that needs it, hiding the latency.\n- The payload is still fresh when consumed.\nIt loses when:\n- The screen changes often, so prefetched content is discarded.\n- The data is rarely consumed (deep-linked pages, optional sections).\n- You prefetch at startup for a screen the user may never open.\nTrack the **hit rate** — consumed over total prefetched bytes — and drop prefetches below a threshold. This is a metric, not a vibe.",
@@ -144,11 +180,19 @@
         "Prefetching unconditionally and never measuring consumption."
       ],
       "refs": [
-        { "title": "Transfer data without draining the battery", "url": "https://developer.android.com/training/efficient-downloads", "checked": "2026-08-13" },
-        { "title": "OkHttp", "url": "https://github.com/square/okhttp", "checked": "2026-08-13" }
+        {
+          "title": "Transfer data without draining the battery",
+          "url": "https://developer.android.com/training/efficient-downloads",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "OkHttp",
+          "url": "https://github.com/square/okhttp",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     },
     {
       "id": "pe-0035",
@@ -156,11 +200,15 @@
       "topic": "Battery",
       "level": 3,
       "type": "qa",
-      "tags": ["battery", "wakelock", "workmanager"],
-      "q": "Walk me through a battery optimization: from detection to the metric that gates it.",
+      "tags": [
+        "battery",
+        "wakelock",
+        "workmanager"
+      ],
+      "q": "What happens in a battery optimization, from detection to the metric that gates it?",
       "shortAnswer": [
-        "Detect with Battery Historian or the Battery Profiler — correlate drain against wakelocks, network, and CPU over time — and check Play Console's battery metrics for the field signal.",
-        "The levers: replace wakelocks with WorkManager deferred work, batch network into fewer larger transfers, respect Doze and app standby, and bound any partial wakelock with a timeout.",
+        "Detect with Battery Historian or the Battery Profiler — correlate drain against wakelocks, network, and CPU — and check Play Console's battery metrics for the field signal.",
+        "Replace wakelocks with WorkManager deferred work, batch network into fewer larger transfers, respect Doze/app standby, and bound partial wakelocks with a timeout.",
         "The gating metric is the excessive-partial-wake-locks core vital (5% threshold) plus your own wakeup and network-per-session telemetry."
       ],
       "answer": "#### Detect\nBattery Historian, built from a `dumpsys batterystats` bugreport, shows drain versus CPU, network, and wake-lock activity on a timeline — the spike that correlates with a network burst is your culprit. The Battery Profiler in Studio does the same per session. For the field, the Play Console's core vital **excessive partial wake locks** (5% of daily sessions, overall threshold) plus excessive background network gives a per-version trend.\n#### The levers, in order\n1. **Wakelocks → WorkManager**: a periodic sync should be a `PeriodicWorkRequest` with constraints, not a partial wakelock. WorkManager defers in Doze, retries with backoff, and coalesces work.\n2. **If you must hold a wakelock**: a partial wakelock keeps the CPU on — acquire with a hard timeout and release in `finally`. Never acquire for work that can be deferred.\n3. **Batch network**: the radio ramps through full-power states; ten requests over ten minutes cost far more than one burst.\n4. **Respect Doze**: don't use exact alarms or polling to \"beat\" the scheduler; save `setExactAndAllowWhileIdle` for user-critical events.\nThen gate: a release fails the battery review if the wakeup metric or background network crosses your budget.",
@@ -181,11 +229,19 @@
         "Holding a partial wakelock 'just in case' — the vitals metric exists because of this."
       ],
       "refs": [
-        { "title": "Wake locks", "url": "https://developer.android.com/training/scheduling/wakelock", "checked": "2026-08-13" },
-        { "title": "Profile battery usage with Battery Historian", "url": "https://developer.android.com/studio/profile/battery-historian", "checked": "2026-08-13" }
+        {
+          "title": "Wake locks",
+          "url": "https://developer.android.com/training/scheduling/wakelock",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Profile battery usage with Battery Historian",
+          "url": "https://developer.android.com/studio/profile/battery-historian",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     },
     {
       "id": "pe-0036",
@@ -193,10 +249,14 @@
       "topic": "Memory",
       "level": 4,
       "type": "qa",
-      "tags": ["oom", "lmk", "memory"],
-      "q": "Your app crashes with OutOfMemoryError on a phone with gigabytes of free RAM. What's actually happening?",
+      "tags": [
+        "oom",
+        "lmk",
+        "memory"
+      ],
+      "q": "Your app crashes with OutOfMemoryError on a phone with gigabytes of free RAM. What's happening?",
       "shortAnswer": [
-        "An OOM is a per-process ART heap limit, not physical RAM exhaustion — your process hit `Runtime.maxMemory()`, often 256-512 MB, whatever the device has free.",
+        "An OOM is a per-process ART heap limit, not RAM exhaustion — your process hit `Runtime.maxMemory()`, often 256-512 MB, whatever the device has free.",
         "The Low Memory Killer is the opposite: under system-wide pressure it kills whole processes by `oom_adj` score — no OOM, often a logcat line from lmkd.",
         "The fixes differ: OOM means shrink your heap (bitmaps, leaks, caches); LMK kills mean reduce cached-process footprint and background activity."
       ],
@@ -218,11 +278,19 @@
         "Treating a silent background-process death as a crash to fix in code."
       ],
       "refs": [
-        { "title": "Manage your app's memory", "url": "https://developer.android.com/topic/performance/memory", "checked": "2026-08-13" },
-        { "title": "Low memory killer daemon (LMKD)", "url": "https://source.android.com/docs/core/perf/lmkd", "checked": "2026-08-13" }
+        {
+          "title": "Manage your app's memory",
+          "url": "https://developer.android.com/topic/performance/memory",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Low memory killer daemon (LMKD)",
+          "url": "https://source.android.com/docs/core/perf/lmkd",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     },
     {
       "id": "pe-0037",
@@ -230,10 +298,14 @@
       "topic": "Memory",
       "level": 4,
       "type": "qa",
-      "tags": ["native-memory", "malloc", "meminfo"],
+      "tags": [
+        "native-memory",
+        "malloc",
+        "meminfo"
+      ],
       "q": "Your process uses far more memory than the Java heap would allow. Where is it going?",
       "shortAnswer": [
-        "Native C/C++ memory — codecs, Skia rendering, WebView, OpenGL textures, media pipelines — lives outside the ART heap cap and shows up in PSS, not Java heap.",
+        "Native C/C++ memory — codecs, Skia, WebView, OpenGL textures, media pipelines — lives outside the ART heap cap and shows up in PSS, not Java heap.",
         "Find it with `dumpsys meminfo` (the NATIVE and Graphics sections), the Memory Profiler's native allocations, or Perfetto's malloc tracking.",
         "A native leak doesn't throw OOM in your app — it drives whole-device pressure and gets your process LMK-killed while the Java heap looks fine."
       ],
@@ -255,11 +327,19 @@
         "Assuming WebView or media memory 'isn't my app's problem' — you configured it."
       ],
       "refs": [
-        { "title": "Inspect memory with the Memory Profiler", "url": "https://developer.android.com/studio/profile/android-profiler", "checked": "2026-08-13" },
-        { "title": "Manage your app's memory", "url": "https://developer.android.com/topic/performance/memory", "checked": "2026-08-13" }
+        {
+          "title": "Inspect memory with the Memory Profiler",
+          "url": "https://developer.android.com/studio/profile/android-profiler",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Manage your app's memory",
+          "url": "https://developer.android.com/topic/performance/memory",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     },
     {
       "id": "pe-0038",
@@ -267,7 +347,11 @@
       "topic": "Performance process",
       "level": 4,
       "type": "qa",
-      "tags": ["performance-budget", "ci", "process"],
+      "tags": [
+        "performance-budget",
+        "ci",
+        "process"
+      ],
       "q": "You're the performance owner on a 40-engineer team. How do you set budgets and stop regressions?",
       "shortAnswer": [
         "Turn performance into a budget system: a few high-value metrics, each with a number, an owner, and a gate — cold start p95 under 2 s.",
@@ -293,11 +377,19 @@
         "Measuring only in the lab or only in the field."
       ],
       "refs": [
-        { "title": "Run benchmarks in CI", "url": "https://developer.android.com/topic/performance/benchmarking/benchmarking-in-ci", "checked": "2026-08-13" },
-        { "title": "Monitor app health with Android vitals", "url": "https://developer.android.com/topic/performance/vitals", "checked": "2026-08-13" }
+        {
+          "title": "Run benchmarks in CI",
+          "url": "https://developer.android.com/topic/performance/benchmarking/benchmarking-in-ci",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Monitor app health with Android vitals",
+          "url": "https://developer.android.com/topic/performance/vitals",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     },
     {
       "id": "pe-0039",
@@ -305,12 +397,16 @@
       "topic": "Profiling",
       "level": 4,
       "type": "qa",
-      "tags": ["production", "tracing", "sampling"],
+      "tags": [
+        "production",
+        "tracing",
+        "sampling"
+      ],
       "q": "You can't reproduce a perf problem on your device. How do you profile in production?",
       "shortAnswer": [
         "Instrument with lightweight Trace sections behind a remote-config toggle, sample a small percentage of sessions, and aggregate slice timings server-side.",
         "For full traces, enable on-demand Perfetto capture on selected devices — a 'profile this device' action — or use the Perfetto SDK, always opt-in and rate-limited.",
-        "Prefer sampling (stack, CPU, or allocation) for always-on because overhead is flat; use tracing for short targeted investigations. Symbolicate release builds with uploaded `mapping.txt` files."
+        "Prefer sampling (stack, CPU, or allocation) for always-on because overhead is flat; use tracing for short investigations. Symbolicate release builds with uploaded `mapping.txt` files."
       ],
       "answer": "#### Tracing vs sampling\n**Tracing** records every event — precise, but overhead scales with events, so it's for short windows and targeted features. **Sampling** records a periodic snapshot (a stack at 100 Hz, or every N allocations) — flat overhead, good always-on, and you reconstruct hotspots statistically. Production strategy: sample by default, trace on demand.\n#### The setup\n- Add `Trace.beginSection` around the journey you care about (feed render, startup), toggled by a **remote-config flag** so most users run uninstrumented.\n- Aggregate slice timings server-side — a trace slice per session is a metric, not a firehose — giving p50 and p95 of \"feed render\" per version and device.\n- For the deep dive, let a tester flip a flag and have the app capture a Perfetto trace and upload it: opt-in, sampled, PII-stripped, and size-capped.\n#### The traps\n- **Symbolization**: a release build is minified and obfuscated; without uploading `mapping.txt` per build, field stacks are unreadable.\n- **Overhead**: full tracing on every session is a CPU tax you end up measuring — sample and cap.\n- **Attribution**: samples must carry device, model, and version or the noise eats the signal.\nThe discipline: the field trace is how you *see* the bug; the lab macrobenchmark is how you *prove* the fix. Production profiling finds problems; CI proves solutions.",
       "code": [
@@ -330,11 +426,19 @@
         "Shipping sampling without rate limits or opt-in — that's a perf regression disguised as telemetry."
       ],
       "refs": [
-        { "title": "androidx.tracing", "url": "https://developer.android.com/reference/kotlin/androidx/tracing/package-summary", "checked": "2026-08-13" },
-        { "title": "Inspect app performance with system tracing", "url": "https://developer.android.com/topic/performance/tracing", "checked": "2026-08-13" }
+        {
+          "title": "androidx.tracing",
+          "url": "https://developer.android.com/reference/kotlin/androidx/tracing/package-summary",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Inspect app performance with system tracing",
+          "url": "https://developer.android.com/topic/performance/tracing",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     }
   ]
 }

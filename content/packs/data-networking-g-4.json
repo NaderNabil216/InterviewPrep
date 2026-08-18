@@ -16,9 +16,9 @@
       ],
       "q": "How do you debug and observe network traffic on Android?",
       "shortAnswer": [
-        "OkHttp's `EventListener` is the structured way to observe every call: it reports DNS, connect, TLS handshake, request/response bytes, and cache hits in order — a per-call latency breakdown.",
+        "OkHttp's `EventListener` is the structured way to observe every call. It reports DNS, connect, TLS, and request/response timing in order — a per-call latency breakdown.",
         "A logging interceptor shows the actual request and response content. Keep it in the debug variant only, or you leak tokens and bloat release logs.",
-        "For raw bytes, route traffic through a proxy (Charles or mitmproxy) and install the proxy CA on the device. The network security config must trust it, or TLS fails."
+        "Route traffic through a proxy — Charles or mitmproxy — and install its CA on the device. The security config must trust it, or TLS fails."
       ],
       "answer": "#### The events API\nOkHttp's `EventListener` is the structured observability layer. It fires in order: `callStart`, `dnsStart`/`dnsEnd`, `connectStart`/`connectEnd`, `secureConnectStart`/`secureConnectEnd`, `connectionAcquired`, `requestHeadersStart`, `responseHeadersEnd`, `callEnd`/`callFailed`. That's a precise latency breakdown — DNS vs connect vs TLS vs server time — per call, per host, usable in production.\n\n#### Interceptors vs events\nA logging interceptor (`HttpLoggingInterceptor`) shows request/response *content*; an `EventListener` shows *timing and connections*. Use the logging interceptor **in debug builds only** — a BODY-level log in release leaks tokens and bloats storage. Redact `Authorization` in whatever you keep.\n\n#### Proxy debugging\nTo see raw bytes: run the app against Charles or mitmproxy, install the proxy's CA on the device, and set the proxy (device Wi-Fi settings or a `Proxy` on the client). `trust-anchors`/`debug-overrides` in the network security config must permit the user CA, or TLS fails.\n\n#### Metrics\nThe right move is aggregating `EventListener` data — status, bytes, latency, cache hit/miss — into analytics. Those numbers surface a regression before a user reports it.",
       "code": [
@@ -50,7 +50,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     },
     {
       "id": "dn-0033",
@@ -65,9 +65,9 @@
       ],
       "q": "How do you implement an offline mutation queue and resolve conflicts?",
       "shortAnswer": [
-        "Writes land in a local Room outbox first — the UI renders optimistically — and a worker drains it in order. Every mutation carries a client-generated idempotency key, so a replayed queue never double-applies.",
-        "Conflicts are inherent, so pick a policy per operation: last-write-wins with server timestamps, version vectors for document-shaped data, or field-level merge for records.",
-        "Read-your-writes needs the optimistic value queryable locally. When the ack arrives, reconcile and re-emit, and show a visible pending or conflict state instead of failing silently."
+        "Writes land in a Room outbox first. The UI renders optimistically while a worker drains it in order. Each mutation carries a client-generated key, so replays never double-apply.",
+        "Conflicts are unavoidable, so pick a policy per operation: last-write-wins with server timestamps, version vectors for document-shaped data, or field-level merge for records.",
+        "Read-your-writes needs the optimistic value queryable locally. When the ack arrives, reconcile and re-emit, and show a pending or conflict state instead of failing silently."
       ],
       "answer": "#### The outbox\nWrites don't hit the network first — they land in a local Room **outbox**: `id, operation, payloadJson, status, retryCount, clientMutationId`. The UI renders optimistically from the local snapshot; a worker drains the queue in order. Each mutation carries a **client-generated idempotency key** the server dedupes on, so replaying a queue after a crash never double-applies.\n\n#### Ordering\nOrder within a session matters, but a failed item shouldn't block the rest forever — retry it with backoff and keep the rest moving. Surface a visible 'pending' state rather than hiding failures.\n\n#### Conflict resolution\nPick a policy per operation type:\n- **last-write-wins** with server timestamps — wrong for counters or accumulators,\n- **version vectors** for document-shaped data, which order concurrent edits,\n- **field-level merge** when disjoint fields change on both sides,\n- manual resolution UI for genuinely irreconcilable edits.\n\n#### Read-your-writes\nThe optimistic value must be queryable locally (that's the Room snapshot), and when the server ack lands you reconcile and re-emit to the UI. `WorkManager` guarantees the drain eventually runs; the design guarantees it runs *correctly*.\n\n#### The trap\nReplaying a whole failed batch from the start double-applies whatever already succeeded — process per item, with per-item keys.",
       "code": [
@@ -99,7 +99,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     },
     {
       "id": "dn-0034",
@@ -114,9 +114,9 @@
       ],
       "q": "What is a database index, and why do some queries slow down as data grows?",
       "shortAnswer": [
-        "A table without an index stores rows in a heap, so a lookup must visit every row — a full table scan that grows linearly with the table size.",
-        "An index is a separate sorted structure holding the indexed column's values with pointers back to the rows. SQLite jumps straight to matches instead of scanning.",
-        "The trade-off: every insert and update must also keep each index fresh. So index the columns you actually filter or join on — not every column."
+        "A table without an index stores rows in a heap. A lookup must check every row — a full scan that grows as the table grows.",
+        "An index is a separate sorted structure holding the indexed column's values with pointers back to rows. SQLite jumps straight to matches instead of scanning.",
+        "The trade-off: every insert and update must also keep each index fresh. So index the columns you filter or join on — not every column."
       ],
       "answer": "#### The problem\nA table without an index stores rows in a heap. To find rows matching `WHERE team = ?`, SQLite visits **every row** — a full table scan. Double the rows, double the work; at a million rows a scan is a noticeable pause.\n\n#### The fix\nAn index is a separate, **sorted** structure holding the indexed column's values with pointers back to the rows. Lookups now jump straight to the matching entries — like the index at the back of a book. A scan that visited every row becomes a search that visits a handful.\n\n#### The catch\nNothing is free: every insert and update must also keep each index fresh, so more indices mean slower writes and more storage. Index the columns you actually `WHERE`, `JOIN`, `ORDER BY`, or enforce unique on — not every column.\n\n#### What Room does\nYou declare indices on the entity: `@Entity(indices = [Index(\"teamId\")])`. The primary key is always indexed automatically — it's SQLite's rowid alias. For a small table the scan is cheap and an index is overkill; for a table that grows, the index is the difference between instant and slow.",
       "code": [
@@ -142,7 +142,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "dn-0035",
@@ -155,11 +155,11 @@
         "requests",
         "networking-basics"
       ],
-      "q": "Walk me through what happens when your app makes an HTTPS request.",
+      "q": "What happens when your app makes an HTTPS request?",
       "shortAnswer": [
-        "Your app builds an HTTP request — a method, a URL, headers, and maybe a body. Then OkHttp resolves DNS, opens a TCP connection, and negotiates TLS before any HTTP bytes flow.",
+        "Your app builds a request — method, URL, headers, maybe a body. OkHttp then resolves DNS, opens a TCP connection, and negotiates TLS before bytes flow.",
         "The server replies with a status line, headers, and a body, which your client parses into a typed response.",
-        "The full path — URL → DNS → TCP → TLS → HTTP → response — is the map interviewers want to see you draw, instead of jumping straight to 'the server returns JSON'."
+        "The full path — URL, DNS, TCP, TLS, HTTP, response — is the map interviewers want to see, instead of jumping straight to 'the server returns JSON'."
       ],
       "answer": "#### The request\nYour app builds an HTTP request: a method (GET/POST), a URL, headers, and maybe a body. OkHttp then does the heavy lifting in order:\n\n1. **DNS** — turn the hostname into an IP address.\n2. **TCP** — open a connection with a three-way handshake.\n3. **TLS** — negotiate encryption so nothing on the wire is readable.\n4. **Send** — the request bytes go over the secure connection.\n\n#### The response\nThe server answers with a **status line** (200 OK, 404 Not Found, 500 Internal Server Error), **headers** (Content-Type, Content-Length), and a **body** — usually JSON. OkHttp hands you the response, and a converter such as Retrofit's turns the body into your data class.\n\n#### Why the map matters\nEvery step is a place things can go wrong and a place to measure: DNS failures, TCP timeouts, TLS handshake errors, slow servers. A candidate who draws the whole path understands where latency and failures actually live — and that understanding is what separates the answer from 'the server returns JSON'.",
       "code": [
@@ -190,7 +190,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     },
     {
       "id": "dn-0036",
@@ -207,7 +207,7 @@
       "shortAnswer": [
         "Small flat settings belong in DataStore. Anything you query, filter, or join belongs in Room. Large blobs belong in files.",
         "Rule of thumb: if you'd ever write `WHERE userId = ?`, it's a database. One flat key/value flag? DataStore. A big blob? Files.",
-        "DataStore rewrites its whole file on every edit, so a growing list belongs in Room. None of these is a place for secrets."
+        "DataStore rewrites its whole file on every edit, so a growing list belongs in Room instead. None of these three is a place for secrets."
       ],
       "answer": "#### The decision\nThree homes for data, chosen by shape and use:\n\n- **DataStore** — small flat key/value settings: dark mode, onboarding seen, last-run timestamp. Tiny, frequent, no queries needed.\n- **Room** — anything you query, filter, join, or paginate: a feed, a message history, a user list. If you'd ever write `WHERE userId = ?`, it's a database.\n- **Files** — large binary data: images, downloads, media. No querying needed, just bytes on disk.\n\n#### The rule of thumb\n'Do I need to ask the data questions?' → Room. 'Is it one flat flag?' → DataStore. 'Is it a big blob?' → files.\n\n#### Watch-outs\nDataStore rewrites its whole file on every edit — a list that grows belongs in Room, not DataStore. Files in the `cacheDir` can be reclaimed by the system, so durable data goes in `filesDir`. And none of the three is a place for secrets — those belong behind encryption or the Keystore.",
       "code": [
@@ -238,7 +238,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     },
     {
       "id": "dn-0037",
@@ -253,9 +253,9 @@
       ],
       "q": "How would you implement a large, resumable file download on Android?",
       "shortAnswer": [
-        "Stream the body to a file with OkHttp's `source()` into a temp file — never `body.string()`, which holds the whole download in memory — and rename only when the transfer completes.",
-        "Resume with a `Range: bytes=<offset>-` header when the server advertises `Accept-Ranges: bytes`. Persist the byte offset so a cancelled download continues instead of starting over.",
-        "Verify `Content-Range` and `ETag` before appending. If the server doesn't support ranges, you re-download — which is why Range support matters for large media."
+        "Stream the body with OkHttp's `source()` into a temp file; never `body.string()` — it holds the download in memory. Rename only when done.",
+        "Resume with a `Range: bytes=<offset>-` header when the server offers `Accept-Ranges: bytes`. Persist the offset; a cancelled download then continues instead of restarting.",
+        "Check `Content-Range` and `ETag` before appending. If the server doesn't support ranges, you re-download — which is why Range support matters for large media."
       ],
       "answer": "#### Stream, don't slurp\nRead the body with OkHttp's `source()` into a buffer and write to a temp file incrementally. `response.body.string()` holds the whole download in memory and will OOM on a 200 MB file. Rename the temp file to its final name only when the transfer completes, so a crash never leaves a half-file under the real name.\n\n#### Resume with Range\nIf the server advertises `Accept-Ranges: bytes`, a dead transfer resumes: persist the byte offset, send `Range: bytes=<offset>-`, and append. Check the `Content-Range` response and the `ETag` — if the file changed server-side, restart from zero rather than corrupting the partial.\n\n#### No Range support?\nNo `Accept-Ranges` header means no resume — you re-download and overwrite. That's why large-media design includes Range from the start.\n\n#### Plumbing\nRun the loop in a coroutine on `Dispatchers.IO` (or a WorkManager worker for long runs), report progress from the source read, and keep the partial file in `filesDir` keyed by URL hash plus etag so a fresh app start can continue instead of restarting.",
       "code": [
@@ -282,7 +282,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     },
     {
       "id": "dn-0038",
@@ -295,11 +295,11 @@
         "transaction",
         "atomicity"
       ],
-      "q": "Why use transactions in Room, and what does @Transaction actually do?",
+      "q": "Why use transactions in Room, and what does @Transaction do?",
       "shortAnswer": [
-        "A transaction wraps several statements so they commit atomically — all apply or none. A crash or exception mid-way rolls back to the state before the transaction.",
+        "A transaction wraps statements so they commit atomically — all apply, or none. A crash or exception mid-way rolls back to the state before it began.",
         "`@Transaction` on a DAO method runs the whole method inside `beginTransaction`/`setTransactionSuccessful`/`endTransaction` on one connection. `withTransaction` is the coroutine equivalent.",
-        "Transactions also serialize related writes under SQLite's write lock — a grouping mechanism and a concurrency control. Keep them short."
+        "Transactions also serialize related writes under SQLite's write lock — a grouping tool and a concurrency control. Keep them short."
       ],
       "answer": "#### What a transaction is\nA transaction wraps multiple statements so they commit **atomically**: all of them apply, or none. If the app crashes or the code throws mid-way, SQLite rolls back to the state before the transaction began. Without it, a partial multi-statement write — an order plus its line items — can be left half-applied.\n\n#### @Transaction\nMarking a DAO method `@Transaction` runs the whole method inside a single transaction on one connection. Room generates `beginTransaction()` / `setTransactionSuccessful()` / `endTransaction()` around it. It's **required** for `@Relation` reads, so the parent and child selects see one consistent snapshot, and it groups related writes into one commit.\n\n#### withTransaction\nIn coroutines, `db.withTransaction { ... }` is the suspend equivalent: it returns the block's result, commits on success, and rolls back on exception. Room asserts it isn't called on the transaction thread — nesting transactions throws.\n\n#### The rules\nKeep transactions short — they hold a write lock and block other writers. Never do network I/O inside one (the lock is held across the network call). And don't wrap a single-statement DAO call in `@Transaction`; there's nothing to group.",
       "code": [
@@ -326,7 +326,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "dn-0039",
@@ -341,9 +341,9 @@
       ],
       "q": "GET vs POST vs PUT vs PATCH — how do idempotency and safety shape your API?",
       "shortAnswer": [
-        "Safe methods (GET, HEAD, OPTIONS) change no server state and can be cached. Idempotent methods (GET, PUT, DELETE) give the same result when repeated, so they can be retried safely.",
+        "Safe methods — GET, HEAD, OPTIONS — change no server state and can be cached. Idempotent methods — GET, PUT, DELETE — give one result, so retries stay safe.",
         "POST is neither safe nor idempotent — two identical POSTs create two resources. So guard retries with an idempotency key the server dedupes on.",
-        "PATCH is idempotent only if the operation is: replacing a field, yes; incrementing a counter, no. That's why it's the method to scrutinize for retries."
+        "PATCH is idempotent only if the change is: replacing a field, yes; incrementing a counter, no. That's why it needs scrutiny for retries."
       ],
       "answer": "#### The two properties\nThey come from RFC 9110 and are different:\n- **Safe** — no server state change: GET, HEAD, OPTIONS.\n- **Idempotent** — repeating the request yields the same server state: GET, PUT, DELETE.\n\nPOST is **neither**: two identical POSTs create two resources. PATCH is only idempotent when the change is — replacing a field is, incrementing a counter is not.\n\n#### Why it matters on mobile\n- **Retries**: OkHttp auto-retries connection failures only when the request is replayable — a body-bearing POST is not, so *you* guard it.\n- **Offline queues**: an outbox of POSTs needs an `Idempotency-Key` header the server dedupes on, or a double-tap on Send creates two orders.\n- **Caching**: safe methods can be cached; POST responses aren't.\n\n#### The API shape\nGET to read, PUT to replace the whole resource, PATCH for a partial change, DELETE to remove, POST to create. Map the right method to the right operation and a whole class of retry and consistency bugs disappears before they exist.",
       "code": [
@@ -375,7 +375,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     },
     {
       "id": "dn-0040",
@@ -391,8 +391,8 @@
       "q": "How does the Android network security config control cleartext and trust?",
       "shortAnswer": [
         "`network_security_config.xml` is an XML policy applied via `android:networkSecurityConfig`. It governs all traffic from the app — cleartext, trust anchors, and per-domain certificate pinning.",
-        "Android 9+ blocks cleartext HTTP by default. A `base-config` with `cleartextTrafficPermitted=false` makes that explicit, and a `domain-config` scoped to one dev host allows HTTP only there.",
-        "`trust-anchors` limits which CAs the app trusts (system vs user). `debug-overrides` lets a debug build trust user CAs for proxy debugging, while release keeps trusting only system CAs."
+        "Android 9+ blocks cleartext HTTP by default. A `base-config` with `cleartextTrafficPermitted=false` sets that, and a `domain-config` for one dev host allows HTTP only there.",
+        "`trust-anchors` sets which CAs the app trusts — system or user. `debug-overrides` lets debug builds add user CAs for proxy debugging; release trusts only system CAs."
       ],
       "answer": "#### The file\n`network_security_config.xml` is an XML policy applied with `android:networkSecurityConfig` on the `<application>`. It is parsed by the OS and governs *all* traffic from the app, not just OkHttp's.\n\n#### Cleartext\nAndroid 9+ (targetSdk 28+) blocks cleartext HTTP by default. `base-config` with `cleartextTrafficPermitted=\"false\"` makes that explicit app-wide; a `domain-config` scoped to one dev host — `10.0.2.2`, a LAN IP, a staging box — allows HTTP only there. The trap: flipping the base config to `true` to 'fix a dev issue' disables HTTPS enforcement app-wide.\n\n#### Trust\n`trust-anchors` declares which CAs the app trusts: `system` only, or `system` plus `user`. Android 7+ apps don't trust user-installed CAs by default — security for users, a hurdle for debugging. `debug-overrides` lets a *debug* build trust user CAs (proxy debugging) while release keeps trusting only system CAs.\n\n#### Pinning\nA `pin-set` with SPKI `pin` entries pins a domain in config — but rotation needs a backup pin, or the app bricks until you ship a fix. Prefer OkHttp's `CertificatePinner` when you want code-level control and tests.",
       "code": [
@@ -419,7 +419,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     }
   ]
 }

@@ -14,9 +14,9 @@
         "signature",
         "typeOf"
       ],
-      "q": "What survives type erasure on the JVM, and how do libraries recover the type anyway?",
+      "q": "What survives type erasure on the JVM? How do libraries recover the type anyway?",
       "shortAnswer": [
-        "Type arguments are erased. `is List<String>` is illegal, and `as List<String>` is an unchecked cast that fails later, at the first element read.",
+        "Type arguments are erased. `is List<String>` is illegal; `as List<String>` is an unchecked cast that fails at the first element read.",
         "The generic signature survives in the class file's `Signature` attribute and in Kotlin metadata. The anonymous-subclass trick and `typeOf<T>()` exploit that.",
         "Arrays are the exception: reified and covariant on the JVM. `ArrayStoreException` catches the mismatch."
       ],
@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0040",
@@ -58,11 +58,11 @@
         "inline",
         "typeOf"
       ],
-      "q": "What can't `reified` do, and what are the standard workarounds?",
+      "q": "What can't `reified` do? And what are the standard workarounds?",
       "shortAnswer": [
         "`reified` only works inside `inline` functions. It can't appear in a virtual or override member, and can't be forwarded to a non-inline generic function.",
         "It can't construct `T` — there's no `T()`. Pass a factory lambda, or a `KClass` and pay for reflection.",
-        "A public inline reified function inlines into consumers, so its body is ABI — only public or `@PublishedApi` declarations allowed. `T::class` loses nested type arguments; `typeOf<T>()` keeps them."
+        "A public inline reified function inlines into consumers; only public or `@PublishedApi` declarations allowed. `T::class` loses nested args; `typeOf<T>()` keeps them."
       ],
       "answer": "`reified` is only legal inside an **`inline` function**: the compiler substitutes the actual type argument at the call site, which is how `T::class`, `is T`, and `is T?` become legal in the body. But the power has hard edges:\n\n#### What it can't do\n- **No virtual/override members**: a `reified` function can't be `open`, can't be an interface method, can't be overridden — it must be inlineable. A `reified` parameter in a `when`/`if` dispatch still has to be resolved statically.\n- **No forwarding to a non-inline generic**: `fun <T> a() = b<T>()` where `b` is a plain generic function — `T` is not a real type there, so it can't be passed.\n- **No `T()` construction**: there is no reified constructor. Instantiation needs a **factory lambda** (`{ T() }` passed in) or a `KClass` + reflection.\n\n#### The ABI footgun\nA **public inline reified function** gets its body inlined into every consumer. That makes the body part of your binary surface: any helper it touches must be public or `@PublishedApi`, and changes to the body don't reach consumers until they recompile (same mechanism as `inline` in general).\n\n#### `T::class` vs `typeOf<T>()`\n`T::class` gives a `KClass` — the raw class. It **loses nested type arguments** (`T::class` for `T = List<User>` is just `List`). `typeOf<T>()` gives a `KType` that preserves them (`List<User>`), which is why serializers and JSON mappers use `typeOf`.",
       "code": [
@@ -89,7 +89,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0041",
@@ -102,9 +102,9 @@
         "where",
         "T-and-Any"
       ],
-      "q": "What is the implicit upper bound of `<T>`, and when do you need `where` or `T & Any`?",
+      "q": "What is the implicit upper bound of `<T>`? And when do you need `where` or `T & Any`?",
       "shortAnswer": [
-        "`fun <T> f(x: T)` has upper bound `Any?`, so `f(null)` compiles. That's the trap behind 'non-null' generic helpers that silently accept null.",
+        "`fun <T> f(x: T)` has upper bound `Any?`, so `f(null)` compiles. That's why 'non-null' generic helpers silently accept null.",
         "`<T : Any>` fixes it. Multiple bounds need `where T : Comparable<T>, T : Serializable`. Recursive bounds mimic the self type Kotlin lacks.",
         "`T & Any`, since 1.7, is the definitely non-nullable type you write when overriding a Java generic method whose parameter is `@NotNull`."
       ],
@@ -138,7 +138,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0042",
@@ -151,7 +151,7 @@
         "UnsafeVariance",
         "projection"
       ],
-      "q": "You are designing a generic API — how do you decide variance, and what is `@UnsafeVariance` doing in `List<out E>.contains`?",
+      "q": "You're designing a generic API. How do you decide variance? What is `@UnsafeVariance` doing in `List<out E>.contains`?",
       "shortAnswer": [
         "Producers get `out` — `Flow`, `StateFlow`, `List`. Consumers get `in` — `Comparator`, `Continuation`. `Nothing` lets a covariant type have a singleton bottom variant.",
         "`contains(element: @UnsafeVariance E)` suppresses the position check, because the operation only reads the element, never stores it.",
@@ -182,7 +182,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0043",
@@ -195,9 +195,9 @@
         "arrayOf",
         "IntArray"
       ],
-      "q": "`listOf` vs `mutableListOf` vs `arrayOf` vs `IntArray` — what do you pick and why?",
+      "q": "`listOf`, `mutableListOf`, `arrayOf`, or `IntArray` — which do you pick, and why?",
       "shortAnswer": [
-        "`List` is a read-only interface, backed by `ArrayList` or a shared singleton for `emptyList()`. `Array<Int>` boxes each element into `Integer`; `IntArray` is a real `int[]`.",
+        "`List` is a read-only interface, backed by `ArrayList` (or the `emptyList()` singleton). `Array<Int>` boxes elements into `Integer`; `IntArray` is an `int[]`.",
         "Arrays are fixed-size and compare by identity. You need `contentEquals` or `contentDeepEquals`. Lists compare structurally.",
         "`buildList {}` avoids the mutable-then-`toList()` dance."
       ],
@@ -226,7 +226,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     }
   ]
 }

@@ -14,7 +14,7 @@
         "technical",
         "ownership"
       ],
-      "q": "Structure a “technical decision you got wrong” answer",
+      "q": "How do you tell a wrong-technical-decision story?",
       "answer": "The interviewer is testing **engineering judgment plus self-awareness** — you picked a technology for the right reason and changed your mind when evidence said so.\n\n**Setup: the decision and the rationale.** “I chose a multi-module Room setup over a single database because the team split by ownership, and I believed isolation would keep schema conflicts away.” A wrong decision made on real reasoning is a story; a whim is a red flag.\n\n**The failure: the evidence, concretely.** “Within two releases, cross-feature queries hit the migration boundary — a shared entity lived in two databases and data was going stale between them.” A mechanism, not a feeling.\n\n**Your reaction: how fast and how loud.** “I flagged the migration risk in the first retro rather than patching around it.” Weeks vs months of quiet suffering is the difference between good and bad judgment.\n\n**The correction.** “We consolidated into one database with schema-gated ownership, and I wrote the migration playbook so it took a weekend instead of a month.”\n\n**Outcome + lesson.** “Stale-data bugs dropped to zero. The lesson I keep now: when a decision’s cost is in integration rather than isolation, bet on integration.” A one-line transferable principle closes the loop and tells the interviewer you will not repeat the mistake on their team.",
       "shortAnswer": [
         "Structure: setup with the rationale, the evidence of failure, the honest reaction, the correction, and a transferable lesson.",
@@ -39,7 +39,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     },
     {
       "id": "bh-0016",
@@ -55,8 +55,8 @@
       "q": "How do you push back on a product requirement?",
       "answer": "Pushing back on product is a trust question: protect engineering reality without being the person who says no to everything.\n\n**Setup: the requirement and the real cost.** “The PM asked for offline-first sync in one sprint — realistically conflict resolution, a migration, and a QA matrix: a quarter of work.”\n\n**The reframe: their goal, not their ask.** “I asked what offline mode really solved — it turned out users on poor networks were losing form data.” The goal is almost always smaller than the ask.\n\n**The counter: a cheaper path to the same goal.** “I proposed an autosave-draft system that survives network loss and syncs on reconnect — a fraction of the work, and it killed the data-loss complaint.” You reject the implementation, not the goal, and you bring the alternative.\n\n**The negotiation: a menu with honest estimates.** “I gave three options — the draft system (2 weeks), a read-only offline mode (6 weeks), or full sync (a quarter) — with the risk of each.” Offering a menu is how engineers push back without owning the decision.\n\n**Outcome.** “We shipped the draft system, data-loss tickets dropped 80%, and the PM used the same trade-off menu on the next project.” The detail that matters: the relationship survived — the PM came back with better-scoped asks. Pushing back well is what makes product folks trust engineers with the hard requirements.",
       "shortAnswer": [
-        "Separate the requirement from the goal. Ask what it really solves — the goal is usually smaller than the ask.",
-        "Bring a cheaper path to the same goal, not just a \"no.\"",
+        "Separate the requirement from the goal. Ask what it solves — the goal is usually smaller than the ask.",
+        "Bring a cheaper path to the same goal, not only a \"no.\"",
         "Present a menu of options with honest estimates, and let the PM choose."
       ],
       "followUps": [
@@ -77,7 +77,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     },
     {
       "id": "bh-0017",
@@ -90,12 +90,12 @@
         "incident",
         "reliability"
       ],
-      "q": "Structure an incident or production outage story",
+      "q": "How do you tell an incident-outage story?",
       "answer": "An incident story scores on **calm, communication, and the systemic fix.** The interviewer is a future teammate who wants to know what you are like at 3am.\n\n**Setup: the signal.** “Crash-free sessions dropped from 99.2% to 88% in twenty minutes after a release.” Number and timeline set the stakes.\n\n**The diagnosis: the process (the scored part).** “The first alert was the crash dashboard; I checked the release diff, saw the new background sync, and confirmed a race in the worker from the in-memory stack traces — not the UI.” Name the tooling: dashboards, stack traces, logs, a rollback gate. Hypothesis, evidence, confirm — not guessing and reloading.\n\n**The communication.** “I posted a one-line status to the on-call channel immediately, paged the owner at ten minutes, and gave the PM a 15-minute cadence update with an ETA.” Communication is nearly half the score — the engineer who disappears for an hour while fixing is worse than one who fixes slower and keeps everyone oriented.\n\n**The fix: the rollback.** “We rolled back within forty minutes, verified sessions recovered, and held the change for the fix.” A clean rollback beats a heroic hotfix.\n\n**The retro: systemic prevention.** “The root cause was the worker running without a start gate; the fix gated it behind the connectivity check, plus a canary rollout that watches crash-free sessions before full ship.” The incident produced a system change — and if true, that it caught the next one.",
       "shortAnswer": [
         "Structure: signal with numbers, diagnose with tooling, keep up communication, roll back cleanly, and fix the system in the retro.",
         "Name the tooling you used. The diagnosis must be a process, not a guess.",
-        "The retro must change the system — a gate, a canary, an alert — so the bug class can't repeat, not just that one instance."
+        "The retro must change the system — a gate, a canary, an alert — so the bug class can't repeat, not only that one instance."
       ],
       "followUps": [
         "Who was on call with you, and what did they do?",
@@ -115,7 +115,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     },
     {
       "id": "bh-0018",
@@ -153,7 +153,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     },
     {
       "id": "bh-0019",
@@ -191,7 +191,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     },
     {
       "id": "bh-0020",
@@ -204,7 +204,7 @@
         "prioritization",
         "deadlines"
       ],
-      "q": "Structure a “prioritizing under a hard deadline” answer",
+      "q": "How do you prioritize under a hard deadline?",
       "answer": "This question scores **your decision rule, not your effort.** Working harder is not the answer; the interviewer wants to see you cut scope on a defensible basis and told people.\n\n**Setup: the deadline and the demand.** “A launch date was fixed by a partner agreement, and the team had about 60% of the promised work done.” The deadline is real and external — that is what makes it prioritization rather than estimation.\n\n**Your rule: how you decided.** Name the framework: “I ranked each feature by launch-blocking vs launch-nice, then cut the nice ones, keeping anything that touched the core flow, security, or the demo path.” A named rule (impact vs effort, launch-critical vs polish) is the whole point — you can answer “why did you cut this?” with a consistent principle.\n\n**The communication: who you told, and when.** “In week three of five I showed the PM the gap and we agreed on the cut list together, so the launch story was coherent rather than silently missing pieces.” Cutting scope in the room with the PM, early, beats quietly shipping less.\n\n**The execution.** “I froze new work, protected the two critical developers from interruption, and shipped the cut list on schedule.”\n\n**Outcome.** “We launched on the agreed date with the core flow intact; two cut features shipped the next release.” The meta-lesson: the skill is agreeing earlier on what *less* means — a team that agrees on the cut list early ships more than one that fights at the deadline.",
       "shortAnswer": [
         "Name the decision rule — launch-critical vs nice, impact vs effort — cut on it, and tell the stakeholder before the deadline.",
@@ -229,7 +229,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     },
     {
       "id": "bh-0021",
@@ -267,7 +267,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     },
     {
       "id": "bh-0022",
@@ -306,7 +306,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     },
     {
       "id": "bh-0023",
@@ -344,7 +344,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     },
     {
       "id": "bh-0024",
@@ -382,7 +382,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     },
     {
       "id": "bh-0025",
@@ -398,7 +398,7 @@
       "q": "How do you discuss compensation and negotiate an offer?",
       "answer": "Negotiating compensation is a low-stakes, high-value skill, and interviewers often ask it to check you can handle a real business conversation.\n\n**Know the numbers before you talk.** Research the band for the level and location (“Android Staff in this metro is roughly 350–450k total”) and know your current total comp. The most common mistake is negotiating from a feeling instead of a number.\n\n**Never give a number first if you can avoid it.** “I’d like to understand the band for this role first” works — most companies state a range once asked. If forced, give a range whose bottom is your real floor, anchored to data: “based on comparable offers, I’m expecting 360–400k total.”\n\n**Negotiate the whole package, not the salary.** Base, RSUs, sign-on, and vesting all move differently. “The base is fine, but the RSU cliff at one year is the issue — can we front-load the grant or add a sign-on?” Recruiters have sign-on budget that base budget rarely matches.\n\n**Use competing offers as leverage with honesty.** “I have another offer at 390k — is that something you can get closer to?” is fine; inventing offers burns the trust you built over four rounds. Never bluff.\n\n**Be easy to say yes to.** End with a small, prioritized set of asks and clear acceptance: “the offer is good — the two things that would close it are X and Y.” And remember title, level, and the team matter more over two years than a 10% comp difference in one.",
       "shortAnswer": [
-        "Research the pay band and your current comp first. Negotiate the whole package — base, RSUs, sign-on, vesting — not just salary.",
+        "Research the pay band and your current comp first. Negotiate the whole package — base, RSUs, sign-on, vesting — not only salary.",
         "Don't give a number first. If forced, anchor a range whose bottom is your real floor.",
         "Use a competing offer as honest leverage. Never bluff or invent one."
       ],
@@ -420,7 +420,7 @@
         }
       ],
       "addedIn": "2026.08.13",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.29"
     }
   ]
 }

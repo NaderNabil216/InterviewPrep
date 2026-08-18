@@ -14,11 +14,11 @@
         "async",
         "builders"
       ],
-      "q": "Compare `launch`, `async`, `withContext`, `coroutineScope`, `runBlocking` and `produce`: what each returns, which ones suspend, and how each surfaces an exception.",
+      "q": "`launch`, `async`, `withContext`, `coroutineScope`, `runBlocking`, `produce` — what does each return, and how do they suspend and throw?",
       "shortAnswer": [
         "`launch` returns a `Job` and is fire-and-forget; its exception goes straight to the parent.",
         "`async` returns a `Deferred`, and its exception waits there until `await()` is called.",
-        "`withContext` and `coroutineScope` suspend, return a value, and rethrow to the caller. `runBlocking` blocks a thread; `produce` returns a hot `ReceiveChannel`."
+        "`withContext` and `coroutineScope` suspend, return a value, and rethrow. `runBlocking` blocks a thread; `produce` returns a hot `ReceiveChannel`."
       ],
       "answer": "Reconstruct the table from first principles.\n\n- **`launch`** — starts a coroutine, returns a `Job`, does not suspend. Fire-and-forget; an exception propagates immediately to the parent (and crashes if unhandled).\n- **`async`** — returns a `Deferred<T>` (a `Job` + a value slot), does not suspend. The exception sits in the `Deferred` until `await()` throws it; never awaited, never thrown.\n- **`withContext`** — *suspends*, switches context for the block, returns `T`, and rethrows the block's exception to its caller. Use it for a single context switch.\n- **`coroutineScope`** — suspends, runs children as its own, returns the block's `T` and rethrows the first child failure after cancelling siblings. The structured-concurrency builder.\n- **`runBlocking`** — not a suspend function: it blocks the calling thread and runs an event loop on it until the block finishes.\n- **`produce`** — returns a hot `ReceiveChannel`; the producer coroutine sends into the channel, an exception closes it.\n\nPlus the four `CoroutineStart` modes (`DEFAULT`, `LAZY`, `ATOMIC`, `UNDISPATCHED`), and the rule: a single value from a single call means `withContext`, never `async { }.await()`.",
       "code": [
@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0030",
@@ -58,7 +58,7 @@
         "anr",
         "anti-pattern"
       ],
-      "q": "Why is `runBlocking` banned in production Android code, and where is it legitimately correct?",
+      "q": "Why is `runBlocking` banned in production Android code? Where is it legitimately correct?",
       "shortAnswer": [
         "It blocks the calling thread and runs an event loop on it until the block finishes — on Main that is a guaranteed ANR.",
         "Called from the main thread, it can deadlock on `withContext(Dispatchers.Main)`.",
@@ -89,7 +89,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0031",
@@ -102,7 +102,7 @@
         "dispatcher-io",
         "performance"
       ],
-      "q": "What does `withContext(Dispatchers.IO)` actually do, and what does it cost?",
+      "q": "What does `withContext(Dispatchers.IO)` do? And what does it cost?",
       "shortAnswer": [
         "It suspends the caller, runs the block in a child coroutine with the merged context, then dispatches back — up to two thread hand-offs per call.",
         "It is strictly sequential. It is never a way to get concurrency.",
@@ -133,7 +133,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0032",
@@ -146,10 +146,10 @@
         "semaphore",
         "scheduler"
       ],
-      "q": "You need at most 4 concurrent uploads. `Dispatchers.IO.limitedParallelism(4)`, a `Semaphore(4)`, or `flatMapMerge(concurrency = 4)`?",
+      "q": "You need at most 4 concurrent uploads. `limitedParallelism(4)`, `Semaphore(4)`, or `flatMapMerge(concurrency = 4)`?",
       "shortAnswer": [
         "`limitedParallelism` caps how many tasks are **dispatched at once**, not how many run concurrently — a suspended upload releases its slot.",
-        "`Semaphore(4)` or `flatMapMerge(4)` actually bound logical concurrency.",
+        "`Semaphore(4)` or `flatMapMerge(4)` bound logical concurrency.",
         "That is why: IO grows elastically to 64 threads, and `Default` shares the same pool."
       ],
       "answer": "`limitedParallelism(4)` creates a *view* over the shared `CoroutineScheduler` that allows at most 4 tasks to be dispatched onto threads at once. That bounds active threads, not logical concurrency: an upload that suspends while awaiting a socket has no task running on a thread, so its slot is free and a fifth upload starts. If 'at most 4 concurrent' means four in-flight logical operations, `limitedParallelism` does not give it to you.\n\n#### What actually bounds concurrency\n- `Semaphore(4)` — each upload acquires before starting; a suspended upload still holds its permit, so you truly cap in-flight work.\n- `flatMapMerge(concurrency = 4)` — caps how many inner flows run at once; the natural tool for a flow of URLs.\n\n#### The pool model worth explaining\n`Dispatchers.IO` is a view over the shared `CoroutineScheduler` with a CPU-permit layer plus an elastic 64-thread limit (`kotlinx.coroutines.io.parallelism`) for blocking calls. `Default` shares the same underlying pool. A blocking call inside `Default` starves the pool, which is why blocking goes through `IO`. For a genuine single-thread confinement you can use `limitedParallelism(1)` — that one *does* bound execution because only one task can run at a time. And `Executor.asCoroutineDispatcher()` — which you must `close()` — is the escape hatch when you need a real custom pool.",
@@ -177,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "co-0033",
@@ -190,7 +190,7 @@
         "synchronized",
         "shared-state"
       ],
-      "q": "`Mutex` vs `synchronized` in suspending code.",
+      "q": "`Mutex` or `synchronized` in suspending code?",
       "shortAnswer": [
         "`synchronized` takes a JVM monitor bound to a **thread**, and the compiler refuses a suspension point inside it.",
         "`Mutex.withLock` is suspending, cancellation-aware and FIFO-fair — but explicitly not reentrant.",
@@ -221,7 +221,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0034",
@@ -234,7 +234,7 @@
         "stateflow",
         "race"
       ],
-      "q": "Three coroutines increment a shared counter and you get the wrong number. Rank the fixes.",
+      "q": "Three coroutines increment a shared counter and you get the wrong number. Sort the fixes.",
       "shortAnswer": [
         "Don't share: keep the state in one coroutine, or use a `limitedParallelism(1)` dispatcher.",
         "Then immutable state behind `MutableStateFlow.update {}`, then atomics, and only then `Mutex`.",
@@ -265,7 +265,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0035",
@@ -278,7 +278,7 @@
         "cold-stream",
         "collect"
       ],
-      "q": "What is a Flow, and what happens the moment you call `collect`?",
+      "q": "What is a Flow? What happens the moment you call `collect`?",
       "shortAnswer": [
         "A Flow is basically a suspend function that can return many values.",
         "`collect` runs the builder block in the collector's own coroutine, and each `emit` is a direct suspending call into the collector's lambda.",
@@ -309,7 +309,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0036",
@@ -322,7 +322,7 @@
         "on-completion",
         "first"
       ],
-      "q": "Tour the Flow operators you use daily, and name the two that people misuse.",
+      "q": "Which Flow operators do you use daily? And name the two people misuse.",
       "shortAnswer": [
         "Daily set: `map`/`filter`, `transform` for zero-to-many emissions, `onEach`, `onStart`, and `scan` for accumulation.",
         "Terminals: `first`, `single`, `toList`, `fold`, and `launchIn` as a shortcut for `launch { collect() }`.",
@@ -353,7 +353,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0037",
@@ -366,7 +366,7 @@
         "context",
         "flow-invariant"
       ],
-      "q": "`flow { withContext(Dispatchers.IO) { emit(x) } }` crashes at runtime. Why, and what is the rule?",
+      "q": "`flow { withContext(Dispatchers.IO) { emit(x) } }` crashes at runtime. Why? What is the rule?",
       "shortAnswer": [
         "It throws 'Flow invariant is violated' at runtime — `emit` must run in the same coroutine that called `collect`.",
         "The collector's context and `Job` must govern emissions, or cancellation breaks.",
@@ -397,7 +397,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0038",
@@ -410,7 +410,7 @@
         "catch",
         "retry"
       ],
-      "q": "Exception transparency: what can `catch` catch, and what escapes it?",
+      "q": "Exception transparency: what can `catch` catch? What escapes it?",
       "shortAnswer": [
         "`catch` only sees exceptions thrown **upstream of itself** — a crash in the `collect { }` lambda passes straight by it.",
         "To cover that code, move it into an `onEach { }` placed above the `catch`.",
@@ -441,7 +441,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     }
   ]
 }

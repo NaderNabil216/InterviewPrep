@@ -14,7 +14,7 @@
         "internals",
         "cps"
       ],
-      "q": "What does the compiler actually do to a `suspend` function?",
+      "q": "What does the compiler do to a `suspend` function?",
       "shortAnswer": [
         "The compiler rewrites the function in CPS style, adding a hidden `Continuation` parameter to the signature.",
         "The body turns into a state machine: each suspension point is a labelled state, and surviving locals become fields on that object.",
@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0002",
@@ -58,7 +58,7 @@
         "job",
         "scope"
       ],
-      "q": "What is structured concurrency, and what does `coroutineScope` vs `supervisorScope` change?",
+      "q": "What is structured concurrency? And what does `coroutineScope` vs `supervisorScope` change?",
       "shortAnswer": [
         "Every coroutine has a parent. A scope waits for all its children to finish, and cancelling the parent cancels the whole tree.",
         "`coroutineScope` — one child failing cancels its siblings and rethrows the error to the caller.",
@@ -94,7 +94,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0003",
@@ -106,10 +106,10 @@
         "exceptions",
         "coroutines"
       ],
-      "q": "How do exceptions propagate differently between `launch` and `async`?",
+      "q": "How do exceptions spread differently between `launch` and `async`?",
       "shortAnswer": [
         "`launch` sends the exception straight to the parent job, which cancels the tree and passes the error to a `CoroutineExceptionHandler`.",
-        "`async` stores the exception in its `Deferred`. `await()` rethrows it, but under a normal parent the failure also cancels the parent right away.",
+        "`async` stores the exception in its `Deferred`. `await()` rethrows it, but under a normal parent the failure also cancels the parent.",
         "A `CoroutineExceptionHandler` only fires on the scope's root coroutine, and it never applies to `async`."
       ],
       "answer": "#### launch\nAn uncaught exception in `launch` is treated as an unhandled failure: it cancels the parent job, which cancels all siblings, and then travels to the nearest `CoroutineExceptionHandler` in the context (or the thread's default handler → crash).\n\n#### async\nThe exception is captured into the `Deferred`. Nothing happens until `await()`, which rethrows it. **But** if the `async`'s parent is a regular `Job`, the failure *also* propagates to the parent immediately, independent of `await()`. So `async { error(\"x\") }` inside a regular scope crashes even if you never await. Under a `SupervisorJob`/`supervisorScope`, the failure is held until `await()`.\n\n#### CoroutineExceptionHandler placement\nIt is only consulted for a coroutine that is the **root** of its scope. Putting one in the context of a nested `launch` does nothing — the exception has already been delegated to the parent. Install it on the scope, or on the top-level `launch`.\n\n#### The practical Android pattern\nDon't lean on the handler for domain errors. Model expected failures as data (`Result`, a sealed `UiState`) and reserve the handler for last-resort logging.",
@@ -137,7 +137,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0004",
@@ -149,10 +149,10 @@
         "dispatchers",
         "threading"
       ],
-      "q": "Compare `Dispatchers.Main`, `Default`, `IO`, and `Unconfined`. When do you switch?",
+      "q": "What are `Dispatchers.Main`, `Default`, `IO`, `Unconfined`? When do you switch?",
       "shortAnswer": [
-        "`Main` is the UI thread (`Main.immediate` skips re-dispatch when already there); `Default` is CPU-bound and sized to cores; `IO` is for blocking calls, elastic to 64 threads.",
-        "`Unconfined` has no confinement — for tests and edge cases only. `Default` and `IO` share one pool, so switching between them is cheap and creates no threads.",
+        "`Main` is the UI thread (`Main.immediate` skips re-dispatch); `Default` CPU-bound, sized to cores; `IO` for blocking calls, elastic to 64 threads.",
+        "`Unconfined` has no confinement — tests and edge cases only. `Default` and `IO` share one pool, so switching is cheap, no new threads.",
         "The rule: a suspend function should be **main-safe**, so the caller never has to choose a dispatcher."
       ],
       "answer": "#### The four\n- **`Main`** — the Android UI thread. `Main.immediate` executes inline when you're already on the main thread, avoiding an unnecessary post to the message queue (matters in Compose and in tight update loops).\n- **`Default`** — CPU-bound work: parsing, sorting, image processing. Parallelism = number of cores (minimum 2).\n- **`IO`** — designed for *blocking* calls: disk, network with a blocking client, SQLite, `File`. Elastic up to 64 threads by default because those threads are mostly parked in a blocking call.\n- **`Unconfined`** — starts in the caller's thread and resumes in whatever thread the continuation completes on. Almost never correct in app code.\n\n`IO` and `Default` share one pool; `withContext(Dispatchers.IO)` from `Default` just changes the parallelism limit, it doesn't spin up a thread. `limitedParallelism(n)` gives you a private slice — useful to cap concurrent network calls.\n\n#### Main safety\nA well-behaved suspend function does its own dispatching so callers can invoke it from anywhere: `suspend fun load() = withContext(ioDispatcher) { … }`. The caller in the ViewModel then just writes `val data = repo.load()` on the main dispatcher. Pushing `withContext` into the caller is a design smell.\n\n#### Injecting dispatchers\nHardcoding `Dispatchers.IO` inside a class makes it untestable. Inject a dispatcher (or a small `DispatcherProvider`) so tests can supply a `TestDispatcher`.\n\n#### Retrofit / Room note\nRetrofit `suspend` functions and Room `suspend`/`Flow` queries are already main-safe — they dispatch internally. Wrapping them in `withContext(Dispatchers.IO)` is redundant and a common thing interviewers probe.",
@@ -185,7 +185,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0005",
@@ -197,7 +197,7 @@
         "flow",
         "cold-hot"
       ],
-      "q": "Cold vs hot flows — what's the difference, and where does each belong?",
+      "q": "Cold vs hot flows — what's the difference? Where does each belong?",
       "shortAnswer": [
         "A cold flow runs its producer block again for **every** collector. Nothing happens until someone collects.",
         "A hot flow (`StateFlow`, `SharedFlow`) emits even with no collectors, and all collectors share one upstream.",
@@ -233,7 +233,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0006",
@@ -245,7 +245,7 @@
         "flow",
         "operators"
       ],
-      "q": "`flatMapLatest` vs `flatMapMerge` vs `flatMapConcat` — and what do `buffer`, `conflate`, and `flowOn` do?",
+      "q": "`flatMapLatest` vs `flatMapMerge` vs `flatMapConcat`? What do `buffer`, `conflate`, and `flowOn` do?",
       "shortAnswer": [
         "`flatMapLatest` cancels the previous inner flow on each new value (search-as-you-type). `flatMapMerge` runs inners concurrently; `flatMapConcat` waits for each in order.",
         "`buffer` separates producer and collector with a channel; `conflate` keeps only the newest value when the collector is slow.",
@@ -276,7 +276,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0007",
@@ -289,7 +289,7 @@
         "flow",
         "compose"
       ],
-      "q": "How do you collect a Flow safely with respect to the Android lifecycle?",
+      "q": "How do you collect a Flow safely across the Android lifecycle?",
       "shortAnswer": [
         "In Views: `repeatOnLifecycle(Lifecycle.State.STARTED)` inside `viewLifecycleOwner.lifecycleScope`. Collection stops at STOP and restarts at START.",
         "In Compose, use `collectAsStateWithLifecycle()`, not plain `collectAsState()`.",
@@ -320,7 +320,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0008",
@@ -333,7 +333,7 @@
         "coroutines",
         "turbine"
       ],
-      "q": "How do you test coroutines and flows deterministically?",
+      "q": "How do you test coroutines and flows without flakiness?",
       "shortAnswer": [
         "`runTest { }` gives a `TestScope` with a virtual clock, so `delay(10_000)` completes instantly and deterministically.",
         "Inject dispatchers so tests can use `StandardTestDispatcher` or `UnconfinedTestDispatcher`. Use `Dispatchers.setMain(...)` for `viewModelScope`.",
@@ -369,7 +369,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     }
   ]
 }

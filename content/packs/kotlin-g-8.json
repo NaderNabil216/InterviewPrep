@@ -14,7 +14,7 @@
         "lazy",
         "single-pass"
       ],
-      "q": "Sequences: when do they stop being lazy, and when are they the wrong tool?",
+      "q": "When do sequences stop being lazy? And when are they the wrong tool?",
       "shortAnswer": [
         "Stateful intermediate operations — `sorted`, `distinct`, `chunked` — buffer the whole sequence. That kills the memory win and early termination.",
         "A sequence from `sequence {}` or `generateSequence` is single-pass: a second iteration throws `IllegalStateException`. `asSequence()` over a `List` is re-iterable.",
@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0050",
@@ -58,7 +58,7 @@
         "referential",
         "contentEquals"
       ],
-      "q": "`==`, `===` and `equals` in Kotlin — what does each actually do?",
+      "q": "`==`, `===`, and `equals` in Kotlin — what does each do?",
       "shortAnswer": [
         "`==` compiles to a null-safe `equals`: `a?.equals(b) ?: (b === null)`. So it's structural even on nullable receivers.",
         "`===` is reference identity, and is not meaningful for primitives or value classes.",
@@ -89,7 +89,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0051",
@@ -102,9 +102,9 @@
         "equals",
         "HashSet"
       ],
-      "q": "What is the equals/hashCode contract, and how does a data class break it?",
+      "q": "What is the equals/hashCode contract? How does a data class break it?",
       "shortAnswer": [
-        "Equal objects must have equal hashCodes, and a key's hashCode must not change while it sits in a hash container. If it does, `HashSet.contains` returns false for a still-present element.",
+        "Equal objects must have equal hashCodes, and a key's hashCode must not change in a hash container. If it does, `HashSet.contains` returns false.",
         "A generated `equals` compares `javaClass` — symmetric, but a subclass never equals its parent.",
         "Body-declared properties are excluded from `equals`. An `Array` property needs a hand-rolled `equals` using `contentEquals`/`contentHashCode`."
       ],
@@ -133,7 +133,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0052",
@@ -146,9 +146,9 @@
         "Comparator",
         "TreeSet"
       ],
-      "q": "The `Comparable`/`Comparator` contracts — what goes wrong in sorted collections?",
+      "q": "`Comparable`/`Comparator` contracts — what goes wrong in sorted collections?",
       "shortAnswer": [
-        "`TreeSet`, `TreeMap`, and `sortedSetOf` use `compareTo` only. Two items that compare to 0 are treated as duplicates even when `equals` disagrees — `BigDecimal 1.0` vs `1.00`.",
+        "`TreeSet`, `TreeMap`, and `sortedSetOf` use `compareTo` only, so two items that compare to 0 are duplicates even when `equals` disagrees.",
         "`a.x - b.x` can overflow — use `compareValues` or `compareBy`. `Double.NaN` sorts greater than everything, and `NaN == NaN` is false.",
         "`sortedBy` copies and is stable (TimSort); `sortBy` mutates in place. The selector runs O(n log n) times — precompute expensive keys."
       ],
@@ -177,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0053",
@@ -190,9 +190,9 @@
         "Throws",
         "Swift"
       ],
-      "q": "Kotlin has no checked exceptions — what does that mean for Java and Swift callers, and what is `@Throws` for?",
+      "q": "Kotlin has no checked exceptions — what does that mean for Java and Swift callers? What is `@Throws` for?",
       "shortAnswer": [
-        "Nothing forces a catch. A Kotlin function that throws `IOException` is invisible to Java's compile-time check, unless `@Throws(IOException::class)` writes a `throws` clause into the bytecode.",
+        "Nothing forces a catch. A function throwing `IOException` is invisible to Java's compile-time check unless `@Throws(IOException::class)` writes `throws`.",
         "On Kotlin/Native, `@Throws` turns an exception into an `NSError**` out-parameter for Swift. An unlisted exception terminates the app instead.",
         "Overriding a Java method never inherits its checked-exception obligation."
       ],
@@ -226,7 +226,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     }
   ]
 }

@@ -14,7 +14,7 @@
         "componentN",
         "data-class"
       ],
-      "q": "How does destructuring work, and why is it risky on a data class?",
+      "q": "How does destructuring work? Why is it risky on a data class?",
       "shortAnswer": [
         "`val (a, b) = x` calls `component1()` and `component2()` by position. Nothing is matched by name.",
         "Swapping two same-typed properties in a data class still compiles, and silently swaps meaning at every destructuring call site.",
@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0025",
@@ -58,7 +58,7 @@
         "var",
         "const"
       ],
-      "q": "`val` vs `var` vs `const val` — and why is `val` not immutability?",
+      "q": "`val` vs `var` vs `const val` — why is `val` not immutability?",
       "shortAnswer": [
         "`val` fixes the reference, not the object. `val list = mutableListOf()` stays fully mutable inside.",
         "`const val` is a compile-time constant: a primitive or `String`, top-level or in an object/companion, inlined into every call site.",
@@ -89,7 +89,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0026",
@@ -102,7 +102,7 @@
         "lazy",
         "nullable"
       ],
-      "q": "`lateinit` vs `by lazy` vs a nullable property — how do you choose?",
+      "q": "`lateinit` vs `by lazy` vs a nullable property — which do you pick?",
       "shortAnswer": [
         "`lateinit` is `var`-only and non-null. No primitives or custom accessors. It's backed by a null field, and reading it too early throws `UninitializedPropertyAccessException`.",
         "`by lazy` allocates a `Lazy` holder and caches forever. That's wrong for lifecycle-scoped or refreshable state.",
@@ -133,7 +133,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0027",
@@ -146,7 +146,7 @@
         "constructor",
         "override"
       ],
-      "q": "In what order do constructors, property initializers and `init` blocks run — and why is calling an `open` member from a constructor a bug?",
+      "q": "What order do constructors, property initializers, and `init` blocks run in? Why is calling an `open` member from a constructor a bug?",
       "shortAnswer": [
         "Order: primary constructor, then property initializers and `init` blocks interleaved in declaration order, then the secondary constructor body after delegation.",
         "A base-class `init` that calls an `open` member runs the subclass override before the subclass's own initializers.",
@@ -177,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0028",
@@ -189,7 +189,7 @@
         "explicit-backing-field",
         "stateflow"
       ],
-      "q": "What are explicit backing fields, and what are the rules?",
+      "q": "What are explicit backing fields? What are the rules?",
       "shortAnswer": [
         "Explicit backing fields, stabilized in Kotlin 2.3, let one property hold a mutable type internally and expose a read-only type outside.",
         "`val state: StateFlow<UiState> field = MutableStateFlow(Loading)` — the mutable value is visible only inside the declaring scope.",
@@ -220,7 +220,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     }
   ]
 }

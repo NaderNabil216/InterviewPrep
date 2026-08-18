@@ -9,8 +9,12 @@
       "topic": "App size",
       "level": 4,
       "type": "qa",
-      "tags": ["install-conversion", "asset-packs", "dynamic-delivery"],
-      "q": "Everyone says smaller apps convert better. What actually moves install conversion?",
+      "tags": [
+        "install-conversion",
+        "asset-packs",
+        "dynamic-delivery"
+      ],
+      "q": "Everyone says smaller apps convert better. What moves install conversion?",
       "shortAnswer": [
         "Size moves conversion mainly in low-storage and metered markets — but store listing, ratings, and perceived quality move installs at least as much.",
         "The cheapest lever is the AAB split (30-50% smaller downloads); asset packs and dynamic features only pay off when shedding genuinely optional, large assets.",
@@ -34,11 +38,19 @@
         "Adding on-demand delivery complexity to 'save' assets users mostly want installed anyway."
       ],
       "refs": [
-        { "title": "Asset delivery with Play Asset Delivery", "url": "https://developer.android.com/guide/playcore/asset-delivery", "checked": "2026-08-13" },
-        { "title": "Deliver dynamic feature modules on demand", "url": "https://developer.android.com/guide/app-bundle/dynamic-delivery", "checked": "2026-08-13" }
+        {
+          "title": "Asset delivery with Play Asset Delivery",
+          "url": "https://developer.android.com/guide/playcore/asset-delivery",
+          "checked": "2026-08-13"
+        },
+        {
+          "title": "Deliver dynamic feature modules on demand",
+          "url": "https://developer.android.com/guide/app-bundle/dynamic-delivery",
+          "checked": "2026-08-13"
+        }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     }
   ]
 }

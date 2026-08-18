@@ -14,7 +14,7 @@
         "text",
         "annotated-string"
       ],
-      "q": "How do you build styled text with links and inline icons?",
+      "q": "How do you make styled text with links and inline icons?",
       "shortAnswer": [
         "`buildAnnotatedString` styles ranges with `SpanStyle` and blocks with `ParagraphStyle`.",
         "`LinkAnnotation.Url`/`LinkAnnotation.Clickable` make links focusable and readable by TalkBack.",
@@ -37,7 +37,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0053",
@@ -50,7 +50,7 @@
         "text",
         "performance"
       ],
-      "q": "Why is text usually the most expensive thing on your frame, and what do you do about it?",
+      "q": "Why is text usually the most expensive thing on your frame? What do you do about it?",
       "shortAnswer": [
         "Text layout shapes glyphs, resolves fonts, and breaks lines — it dominates measure time in a list row.",
         "An async `FontFamily` causes a visible reflow when it loads. Preload it, or pick a fallback with matching metrics.",
@@ -73,7 +73,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0054",
@@ -86,7 +86,7 @@
         "animation",
         "animatable"
       ],
-      "q": "Why does gesture-driven motion need `Animatable` rather than `animate*AsState`?",
+      "q": "Why does gesture motion need `Animatable` instead of `animate*AsState`?",
       "shortAnswer": [
         "`snapTo` follows the finger, then `animateTo`/`animateDecay` continues with `initialVelocity` from a `VelocityTracker`.",
         "`animate*AsState` can't take over velocity and can't be interrupted.",
@@ -109,7 +109,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0055",
@@ -122,7 +122,7 @@
         "animation",
         "transition"
       ],
-      "q": "Why use `Transition`/`updateTransition` instead of several `animate*AsState` calls, and what is `SeekableTransitionState` for?",
+      "q": "Why use `Transition`/`updateTransition` instead of several `animate*AsState` calls? What is `SeekableTransitionState` for?",
       "shortAnswer": [
         "One clock and one target change keep N properties in lockstep, each with its own `transitionSpec`.",
         "`updateTransition` supports `createChildTransition` and can be introspected by the Animation Inspector.",
@@ -145,7 +145,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0056",
@@ -158,7 +158,7 @@
         "gestures",
         "pointer-input"
       ],
-      "q": "Explain `pointerInput`: event passes, consumption, and the bug everyone hits.",
+      "q": "`pointerInput`: how do event passes and consumption work? The classic bug?",
       "shortAnswer": [
         "Use `awaitPointerEventScope { awaitFirstDown(); ... }` or ready-made detectors like `detectTapGestures` and `detectDragGesturesAfterLongPress`.",
         "Every event passes through Initial, Main, and Final. Ancestors pre-intercept in Initial; children consume in Main via `change.consume()`.",
@@ -181,7 +181,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0057",
@@ -194,7 +194,7 @@
         "gestures",
         "anchored-draggable"
       ],
-      "q": "Build swipe-to-dismiss with `AnchoredDraggable`.",
+      "q": "Swipe-to-dismiss with `AnchoredDraggable` — how?",
       "shortAnswer": [
         "`AnchoredDraggableState` takes `DraggableAnchors`, a `positionalThreshold`, a `velocityThreshold`, and a `decayAnimationSpec` for the fling.",
         "Read `requireOffset()` inside a `graphicsLayer`/`offset` lambda, so the row never recomposes mid-drag.",
@@ -217,7 +217,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0058",
@@ -230,7 +230,7 @@
         "touch",
         "interop"
       ],
-      "q": "Touch interop: a Compose gesture inside a scrolling View, and a legacy View inside Compose.",
+      "q": "Touch interop: a Compose gesture in a scrolling View, and a legacy View in Compose.",
       "shortAnswer": [
         "`AndroidComposeView` gets `dispatchTouchEvent` like any View, so a `ViewPager2`/`RecyclerView` ancestor can intercept the moves.",
         "The fix is `requestDisallowInterceptTouchEvent`, called from inside the gesture.",
@@ -253,7 +253,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0059",
@@ -265,11 +265,11 @@
         "compose",
         "navigation-3"
       ],
-      "q": "Show me a Navigation 3 setup in code.",
+      "q": "What is a Navigation 3 setup?",
       "shortAnswer": [
         "`rememberNavBackStack(HomeKey)` returns an observable list of `NavKey`s.",
         "`NavDisplay(backStack, onBack = { backStack.removeLastOrNull() }, entryProvider = entryProvider { entry<Detail> { ... } })` renders it.",
-        "Keys are `@Serializable` data classes, so arguments are constructor parameters and navigation is just list mutation."
+        "Keys are `@Serializable` data classes, so arguments are constructor parameters and navigation is list mutation."
       ],
       "answer": "Navigation 3 replaces the string-route system with observable state. The back stack is a plain `List<NavKey>`: `val backStack = rememberNavBackStack(HomeKey)`. Navigating is list mutation — `backStack += DetailKey(id)` pushes, `backStack.removeLastOrNull()` pops.\n\n#### Rendering\n`NavDisplay(backStack = backStack, onBack = { backStack.removeLastOrNull() })` observes the list and renders entries. The `entryProvider` maps a key to its content: `entryProvider { entry<Detail> { DetailScreen(entry.key.id) } }`, using `@Serializable` data class keys so the argument `id` is a constructor parameter — no string route, no `navArgs`, no cast.\n\n#### What you inherit for free\nBecause keys are serializable, the back stack can be persisted across process death — `rememberNavBackStack` restores it. Two senior notes: `NavDisplay`'s `contentType` and transitions are configured around the key type, and pushing a key that is already on the stack inserts a *new* entry unless you guard it — the list is a model, not a deduped stack. That visibility — the back stack as ordinary state you can read, react to, and mutate — is the whole point of Nav3.",
       "followUps": [
@@ -288,7 +288,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "cmp-0060",
@@ -301,7 +301,7 @@
         "navigation-3",
         "adaptive"
       ],
-      "q": "How does one Navigation 3 back stack render two panes at once?",
+      "q": "How does a Navigation 3 back stack render two panes at once?",
       "shortAnswer": [
         "A `SceneStrategy` looks at the back stack and decides which entries render together as a `Scene`.",
         "A list-detail strategy puts the last two entries in two panes on a wide window, and one pane on compact.",
@@ -324,7 +324,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0061",
@@ -337,7 +337,7 @@
         "navigation",
         "predictive-back"
       ],
-      "q": "How do you implement predictive back in a Compose app?",
+      "q": "How do you add predictive back in a Compose app?",
       "shortAnswer": [
         "`PredictiveBackHandler` and the navigation event APIs give you a `Flow<BackEventCompat>` with progress 0..1 and the swipe edge.",
         "Collect the flow, drive the animation, and complete it — or handle cancellation in a `finally` block.",
@@ -360,7 +360,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     }
   ]
 }

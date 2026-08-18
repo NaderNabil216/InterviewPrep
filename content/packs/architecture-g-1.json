@@ -14,10 +14,10 @@
         "state",
         "ui-layer"
       ],
-      "q": "What is 'state' in a Compose app, and what does unidirectional data flow actually mean?",
+      "q": "What is state in a Compose app, and what does unidirectional data flow mean?",
       "shortAnswer": [
         "State is the data a screen renders at a moment — what it shows, not the actions that change it.",
-        "Unidirectional data flow means state flows **down** from a single source of truth, and events flow **up** back to that source; the UI never mutates state directly.",
+        "Unidirectional data flow means state flows **down** from a single source of truth, and events flow **up** to that source; UI never mutates state directly.",
         "Because the UI is a pure function of state, the same state renders identically after rotation, recomposition, or restore — predictability is the whole point."
       ],
       "answer": "#### State is the render input\nState is the data a screen renders at a given moment: loaded items, the text in a field, the selected tab. The distinction that matters is between **state** (what is shown) and **events** (the actions that change it). Writing `count++` inside the composable that also renders `count` is exactly the coupling UDF exists to remove.\n\n#### The two directions\n- **State flows down.** One owner — a ViewModel, a repository, or a hoisted composable — produces an immutable snapshot, and `collectAsStateWithLifecycle()` turns it into something Compose can read. That owner is the **single source of truth**.\n- **Events flow up.** The UI calls `onIncrement`, `onTextChanged`, `onSelect`; only the owner may mutate state. A child composable that receives `count` and a callback cannot corrupt state it does not own.\n\n#### What it buys you\nThe screen is a pure function of state: rotate it, re-collect it, restore it from a process-death save, and it renders identically. Two places cannot disagree about the screen because only one place owns it. Testability follows — you assert on state, not on gestures.\n\nThat single-snapshot model is the foundation every other pattern in this track — MVVM, MVI, state holders — builds on.",
@@ -51,7 +51,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0009",
@@ -66,9 +66,9 @@
       ],
       "q": "When do you reach for a ViewModel versus a plain state holder class versus `remember { }`?",
       "shortAnswer": [
-        "`remember { }` is for state that matters only while a composable is on screen — text, scroll, toggles. It dies on rotation and cannot be unit-tested in isolation.",
+        "`remember { }` is for state that matters only while a composable is on screen — text, scroll, toggles. It dies on rotation; not unit-testable in isolation.",
         "A **plain state holder** class hoists UI state and events into something reusable and unit-testable; it survives recomposition but still dies with the composition.",
-        "A **ViewModel** is the right holder when state must survive configuration changes or process death, or when it needs DI-provided repositories — overkill for a disposable counter."
+        "A **ViewModel** is the right holder when state must survive configuration changes or process death, or when it needs DI-provided repositories — overkill for disposable counter."
       ],
       "answer": "#### The three holders\n- **`remember { }`** — state tied to a composition slot: text input, scroll position, an expand toggle. Correct for state nobody else needs and nothing must survive. Costs: gone on rotation, untestable in isolation, and the state and its logic sit inside the composable.\n- **Plain state holder** — a regular `@Stable` class owning UI state and events, remembered by the screen: `class TextFieldState { var text by mutableStateOf(\"\") }`. It can be hoisted and shared and tested as a pure class. It still dies when the composition leaves — it is not lifecycle-aware.\n- **ViewModel** — framework-managed: survives configuration changes, receives a `SavedStateHandle` that survives process death, and is the only holder that injects repositories (`@HiltViewModel`). Its cost is ceremony and a life tied to the navigation entry, not the composition.\n\n#### The decision rule\nLifetime first, dependencies second. Does the state need to survive rotation? Then `remember` is out. Does it need to survive process death, or does it need a repository? Then a ViewModel. If the answer to both is no, a plain state holder is the honest choice — and a ViewModel that only wraps one `mutableStateOf` is a sign you over-engineered.\n\nFollow the architecture guidance: keep the composable dumb, and prefer the simplest holder whose lifetime and dependencies match the state's.",
       "code": [
@@ -101,7 +101,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0010",
@@ -117,7 +117,7 @@
       "q": "Loading, error, empty, and stale data: is one sealed state class the right model, or separate fields?",
       "shortAnswer": [
         "Model **full-screen states** — loading, error, empty, content — as a sealed class: they are mutually exclusive, and `when` becomes exhaustive.",
-        "Model **partial states** — content that is refreshing, or one region loading — as fields or flags next to the sealed state, because they coexist with content by definition.",
+        "Model **partial states** — content that is refreshing, or one region loading — as fields or flags next to the sealed state, because they coexist with content.",
         "Name the two failure modes: stuffing every flag into the sealed class (state-space explosion) or separate `StateFlow`s that drift out of sync."
       ],
       "answer": "#### Full-screen states: sealed class\nAt the screen level the shape is a union: loading, error, empty, or content. A sealed interface encodes that exactly — the compiler makes the variants mutually exclusive and `when` exhaustive. Adding a case breaks every `when` until it is handled, and `isLoading == true` together with `error != null` becomes unrepresentable because they share one slot.\n\n#### Partial state: fields alongside\nRefreshing is not a fourth screen state: \"stale content while a refresh runs\" must render content *and* a spinner. It belongs as a flag next to the sealed value — `screen` stays in `Content` while `isRefreshing` flips, and rotation plus repeated refreshes behave. The same applies to one region loading independently inside an otherwise loaded screen.\n\n#### The two anti-patterns\n1. One sealed class with every flag enumerated — the state space explodes into meaningless variants, and adding a toggle means adding a case.\n2. Three separate `StateFlow`s for loading, error, and content — they drift out of sync and you render an error on top of data.\n\nThe rule that answers the question: **sealed for mutually exclusive screen shapes, fields for what can coexist with content.** That split is exactly what the `when (screen)` plus `isRefreshing` example in the code does.",
@@ -151,7 +151,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0011",
@@ -166,7 +166,7 @@
       ],
       "q": "Your screen's state class keeps growing — dozens of flags, nested conditions. How do you stop the state explosion?",
       "shortAnswer": [
-        "Kill **derived state** first — anything computable from other state is not state; it is a `derivedStateOf` or a mapping, and hand-syncing it is the biggest source of bloat.",
+        "Kill **derived state** first — anything computable from other state is not state; `derivedStateOf` or a mapping, and hand-syncing is the biggest source of bloat.",
         "Split by **what changes together**: give each independent region its own small sealed state or plain holder instead of one 40-field class.",
         "Collapse boolean pairs into typed values: `showDialog` plus `dialogKind` becomes one `DialogConfig?` where null means hidden. Keep the ViewModel a thin coordinator."
       ],
@@ -201,7 +201,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0012",
@@ -214,11 +214,11 @@
         "mvi",
         "mvp"
       ],
-      "q": "Compare MVVM, MVI, and MVP honestly — and when is each the wrong choice?",
+      "q": "Compare MVVM, MVI, and MVP. When is each the wrong choice?",
       "shortAnswer": [
-        "**MVVM** is the pragmatic default with the least ceremony; it works while you enforce one immutable `StateFlow` — it goes wrong the moment it becomes permission to skip state modeling.",
-        "**MVI** makes inconsistent states impossible with a sealed intent and a pure reducer — but it is wrong when the screen's logic is smaller than the ceremony protecting it.",
-        "**MVP** targets an imperative `View` interface that Compose erased, so it is wrong on modern Android — but saying *why* the interface is untyped UI state is what is scored."
+        "**MVVM** is the pragmatic default with least ceremony; it works while you enforce an immutable `StateFlow` — it fails when used to skip state modeling.",
+        "**MVI** makes inconsistent states impossible with a sealed intent and a pure reducer — but it is wrong when the ceremony outgrows the logic it protects.",
+        "**MVP** targets an imperative `View` interface that Compose erased, so it is wrong on modern Android — explain *why* it is untyped UI state."
       ],
       "answer": "#### Same loop, different bookkeeping\nAll three are the same loop — the UI renders state, events mutate it — differing in *where the mutation lives* and *how constrained the state is*.\n\n**MVVM** exposes state and public methods; constraints are advisory. It wins on ceremony — a form and a list need no sealed-intent tax. It loses the moment someone adds a second `StateFlow`, because two flows can now disagree about one screen. That is the wrong time to use it: when \"MVVM\" is used as a license to skip modeling state at all.\n\n**MVI** forces one immutable `State`, a sealed `Intent`, and a pure `(State, Action) -> State`. Every transition is an exhaustive `when`, and a state like `loading == true && error != null` cannot exist. It is wrong when the screen is nearly stateless — a settings toggle with one boolean — where the ceremony exceeds the logic it protects. It is also wrong at scale when intents proliferate and reducers become long `when` statements.\n\n**MVP** splits the View into an interface (`view.showItems(list)`, `view.showError(message)`) the Presenter calls. On Compose there is no imperative View to target, so the interface is dead code with a presenter-shaped shadow. The killer critique: that `View` interface *is* UI state, but as untyped imperative methods — so it has MVI's drift problem without MVI's exhaustiveness. Wrong today, still worth understanding for legacy reviews.\n\nName the trade-off, not the orthodoxy.",
       "code": [
@@ -251,7 +251,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0013",
@@ -264,10 +264,10 @@
         "events",
         "live-data"
       ],
-      "q": "Dissect SingleLiveEvent: why is it an anti-pattern, and what exactly breaks when you use it?",
+      "q": "Why is SingleLiveEvent an anti-pattern? What breaks when you use it?",
       "shortAnswer": [
         "It is a `LiveData` subclass that clears its value after one observer consumes it — so every observer beyond the first silently gets nothing.",
-        "If rotation happens between `setValue` and consumption, the screen is destroyed; the recreated one re-subscribes to the nulled value, and the snackbar or navigation simply vanishes.",
+        "If rotation happens between `setValue` and consumption, the screen is destroyed; the recreated one re-subscribes to the nulled value, and snackbar or navigation vanishes.",
         "The replacement models events as **state the UI acknowledges** — a `messages` list in the `UiState` — so rotation and process death cannot lose them."
       ],
       "answer": "#### What it is\n`SingleLiveEvent` is `MutableLiveData` with an `observe` override: when the current observer receives a value, the value resets to `null`. The intent — \"navigate once, snackbar once\" — sounds reasonable; the mechanism is \"this event exists only until the current observer consumes it,\" and that is the bug.\n\n#### What breaks\n- **One observer, silently.** Attach a second — a recreated layout, a logging subscriber, a test — and it gets nothing, with no error. Whether your screen works becomes an observer-count lottery.\n- **Rotation drops events.** The consuming activity is destroyed; the recreated one re-subscribes and reads `null`. The \"saved\" snackbar is gone before the user saw it. That is a correctness bug, not a polish issue.\n- **A race at the seam.** `postValue` from a background thread can set the value between consumption and reset, so a later observer double-receives.\n- **It papers over the wrong model.** The ViewModel emits ephemeral signals into the void and hopes a UI is listening *right now*. Events that depend on a live observer are events that rotation can destroy.\n\n#### The replacement, in one line\nMake the effect part of state: `messages: List<UserMessage>` in the `UiState`; the UI renders the first and calls `onMessageShown(id)`. Acknowledged state survives rotation, survives re-collection, and is testable by asserting on state. `SharedFlow(replay = 0)` is the pragmatic fallback if you accept what is dropped while the UI is stopped.",
@@ -301,7 +301,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0014",
@@ -316,8 +316,8 @@
       ],
       "q": "What does it mean to treat navigation as state, and how does Navigation 3 embody that?",
       "shortAnswer": [
-        "Navigation as state means the back stack is **data** — a list of destinations you can read, transform, and persist — not an opaque stack only the navigator can mutate.",
-        "Navigation 3 makes that literal: `NavBackStack` is a snapshot-backed list of `NavKey`s you push onto and pop from; `rememberNavBackStack` restores it across configuration changes and process death.",
+        "Navigation as state means the back stack is **data** — a list of destinations you can read, transform, and persist — not an opaque stack.",
+        "Navigation 3 makes that literal: `NavBackStack` is a snapshot-backed list of `NavKey`s you push/pop; `rememberNavBackStack` restores across configuration changes and process death.",
         "The payoff: replayed events can't navigate twice, deep links and system back become the same list transforms, and the stack is testable as ordinary state."
       ],
       "answer": "#### The imperative model's bugs\nNavigation Compose (Nav2) hid the stack: `navigate(route)` pushed, `popBackStack()` popped, and the stack's contents were an implementation detail. Two failure modes followed — a replayed one-shot event navigates twice (the classic `LaunchedEffect` bug), and you cannot read the stack to drive UI decisions.\n\n#### The state model\nFlip it: the destinations you are on are a list your code can read and transform. Then the old bugs change character:\n- Double-navigation disappears, because navigation becomes an **acknowledged state mutation**, not a fire-and-forget call.\n- Deep links become *initializing the list* — the same mechanism as a normal launch.\n- System back and predictive back become *removing the last element*.\n- The whole thing is unit-testable: assert on the list after an action.\n\n#### Navigation 3 in 2026\nNavigation 3 (stable since 1.1.0, April 2026) makes this concrete. `rememberNavBackStack(startKey)` gives you a `NavBackStack` — a Compose-snapshot-backed `MutableList<NavKey>` that survives configuration changes and process death via serialized saved state. Composable destinations render from the stack's current entry, `add`/`remove` are push/pop, and Now in Android wraps it in a `Navigator` that treats every navigate call as a state transition. The architectural point: navigation stops being a special subsystem with its own lifecycle and becomes state you already know how to reason about.",
@@ -351,7 +351,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0015",
@@ -366,7 +366,7 @@
       ],
       "q": "What belongs in a repository, and what should never be in one?",
       "shortAnswer": [
-        "A repository is the **domain-facing boundary of the data layer**. It hands out the app's own data model, hides which sources exist, and owns the policy for how they combine.",
+        "A repository is the **domain-facing boundary of the data layer**. It hands the app's data model, hides which sources exist, and owns how they combine.",
         "What belongs in it: source-of-truth `Flow`s, caching and staleness policy, source switching and fallback, outbox/retry, and DTO-to-domain mapping.",
         "What stays out: UI state, navigation, per-screen reshaping, and rules that span repositories. Those belong to state holders, the navigation layer, and use cases."
       ],
@@ -401,7 +401,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0016",
@@ -414,11 +414,11 @@
         "single-source-of-truth",
         "offline-first"
       ],
-      "q": "Explain NetworkBoundResource and why the pattern fell out of favor — what replaced it?",
+      "q": "What is NetworkBoundResource? Why did it fall out of favor? What replaced it?",
       "shortAnswer": [
-        "NetworkBoundResource was a generic cache-then-network loader: read the database, fetch in the background if stale, save the result, and re-emit — all wrapped in a `Resource<T>` status tag.",
-        "It fell out of favor because the script was **opaque and rigid**: one fixed policy, no paging, no real cancellation, and `Resource<T>` flattened every screen state into a single wrapper.",
-        "The replacement: Room as the single source of truth plus plain flows — the UI observes the database, refresh fetches and writes into it, and `RemoteMediator` handles pagination."
+        "NetworkBoundResource was a cache-then-network loader: read the database, fetch in background if stale, save the result, and re-emit — wrapped in `Resource<T>` status tag.",
+        "It fell from favor: the script was **opaque and rigid** — one fixed policy, no paging, no cancellation — and `Resource<T>` flattened state into wrapper.",
+        "The replacement: Room as the single source of truth, plain flows — the UI observes database, refresh fetches and writes into it, `RemoteMediator` handles pagination."
       ],
       "answer": "#### What it was\nFrom the architecture-components samples (GithubBrowserSample), `NetworkBoundResource` scripted the cache-then-network dance: `loadFromDb()`, decide `shouldFetch()`, `createCall()`, `saveCallResult()`, emitting Loading, cache Success, then network Success — all wrapped in a generic `Resource<T>` (status + data + message). One class gave every screen cache-first behavior for free.\n\n#### Why it aged out\n- **It was a magic box.** The policy was fixed: cache-first, then network, then re-emit. The moment a screen needed refresh-only-if-stale, deduplicated in-flight fetches, or a different failure mode, the generic wrapper was the wrong shape and you fought it.\n- **No structured lifecycle.** The network call ran in its own scope with no real cancellation; a config change or stopped collection mid-flight behaved badly.\n- **No paging, no partial writes, no cache-size policy.** Real screens needed all three.\n- **`Resource<T>` was the state-modeling anti-pattern** — one tagged wrapper flattened Loading/Success/Error instead of a proper sealed state.\n\n#### What replaced it\nThe single-source-of-truth flow: the UI observes **only the database**; `refresh()` is a separate, fallible operation that fetches and *writes into the database*; the Room `Flow` re-emits on its own. Paging 3's `RemoteMediator` keeps the same shape for paginated data — fetch pages *into* Room, `PagingSource` reads them back. The \"resource\" logic is now ordinary, readable repository code, and the UI state is a proper sealed model.",
       "code": [
@@ -451,7 +451,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0017",
@@ -464,11 +464,11 @@
         "process-death",
         "state-restoration"
       ],
-      "q": "How do you survive process death — what does SavedStateHandle actually save, and where are its limits?",
+      "q": "How do you survive process death? What does SavedStateHandle save? Where are its limits?",
       "shortAnswer": [
-        "`SavedStateHandle` is the ViewModel's slice of the saved-instance-state Bundle: written during `onSaveInstanceState` and rebuilt before the ViewModel's constructor runs, so `init` can act on restored ids.",
-        "It saves whatever fits in a Bundle — primitives, `String`, `Parcelable`/`Serializable`, and maps of those — capped by the ~1MB transaction limit, so no caches, lists, or bitmaps.",
-        "The robust split: put the **key** (id, cursor, flags) in the handle and the **payload** in Room or DataStore; re-hydrate on restart, and still handle 'no saved value'."
+        "`SavedStateHandle` is the ViewModel's slice of saved-instance-state Bundle: written during `onSaveInstanceState`, rebuilt before ViewModel's constructor runs, so `init` acts on restored ids.",
+        "It saves what fits in a Bundle — primitives, `String`, `Parcelable`/`Serializable`, and maps — capped by ~1MB transaction limit, no caches, lists, bitmaps.",
+        "The robust split: put the **key** (id, cursor, flags) in handle and **payload** in Room or DataStore; re-hydrate on restart, and handle 'no saved value'."
       ],
       "answer": "#### The mechanism\nEach ViewModel can register state in the saved-instance-state Bundle, which the framework writes during `onSaveInstanceState`. After process death, `SavedStateHandle` is reconstructed from that Bundle **before** the ViewModel's constructor runs — via `createSavedStateHandle()` — so `init` can read a saved `profileId` and start loading immediately. Because the handle exists at construction time, the guarantee is real: restore-before-init, not restore-after.\n\n#### What it saves\nAnything a `Bundle` holds: primitives, `String`, enums, `Parcelable`/`Serializable`, and `ArrayList`/`Map` of those. It also survives configuration changes, and the `getStateFlow(\"key\")` API re-emits the restored value — so rotation restore and process-death restore share one code path.\n\n#### The limits\n- **The Bundle cap.** Everything crosses the transaction buffer, roughly 1MB; saving a cached list or a bitmap throws `TransactionTooLargeException`.\n- **No arbitrary objects.** A repository, a lambda, or a custom non-Parcelable class cannot be saved.\n- **Not a guarantee.** If the OS kills the process without a save — memory pressure while backgrounded, or the user swiping the app away — the handle starts empty. You must handle \"no saved value\".\n- **Not a cache.** Large data belongs in Room or DataStore; the handle holds the *key*, not the *payload*.\n\nThe interview-grade answer names both directions: what is guaranteed (constructor-time restore of Bundle-able values) and what is not (anything you should not have put there anyway).",
       "code": [
@@ -501,7 +501,7 @@
         }
       ],
       "addedIn": "2026.08.11",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     }
   ]
 }

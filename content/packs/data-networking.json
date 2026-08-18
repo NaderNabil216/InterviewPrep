@@ -14,11 +14,11 @@
         "retrofit",
         "interceptor"
       ],
-      "q": "How do OkHttp interceptors work, and how do you implement token refresh correctly?",
+      "q": "How do OkHttp interceptors work? How do you refresh tokens correctly?",
       "shortAnswer": [
-        "**Application interceptors** run once per call and see the logical request; **network interceptors** run per network round trip, so they see redirects, retries, and the real headers/body.",
-        "Do token refresh in an `Authenticator`, not an interceptor — the `Authenticator` is called on a 401, and OkHttp does the retry for you.",
-        "The subtle bug is the **refresh stampede**: ten parallel requests all get 401 at once. Single-flight the refresh behind a mutex, and let the losers reuse the new token."
+        "**Application interceptors** run once per call, seeing the logical request. **Network interceptors** run per network round trip, seeing redirects, retries, and real headers and body.",
+        "Do token refresh in an `Authenticator`, not an interceptor. OkHttp calls the `Authenticator` on a 401 and does the retry for you.",
+        "The **refresh stampede** happens when ten parallel requests all get 401 together. Single-flight the refresh behind a mutex; losers reuse the new token."
       ],
       "answer": "#### Interceptor types\n- **Application interceptor** (`addInterceptor`): called once per `Call`, so it doesn't see intermediate responses. Best for auth headers, app-level logging, mocking.\n- **Network interceptor** (`addNetworkInterceptor`): called for every network round trip, sees redirects/retries and the real body. Best for wire-level logging, cache header inspection.\n\nOrder matters: interceptors form a chain, each calling `chain.proceed(request)`.\n\n#### Authenticator\nOkHttp invokes `Authenticator.authenticate()` on a **401**, hands you the failed request, and retries with whatever request you return. Return `null` to give up. This beats \"catch 401 in an interceptor and retry manually\" because OkHttp manages the retry count (`response.priorResponse` chain) and avoids infinite loops.\n\n#### The stampede\nWith 10 concurrent requests, all get 401 and all try to refresh — 9 invalidate tokens the others just obtained. Fix: a `Mutex` (or `synchronized`) around the refresh, re-checking inside the lock whether another thread already refreshed — the classic double-checked pattern.\n\n#### Other things worth naming\n- **Connection pooling** and HTTP/2 multiplexing are on by default; reuse **one** `OkHttpClient` via `newBuilder()` so pool and dispatcher are shared.\n- **Timeouts**: `connectTimeout`, `readTimeout`, `writeTimeout`, and `callTimeout` for the whole call — most people forget the last one.\n- **HTTP caching** via `Cache` + `Cache-Control` for cacheable GETs, not a substitute for real offline.\n- **Certificate pinning** with `CertificatePinner` — always pin a backup key, or a cert rotation bricks your app.\n- **Ktor client** is the KMP alternative with a similar plugin model.",
       "code": [
@@ -50,7 +50,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     },
     {
       "id": "dn-0002",
@@ -65,7 +65,7 @@
       ],
       "q": "How do Room migrations work, and what breaks in production?",
       "shortAnswer": [
-        "Bump `version`, add a `Migration(from, to)` with raw SQL, and Room runs each step in order. Export the schema JSON and commit it — that's what makes migration tests possible.",
+        "Bump `version`, add `Migration(from, to)` with raw SQL, Room runs each step in order. Export schema JSON — that's what makes migration tests possible.",
         "**Auto-migrations** (`@AutoMigration`) handle additive changes. Renames, deletes, and type changes need an `@RenameColumn`/`@DeleteColumn` spec or a manual migration.",
         "`fallbackToDestructiveMigration()` silently deletes user data — never ship it."
       ],
@@ -99,7 +99,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     },
     {
       "id": "dn-0003",
@@ -113,7 +113,7 @@
       ],
       "q": "DataStore vs SharedPreferences — why did SharedPreferences need replacing?",
       "shortAnswer": [
-        "`SharedPreferences.apply()` is async, but the **first load and `commit()` are blocking disk I/O on the calling thread** — a known ANR source — and failed writes are silently ignored.",
+        "`SharedPreferences.apply()` is async, but first load and `commit()` are blocking disk I/O on calling thread — a known ANR source — writes dropped.",
         "DataStore is Flow-based and fully async. Writes are transactional, and read/write errors surface as exceptions you can catch and handle.",
         "Preferences DataStore is key-value with no type safety. Proto DataStore uses a typed protobuf schema — worth it for structured settings."
       ],
@@ -142,7 +142,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     },
     {
       "id": "dn-0004",
@@ -191,7 +191,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.27"
     }
   ]
 }

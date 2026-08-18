@@ -14,10 +14,10 @@
         "keystore",
         "tokens"
       ],
-      "q": "Where do you store auth tokens, and how do you secure an Android app generally?",
+      "q": "Where do auth tokens live? How do you secure an Android app generally?",
       "shortAnswer": [
         "Tokens belong in the **Android Keystore**: keys are born in hardware (TEE/StrongBox) and never exported, so even a rooted device can only use them.",
-        "Never store tokens in plaintext `SharedPreferences`, and never hardcode secrets in code or `BuildConfig` — both are trivially recoverable from the APK.",
+        "Never store tokens in plaintext `SharedPreferences`, and never hardcode secrets in code or `BuildConfig` — anyone can recover both from the APK.",
         "Treat the client as hostile: anything in the APK is public. Keep real secrets server-side and give the client short-lived, revocable credentials."
       ],
       "answer": "#### Token storage\n- **Android Keystore** — generate an AES/RSA key with `KeyGenParameterSpec`, encrypt the token, store the ciphertext; the key never leaves hardware. `setUserAuthenticationRequired(true)` gates use behind biometrics, `setIsStrongBoxBacked(true)` uses a dedicated security chip.\n- Prefer **short-lived access tokens** plus a refresh token, so a leak has a small blast radius, with server-side revocation.\n- `EncryptedSharedPreferences` wrapped this conveniently; check its status before relying on it, and be ready to use Keystore directly.\n\n#### What not to do\nHardcoded API keys — `strings.xml`, `BuildConfig` and `.so` files are recoverable with `apktool` or `strings`, and obfuscation is not encryption. Logging tokens or PII. Trusting client-side validation: every check is re-done server-side.\n\n#### The checklist interviewers walk\n1. **Transport** — TLS everywhere, `cleartextTrafficPermitted=false`. Pin certificates only with a backup pin and a remote kill switch, or a rotation bricks your install base.\n2. **Exported components** — `android:exported` explicit since Android 12; validate every incoming `Intent`.\n3. **PendingIntent** — `FLAG_IMMUTABLE` or `FLAG_MUTABLE`. A mutable one handed to another app lets it act as you.\n4. **Deep links** — verify App Links with `assetlinks.json`; treat every parameter as untrusted.\n5. **WebView** — no JavaScript unless required, never `addJavascriptInterface` with untrusted content.\n6. **Integrity** — Play Integrity API for a server-verified signal; client-side root checks alone are trivially defeated.\n7. **At rest, backup, screenshots** — SQLCipher where the threat model needs it, backup rules excluding secrets, `FLAG_SECURE` on sensitive screens.\n\nThe framing: the client is untrusted. Make the stolen-device and malicious-app cases survivable.",
@@ -55,7 +55,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.25"
     },
     {
       "id": "sk-0002",
@@ -68,7 +68,7 @@
         "cmp",
         "2026"
       ],
-      "q": "What is the state of KMP and Compose Multiplatform in 2026, and when would you choose it?",
+      "q": "What is the state of KMP and Compose Multiplatform? When would you choose it?",
       "shortAnswer": [
         "**Compose Multiplatform for iOS is stable** (1.11.0), and Google's big Jetpack libraries — Room, DataStore, ViewModel, Lifecycle, Paging — are KMP-ready.",
         "The Kotlin/Native memory model is modern: the old frozen-object and worker restrictions are gone, so coroutines behave the same on every platform.",
@@ -109,7 +109,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.25"
     },
     {
       "id": "sk-0003",
@@ -123,7 +123,7 @@
         "media3",
         "2026"
       ],
-      "q": "What modern Android capabilities should you be able to speak to in 2026?",
+      "q": "What modern Android capabilities should you be able to speak to?",
       "shortAnswer": [
         "**On-device AI** runs locally: ML Kit GenAI APIs and Gemini Nano via AICore handle summarization, rewriting, and image description — private and offline, but device-gated.",
         "**Credential Manager** is the one sign-in API for passkeys, passwords, and federated sign-in; passkeys are where auth is headed.",
@@ -164,7 +164,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.25"
     }
   ]
 }

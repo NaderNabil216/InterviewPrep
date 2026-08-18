@@ -17,7 +17,7 @@
       "q": "Two Sum — find indices of two numbers adding to a target",
       "shortAnswer": [
         "Find the indices of two numbers in an `IntArray` that add up to a target — exactly one solution exists.",
-        "Walk the array once, storing value to index in a `HashMap`; look up the complement `target - x` before inserting the current element.",
+        "Walk the array once, storing each value's index in a `HashMap`; look up the complement `target - x` before inserting the current element.",
         "Check the complement before inserting `x` so an element never pairs with itself. Time O(n), space O(n) versus O(n²) brute force."
       ],
       "prompt": "Given an `IntArray` and a target, return the indices of the two numbers that add up to the target. Exactly one solution exists and you may not use the same element twice.\n\nThis is almost always the warm-up. The interviewer is checking that you go from brute force to the hash-map insight quickly, and that you state complexity without being asked.",
@@ -54,7 +54,7 @@
           "checked": "2026-08-09"
         }
       ],
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.30"
     },
     {
       "id": "ds-0002",

@@ -258,7 +258,7 @@
       "shortAnswer": [
         "Find the edge whose removal restores a tree, from a graph with exactly one extra edge.",
         "Union-find with path compression: add edges one at a time, and the first edge whose endpoints are already connected is the answer.",
-        "The input-order guarantee is the whole trick — the first cycle-closing edge is the last removable one in the input. Near O(n) with `α(n)`."
+        "The input-order guarantee is the trick — the first cycle-closing edge is the last removable one in the input. Near O(n) with `α(n)`."
       ],
       "prompt": "A tree of `n` nodes has exactly one extra edge added, producing a graph with exactly one cycle. Given the edge list `edges: Array<IntArray>` in order, return the edge that appears last in the input and could be removed to restore a tree.\n\nUnion-Find with path compression is the intended answer: add edges one at a time; the first edge whose two endpoints are *already connected* is the answer. Learn this alongside ds-0012 (number of islands) — they share the same data structure.",
       "hints": [
@@ -289,7 +289,7 @@
         }
       ],
       "sampleCall": "findRedundantConnection(arrayOf(intArrayOf(1,2), intArrayOf(1,3), intArrayOf(2,3))).contentToString()",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.30"
     },
     {
       "id": "ds-0047",

@@ -1,0 +1,130 @@
+Manifest v2026.08.19 (generated 2026-08-17)
+  ✓ kotlin-a                8 items
+  ✓ kotlin-b                5 items
+  ✓ kotlin-g-1              5 items
+  ✓ kotlin-g-10             5 items
+  ✓ kotlin-g-11             5 items
+  ✓ kotlin-g-12             2 items
+  ✓ kotlin-g-2              5 items
+  ✓ kotlin-g-3              5 items
+  ✓ kotlin-g-4              5 items
+  ✓ kotlin-g-5              5 items
+  ✓ kotlin-g-6              5 items
+  ✓ kotlin-g-7              5 items
+  ✓ kotlin-g-8              5 items
+  ✓ kotlin-g-9              5 items
+  ✓ coroutines-a            8 items
+  ✓ coroutines-g-5          7 items
+  ✓ coroutines-g-1         10 items
+  ✓ coroutines-g-2         10 items
+  ✓ coroutines-g-3         10 items
+  ✓ coroutines-g-4         10 items
+  ✓ compose-a               6 items
+  ✓ compose-b               2 items
+  ✓ compose-c               3 items
+  ✓ compose-g-1            10 items
+  ✓ compose-g-2            10 items
+  ✓ compose-g-3            10 items
+  ✓ compose-g-4            10 items
+  ✓ compose-g-5            10 items
+  ✓ compose-g-6            10 items
+  ✓ compose-g-7             4 items
+  ✓ platform                6 items
+  ✓ platform-b              4 items
+  ✓ platform-g-1           10 items
+  ✓ platform-g-2           10 items
+  ✓ platform-g-3           10 items
+  ✓ platform-g-4           10 items
+  ✓ platform-g-5           10 items
+  ✓ architecture            4 items
+  ✓ architecture-b          3 items
+  ✓ architecture-g-1       10 items
+  ✓ architecture-g-2       10 items
+  ✓ architecture-g-3       10 items
+  ✓ architecture-g-4       10 items
+  ✓ architecture-g-5        3 items
+  ✓ dsa                     6 items
+  ✓ dsa-b                   8 items
+  ✓ dsa-c                   5 items
+  ✓ dsa-g-1                 7 items
+  ✓ dsa-g-2                 7 items
+  ✓ dsa-g-3                 7 items
+  ✓ dsa-g-4                 7 items
+  ✓ dsa-g-5                 7 items
+  ✓ dsa-g-6                 6 items
+  ✓ system-design           3 items
+  ✓ system-design-b         2 items
+  ✓ system-design-g-1       4 items
+  ✓ system-design-g-2       5 items
+  ✓ system-design-g-3       5 items
+  ✓ data-networking         4 items
+  ✓ data-networking-g-1     9 items
+  ✓ data-networking-g-2     9 items
+  ✓ data-networking-g-3     9 items
+  ✓ data-networking-g-4     9 items
+  ✓ performance             3 items
+  ✓ performance-g-1         9 items
+  ✓ performance-g-2         9 items
+  ✓ performance-g-3         9 items
+  ✓ performance-g-4         9 items
+  ✓ performance-g-5         1 items
+  ✓ build-testing           2 items
+  ✓ build-testing-g-1      10 items
+  ✓ build-testing-g-2      10 items
+  ✓ build-testing-g-3      10 items
+  ✓ build-testing-g-4      10 items
+  ✓ build-testing-g-5      10 items
+  ✓ build-testing-g-6       8 items
+  ✓ security-kmp            3 items
+  ✓ security-kmp-g-1       10 items
+  ✓ security-kmp-g-2       10 items
+  ✓ security-kmp-g-3       10 items
+  ✓ security-kmp-g-4       10 items
+  ✓ security-kmp-g-5       10 items
+  ✓ security-kmp-g-6       10 items
+  ✓ security-kmp-g-7        7 items
+  ✓ behavioral              3 items
+  ✓ behavioral-g-1         11 items
+  ✓ behavioral-g-2         11 items
+  ✓ cheatsheets             3 items
+  ✓ cheatsheets-b           2 items
+  ✓ gate 15 no fenced code blocks in any prose field
+  ✓ plan 7day            7 days, 121 item refs
+  ✓ gate 14 plan 7day: 841 min of work over 7 days vs 130 min/day (cap 910) — fits with 69 min spare
+  ✓ plan 14day           15 days, 181 item refs
+  ✓ gate 14 plan 14day: 1229 min of work over 15 days vs 90 min/day (cap 1350) — fits with 121 min spare
+  ✓ gate 10 every ref on items shipped by 2026.08.19 verified within 30 days of 2026-08-17
+  ✓ gate 11 stackSnapshot re-verified 2026-08-14
+
+gate 4  per-track counts vs FR-002 targets
+  track              built target  L1 L2 L3 L4  floor
+  kotlin                70     70   8 22 29 11      3    
+  coroutines-flow       55     55   5 18 23  9      3    
+  compose               75     75   6 21 32 16      3    
+  platform              60     60   6 18 28  8      3    
+  architecture          50     50   5 14 23  8      3    
+  data-networking       40     40   4 12 17  7      3    
+  performance           40     40   5 12 18  5      3    
+  build-testing         60     60   4 17 33  6      3    
+  security-kmp          70     70   5 22 35  8      3    
+  dsa                   60     60   4 16 34  6      3    
+  system-design         19     19   2  2  8  7      2    
+  behavioral            25     25   2 11 10  2      2    
+  cheatsheets            5      5   1  4  0  0      0    
+
+gate 5  difficulty mix: L1 9%/10%  L2 30%/30%  L3 46%/45%  L4 15%/15%  (tolerance ±5pp)
+  ✓ gate 2b qa answers in the 120-250 band: 545/545 = 100.0% (target >=90%)
+  ✓ gate 8  no unadjudicated near-duplicate pairs across 629 items on disk
+  ✓ gate 9  every ref host is on the primary-source allowlist
+  ✓ gate 12 every authored track has a frozen scope[] with full coverage
+
+gate 13 version-claim screen: 223 items flagged library-wide, 31 shipped by 2026.08.19
+        audit at least 10: kt-0008, kt-0009, kt-0011, kt-0012, kt-0015, kt-0018, kt-0059, kt-0060, kt-0061, kt-0062
+
+Total: 629 items
+  by level: { '1': 57, '2': 189, '3': 290, '4': 93 }
+  by type : { qa: 545, dsa: 60, design: 19, concept: 5 }
+  on disk : 629 items across 89 pack files
+  hosts   : developer.android.com×531, kotlinlang.org×237, github.com×70, docs.gradle.org×42, www.google.com×21, source.android.com×11, support.google.com×8, datatracker.ietf.org×8, developers.google.com×8, blog.jetbrains.com×6, android-developers.googleblog.com×4, square.github.io×4, youtrack.jetbrains.com×1, developer.chrome.com×1, mas.owasp.org×1, ktor.io×1, firebase.google.com×1, developer.apple.com×1
+
+All good (0 warning(s))

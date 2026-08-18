@@ -14,7 +14,7 @@
         "build-lifecycle",
         "task-graph"
       ],
-      "q": "Walk through a Gradle build's phases. When does configuration happen, and how does the task graph get built?",
+      "q": "What are a Gradle build's phases? When does configuration happen, and how does the task graph get built?",
       "shortAnswer": [
         "Every Gradle build runs initialization, configuration, then execution, in that fixed order.",
         "Configuration evaluates every project's build script and builds the task graph from declared dependencies. Execution then runs only the tasks that graph needs.",
@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0004",
@@ -59,10 +59,10 @@
         "custom-tasks",
         "caching"
       ],
-      "q": "How do you make a custom Gradle task incremental, and what is the difference between UP-TO-DATE and FROM-CACHE?",
+      "q": "How do you make a custom Gradle task incremental? What is the difference between UP-TO-DATE and FROM-CACHE?",
       "shortAnswer": [
         "Declare every input and output with `@Input`, `@InputFiles`, `@OutputDirectory` — Gradle can only track what you tell it about.",
-        "UP-TO-DATE means this build already ran the task with identical inputs and outputs, so it is skipped. FROM-CACHE means the outputs came back from the build cache and the action never ran.",
+        "UP-TO-DATE: the task already ran with identical inputs and outputs — skipped. FROM-CACHE: outputs came back from the build cache; the action never ran.",
         "A task whose outputs don't depend only on declared inputs — like a build timestamp in the output — is not cacheable and should say so."
       ],
       "answer": "#### What incremental means\nIncremental build lets Gradle reuse a task's previous outputs. After a successful run Gradle snapshots the task's declared inputs and outputs; if the next run finds them unchanged, the task is skipped as UP-TO-DATE and its actions never execute.\n\n#### Declaring inputs and outputs\nA custom task is only trackable if it declares them: @Input for scalar values, @InputFiles/@InputDirectory for files, @OutputDirectory/@OutputFile for results, using abstract Property or ConfigurableFileCollection so configuration stays lazy. An undeclared input silently breaks the guarantee in the dangerous direction — the task is skipped when it should have run. Input normalization (line endings, property-file ordering, ABI signatures on compile classpaths) raises the hit rate without weakening correctness.\n\n#### UP-TO-DATE versus FROM-CACHE\nUP-TO-DATE means this build already ran the task with identical inputs and outputs on this machine. FROM-CACHE means the outputs were restored from the build cache by input hash — the action never executed here, and the entry may have been produced by another machine entirely. Both skip the action; FROM-CACHE additionally survives clean and fresh checkouts.\n\n#### What breaks tracking\nNon-deterministic tasks — an output stamped with a build timestamp, or an output depending on an undeclared value — must not be cacheable, and Gradle disables tracking when it cannot prove determinism. A task that never shows UP-TO-DATE is leaking an input; that is the debugging signal.",
@@ -95,7 +95,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0005",
@@ -108,10 +108,10 @@
         "configuration-cache",
         "build-speed"
       ],
-      "q": "What does the Gradle configuration cache actually store, and which build logic breaks it?",
+      "q": "What does the Gradle configuration cache store? What build logic breaks it?",
       "shortAnswer": [
         "It stores the finished task graph and configuration on disk, so a later build skips configuration entirely when the build inputs haven't changed.",
-        "Logic that reads mutable external state during configuration — a timestamp, a random value, a file, a raw env read — breaks serialization and forces a miss or a failure.",
+        "Logic that reads mutable external state during configuration — a timestamp, a random value, a file, a raw env read — breaks serialization: miss or failure.",
         "It's the preferred mode since Gradle 9.0 and becomes the default in Gradle 10, so fixing violations now is the migration."
       ],
       "answer": "#### What it stores\nThe configuration cache serializes the output of the configuration phase: the task graph, task configuration, and declared inputs. On the next build Gradle checks the configuration inputs — build scripts, buildSrc and included builds, version catalogs, gradle.properties — and if none changed it loads the stored graph and goes straight to execution, skipping configuration entirely.\n\n#### What breaks it\nSerialization means every object captured during configuration must survive storage and deserialization in a fresh VM, and environment state must be declared. Violations are the classic ones: reading a timestamp or random value during configuration, reading files directly, touching another project's state, using deprecated listeners such as TaskExecutionListener, and storing a Project or Gradle instance in a task field. Each produces a report you can read; the build fails when the violation is real, or warns during adoption.\n\n#### Why it matters now\nSince Gradle 9.0 the configuration cache is the preferred mode of execution, and Gradle 10 makes it the default. It also unlocks parallel execution of independent tasks within a single project. It is separate from the build cache: this one removes configuration time, the other removes execution time, and they compose. Budget the first adoption as a dedicated task — run with problem reporting on, fix each item, and add a CI gate that fails new violations.",
@@ -139,7 +139,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0006",
@@ -153,10 +153,10 @@
         "remote-cache",
         "ci"
       ],
-      "q": "When is a remote build cache actually worth running, and when does it add nothing?",
+      "q": "When is a remote build cache worth running? When does it add nothing?",
       "shortAnswer": [
-        "A remote cache pays off when many builds produce identical outputs from identical inputs — CI compiling the same dependency set across branches and machines is the ideal case.",
-        "It adds nothing when builds rarely repeat inputs: a mostly-serial single-module app, or tasks stamped with a unique timestamp that changes the cache key every run.",
+        "A remote cache pays off when builds produce identical outputs from identical inputs — CI compiling the same dependency set across branches is the ideal case.",
+        "It adds nothing when builds rarely repeat inputs: a mostly-serial single-module app, or tasks stamped with a unique timestamp changing the cache key every run.",
         "The win depends on what is cached. Compile and merge tasks cache well; tests usually should not be cached, and non-hermetic tasks cannot."
       ],
       "answer": "#### How it works\nWith org.gradle.caching=true every task's outputs are stored under a key derived from the task implementation and its declared, normalized inputs. A later build with the same key skips the action and restores the output — labeled FROM-CACHE. The local cache lives in the Gradle user home; the remote cache is an HTTP/HTTPS service shared across machines.\n\n#### When it genuinely helps\nThe economics are: how often does another build produce identical inputs, and how expensive is the task? CI is the sweet spot — many branches and jobs compile the same dependency set, so one build populates and the rest restore compile and dex outputs. Developers benefit the same way across branches and after a fresh checkout. AGP tasks cache well when inputs are normalized; R8 and merged resources are cacheable when stable.\n\n#### When it adds nothing\nA build that rarely repeats inputs — one module, mostly serial, tasks salted with a per-build timestamp — gets only the I/O cost. A timestamp inside an output changes the key on every run, so the task never hits. Path-dependent or unnormalized inputs also break keys between machines.\n\n#### What to exclude\nTests should not be cached: restored test results hide flakes and skip real execution. Keep isPush=false on developer machines so CI owns the cache, read the hit rate from a build scan, and only then call it a win.",
@@ -184,7 +184,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0007",
@@ -198,9 +198,9 @@
         "isolated-projects",
         "configuration"
       ],
-      "q": "How does Gradle parallelize builds, and what was configuring-on-demand trying to save?",
+      "q": "How does Gradle parallelize builds? What was configuring-on-demand trying to save?",
       "shortAnswer": [
-        "Parallel execution runs independent tasks in different projects at the same time on separate workers. With the configuration cache, even independent tasks inside one project run in parallel.",
+        "Parallel execution runs independent tasks in different projects on separate workers; with the configuration cache, even tasks inside one project run in parallel.",
         "Configuring-on-demand skipped projects the current invocation didn't need, but it was deprecated because it assumed the project graph was predictable.",
         "The modern replacement is the configuration cache plus isolated projects. Together they make partial and cached configuration safe."
       ],
@@ -229,7 +229,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0008",
@@ -243,11 +243,11 @@
         "build-speed",
         "anti-pattern"
       ],
-      "q": "Why does running a clean build 'to be safe' usually make a build worse, not better?",
+      "q": "Why does running a clean build to be safe usually make a build worse, not better?",
       "shortAnswer": [
         "Clean deletes every task output, so the next build has nothing to compare and every task re-runs from scratch. All incremental state is gone.",
-        "The build cache survives clean because its keys are input hashes, but local up-to-date state and file snapshots are lost, so tasks pay a restore instead of a skip.",
-        "A build that needs clean to be correct has a real bug — a task wrongly staying UP-TO-DATE — and deleting outputs hides it instead of finding it."
+        "The build cache survives clean — its keys are input hashes — but local up-to-date state and file snapshots are lost, so tasks restore instead of skip.",
+        "A build that needs clean to be correct has a real bug — a task wrongly staying UP-TO-DATE — deleting outputs hides it, not finds it."
       ],
       "answer": "#### What clean destroys\nclean deletes the build directory, so every task's previous outputs are gone. The next run cannot compare inputs and outputs, nothing is UP-TO-DATE, and every task re-executes — in a large project, minutes of work the incremental build would have skipped.\n\n#### Cache survives, incremental state does not\nThe build cache is keyed by input hashes and stored in the Gradle user home, so clean followed by a cache-enabled build still restores outputs as FROM-CACHE. What clean throws away is the local incremental state — prior outputs and file snapshots — so tasks now pay a restore step instead of a skip, and the local cache misses entirely.\n\n#### The habit is a symptom\nPeople clean because a build was wrong once: a task stayed UP-TO-DATE when it should have run. That is a misdeclared input or output, and the fix is to declare the real input, not to delete outputs forever. A CI pipeline that cleans first discards every benefit the caches exist to provide. Use clean deliberately to diagnose or repackage; if a build needs it to be correct, find and fix the task instead.",
       "code": [
@@ -274,7 +274,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0009",
@@ -288,10 +288,10 @@
         "migration",
         "ksp"
       ],
-      "q": "AGP 9 no longer needs org.jetbrains.kotlin.android. What actually changed, and what breaks if you keep applying it?",
+      "q": "AGP 9 no longer needs org.jetbrains.kotlin.android. What changed, and what breaks if you keep applying it?",
       "shortAnswer": [
-        "AGP 9.0 ships built-in Kotlin. Applying `com.android.application` or `com.android.library` now compiles Kotlin itself, so the separate Kotlin Android plugin is neither needed nor allowed.",
-        "AGP carries its own Kotlin Gradle plugin runtime — KGP 2.2.10 minimum at 9.0. kapt is incompatible, so processors move to KSP, or `com.android.legacy-kapt` as a stopgap.",
+        "AGP 9.0 ships built-in Kotlin: `com.android.application` and `com.android.library` now compile Kotlin — the Kotlin Android plugin is neither needed nor allowed.",
+        "AGP carries its Kotlin Gradle plugin runtime — KGP 2.2.10 minimum at 9.0. kapt incompatible: processors move to KSP or `com.android.legacy-kapt`.",
         "The new DSL is also the default: `android.kotlinOptions` moves to `kotlin.compilerOptions`, and the opt-out flags are removed in AGP 10."
       ],
       "answer": "#### What AGP 9 changed\nAGP 9.0 introduced built-in Kotlin: applying com.android.application or com.android.library now compiles Kotlin itself, so org.jetbrains.kotlin.android is neither required nor allowed. AGP carries a runtime dependency on the Kotlin Gradle plugin (KGP 2.2.10 minimum at 9.0) and adds the Kotlin standard library automatically, so the AGP and Kotlin toolchains cannot drift. In the current stack, Kotlin 2.4.10 and AGP 9.3.0 work together out of the box.\n\n#### What breaks\nApplying the old plugin fails with 'the org.jetbrains.kotlin.android plugin is no longer required'. kapt is incompatible with built-in Kotlin: migrate processors to KSP, or as a stopgap apply com.android.legacy-kapt at the AGP version. android.kotlinOptions moves to kotlin.compilerOptions, and jvmTarget now defaults to android.compileOptions.targetCompatibility, so a separately declared jvmTarget becomes a conflict. Extra Kotlin source directories move into android.sourceSets with the kotlin accessor.\n\n#### The migration\nModule by module works: keep android.builtInKotlin=false in gradle.properties and apply com.android.built-in-kotlin to the module being migrated, removing both when done. The opt-out flags (builtInKotlin, newDsl) are removed in AGP 10, so the migration is the plan, not a choice. KMP modules stay different: they use org.jetbrains.kotlin.multiplatform with com.android.kotlin.multiplatform.library.",
@@ -324,7 +324,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0010",
@@ -339,8 +339,8 @@
       ],
       "q": "How do you customize a single build variant without the old applicationVariants API?",
       "shortAnswer": [
-        "AGP's Variant API gives you three callbacks on the `androidComponents` block — `finalizeDsl`, `beforeVariants`, `onVariants` — each at a different point in variant creation.",
-        "`beforeVariants` gives you a `VariantBuilder` where the build flow is still mutable. `onVariants` gives you the finished `Variant`, whose `Property` values resolve lazily at execution.",
+        "AGP's Variant API offers three callbacks on `androidComponents` — `finalizeDsl`, `beforeVariants`, `onVariants` — each at a different point in variant creation.",
+        "`beforeVariants` gives a `VariantBuilder` where build flow is mutable; `onVariants` gives finished `Variant` — `Property` values resolve lazily at execution.",
         "AGP's own tasks are not public API, so you read and transform outputs through the artifact API instead of hooking tasks by name."
       ],
       "answer": "#### The model\nThe Variant API (stable since AGP 9, incubating since AGP 7) replaces applicationVariants, libraryVariants and variantFilter. All customization goes through the androidComponents block, whose callbacks run during configuration and must stay fast; heavy work belongs in tasks.\n\n#### finalizeDsl\nRuns after the android block is evaluated but before variants exist. DSL values can still be changed programmatically; everything must be resolvable at configuration time.\n\n#### beforeVariants\nReceives a VariantBuilder, where the build flow is still mutable: disable a variant with vb.enable=false, change minSdk, drop tests. A VariantSelector narrows the callback, for example selector().withBuildType(\"release\").withFlavor(\"color\", \"blue\").\n\n#### onVariants\nReceives the finished Variant. Variants and artifacts are fixed here, so you set Property values — signingConfig, buildConfigFields, manifestPlaceholders — that resolve lazily when tasks execute, and you can wire them to providers from your own tasks.\n\n#### Artifacts, not tasks\nAGP tasks are implementation details and must not be hooked by name. Read or transform outputs through the artifact API — component.artifacts.get(SingleArtifact.APK), or transform a MergedManifest. That contract is configuration-cache friendly, which is exactly why AGP 9 removed the old hooks.",
@@ -373,7 +373,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0011",
@@ -387,10 +387,10 @@
         "bom",
         "dependency-management"
       ],
-      "q": "What problem do Gradle version catalogs solve, and how do Compose BOMs fit in?",
+      "q": "What problem do Gradle version catalogs solve? How do Compose BOMs fit in?",
       "shortAnswer": [
         "A version catalog puts dependency and plugin coordinates in `gradle/libs.versions.toml` and exposes type-safe accessors, so each version lives in exactly one place.",
-        "A BOM is different. It's a dependency of constraints that aligns the versions of a whole family during resolution, not just a place to store numbers.",
+        "A BOM is different: a dependency of constraints that aligns a whole family's versions during resolution, not a place to store numbers.",
         "The catalog records intent and the platform enforces it — the pattern is the version in the catalog, then `implementation(platform(libs.compose.bom))`."
       ],
       "answer": "#### The catalog\nA version catalog centralizes dependency and plugin coordinates in gradle/libs.versions.toml and exposes them as type-safe accessors — libs.compose.bom, libs.plugins.ksp — so a version lives in exactly one place, with IDE autocomplete and a single point for upgrades. It does not affect resolution: a version from the catalog behaves identically to the same version written inline in a module.\n\n#### BOMs and platforms\nA BOM is a POM of dependency constraints, and Gradle imports it with the platform modifier. Declaring implementation(platform(libs.compose.bom)) pulls the BOM into the graph and aligns the versions of the whole androidx.compose family, even where a module does not write a version. Plain platform constraints recommend versions and lose to a higher explicit version elsewhere; enforcedPlatform overrides the graph but exports forced versions transitively, so it is a last resort.\n\n#### Together\nThe current pattern: keep the Compose BOM (2026.06.01) in the catalog, apply it with implementation(platform(...)) in every Compose module, and stop writing per-artifact Compose versions. The catalog records intent; the platform enforces alignment. For libraries you must pin hard, prefer a rich version constraint with strictly over force, which fights every other module in the graph.",
@@ -423,7 +423,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0012",
@@ -437,7 +437,7 @@
         "dependency-locking",
         "reproducible-builds"
       ],
-      "q": "How do you stop a transitive dependency from silently changing, and what is dependency locking?",
+      "q": "How do you stop a transitive dependency from silently changing? What is dependency locking?",
       "shortAnswer": [
         "By default Gradle resolves to the highest requested version. You steer it with a resolution strategy and constraints, or freeze it with dependency locking.",
         "Locking records each configuration's resolved versions in `gradle.lockfile` and fails the build when resolution would drift from them — that's true reproducibility.",
@@ -473,7 +473,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     }
   ]
 }

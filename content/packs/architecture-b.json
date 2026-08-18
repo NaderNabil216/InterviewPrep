@@ -16,7 +16,7 @@
       ],
       "q": "How do you handle one-shot events (navigate, snackbar) without the replay bug?",
       "shortAnswer": [
-        "The bug: model an event as `StateFlow` or `LiveData`, and re-collecting after rotation replays the last value — so you navigate twice or show the snackbar again.",
+        "The bug: model an event as `StateFlow` or `LiveData`; re-collecting after rotation replays the last value — the snackbar shows twice or navigation fires.",
         "Best answer: **make the event part of the state** as a pending-effect list the UI explicitly acknowledges. It survives rotation and process death.",
         "Acceptable alternative: `SharedFlow(replay = 0)` collected with `repeatOnLifecycle`/`collectAsStateWithLifecycle`. Simpler, but events emitted while the UI is stopped can be dropped."
       ],
@@ -55,7 +55,7 @@
         }
       ],
       "addedIn": "2026.08.5",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0006",
@@ -68,11 +68,11 @@
         "domain",
         "clean-architecture"
       ],
-      "q": "Is a domain layer with use cases worth it? Defend both sides.",
+      "q": "Is a domain layer with use cases worth it? Both sides?",
       "shortAnswer": [
-        "**Worth it** when logic is shared across ViewModels, when one user action orchestrates several repositories, or when business rules are complex enough to deserve isolated tests.",
-        "**Not worth it** when the use case is a one-line pass-through to a repository — indirection with no benefit, and reviewers will rightly call it cargo-culted Clean Architecture.",
-        "The honest senior answer: add use cases selectively, per feature, when a second consumer or repository shows up. Do not mandate them project-wide on day one."
+        "**Worth it** when logic is shared across ViewModels, when a user action orchestrates repositories, or when business rules are complex enough to deserve isolated tests.",
+        "**Not worth it** when the use case is a one-line pass-through to repository — indirection with no benefit, and reviewers will call it cargo-culted Clean Architecture.",
+        "The honest senior answer: add use cases selectively, per feature, when a second consumer or repository shows up. Do not mandate project-wide on day one."
       ],
       "answer": "#### What a use case actually buys you\n1. **Sharing** — several ViewModels need \"is this user entitled to premium?\", combining account repo, subscription repo, and a feature flag. Without it, that logic gets copy-pasted and drifts.\n2. **Orchestration** — one action touching several repositories needs ordering and error semantics somewhere neutral; in a ViewModel it becomes a fat coordinator.\n3. **Testability** — pure Kotlin, no Android scaffolding, no `Dispatchers.setMain`. Tests for the rules that encode the business.\n4. **A vocabulary** — `ObserveUnreadCountUseCase` names the product action; `repository.query(...)` a database access.\n\n#### The cost\n- A file per operation; a screen with six actions becomes six classes.\n- Pass-through use cases (`invoke() = repo.get()`) hide nothing.\n- Newcomers trace four layers to find one SQL query; the most cargo-culted pattern in Android.\n\n#### The position to take\n> \"I don't add a domain layer by default. I add a use case when logic gains a second consumer, or one action touches multiple repositories. A one-line pass-through is indirection I'd remove in review.\"\n\nThat reads as judgment, which is what's scored. Keep an example of one you introduced *and* one you deleted.\n\n#### Conventions worth knowing\n- Name after the action: `GetUserProfileUseCase`, or in Kotlin just `GetUserProfile`.\n- Single public `operator fun invoke()` so it calls like a function.\n- Return domain models and errors, never DTOs or `HttpException`.\n- Inject the dispatcher; keep it main-safe. Use cases may depend on each other — keep it shallow.",
       "code": [
@@ -99,7 +99,7 @@
         }
       ],
       "addedIn": "2026.08.5",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0007",
@@ -116,7 +116,7 @@
       "shortAnswer": [
         "Mobile can't roll back: a bad release stays on devices until users update — days to weeks later. So the release strategy *is* the safety mechanism.",
         "**Feature flags** decouple deploy from release; **staged rollout** limits the blast radius; a **remote kill switch** disables a feature without shipping a build.",
-        "Add: Play's staged rollout percentages, halt rollout on a vitals regression, and enough instrumentation that you would actually notice."
+        "Add: Play's staged rollout percentages, halt rollout on a vitals regression, and enough instrumentation that you would notice."
       ],
       "answer": "#### Why this matters more on mobile\nOn a server you roll back in minutes. On mobile the binary is on the device and adoption is gradual — users can sit on a broken version for weeks. Every risky change needs a runtime off-switch.\n\n#### Feature flags\n- Remote config fetched at startup and cached, with a **safe local default** so first launch and offline work.\n- Flags must **fail safe**: on a fetch failure fall back to last-known-good, then to the compiled default. A flag-service outage must never break the app.\n- Evaluate once per session, or the UI flips mid-use.\n- Every flag gets an owner and a removal date. Three hundred live flags is 2³⁰⁰ configurations, and nobody knows which are tested.\n\n#### Staged rollout\nPlay releases at 1% → 5% → 20% → 50% → 100%. Define **halt criteria before you start**: crash-free rate, ANR rate, a product metric. Watch Android vitals; Play can auto-halt on a regression. Hold each stage long enough for signal. You cannot decrease a rollout percentage, only halt it.\n\n#### Kill switch\nDistinct from a flag: a server-controlled boolean that disables a feature or forces a fallback. Every non-trivial subsystem ships with one; mentioning it unprompted is a strong senior signal.\n\n#### Experiments and forced update\nAssignment should be server-side and sticky per user; log exposure separately from the outcome. For genuinely broken releases you need in-app updates plus a server-driven minimum-version check — design that *before* you need it — retrofitting one into a broken version is impossible by definition.",
       "code": [
@@ -154,7 +154,7 @@
         }
       ],
       "addedIn": "2026.08.5",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     }
   ]
 }

@@ -9,10 +9,14 @@
       "topic": "Startup",
       "level": 3,
       "type": "qa",
-      "tags": ["startup", "baseline-profiles", "r8"],
+      "tags": [
+        "startup",
+        "baseline-profiles",
+        "r8"
+      ],
       "q": "How do you diagnose and improve app startup time?",
       "shortAnswer": [
-        "Know the three start kinds: **cold** (new process), **warm** (process alive, new Activity), **hot** (Activity just resumes). Only cold start is worth optimizing hard.",
+        "Know the three start kinds: **cold** (new process), **warm** (process alive, new Activity), **hot** (Activity resumes). Only cold start is worth optimizing hard.",
         "Measure with `Macrobenchmark` plus `StartupTimingMetric` on a release build — never a debug build, never a stopwatch.",
         "Biggest levers: **Baseline Profiles** (AOT-compile the startup path, typically 20-30% faster), less work in `Application.onCreate`, and lazy library init."
       ],
@@ -34,11 +38,19 @@
         "Adding a splash screen and calling it a startup optimization."
       ],
       "refs": [
-        { "title": "App startup time", "url": "https://developer.android.com/topic/performance/vitals/launch-time", "checked": "2026-08-07" },
-        { "title": "Baseline Profiles", "url": "https://developer.android.com/topic/performance/baselineprofiles/overview", "checked": "2026-08-07" }
+        {
+          "title": "App startup time",
+          "url": "https://developer.android.com/topic/performance/vitals/launch-time",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Baseline Profiles",
+          "url": "https://developer.android.com/topic/performance/baselineprofiles/overview",
+          "checked": "2026-08-07"
+        }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "pe-0002",
@@ -46,10 +58,14 @@
       "topic": "Jank",
       "level": 3,
       "type": "qa",
-      "tags": ["jank", "frames", "perfetto"],
+      "tags": [
+        "jank",
+        "frames",
+        "perfetto"
+      ],
       "q": "What causes jank, and how do you find it systematically?",
       "shortAnswer": [
-        "Jank means a frame missed its deadline: ~16.7 ms at 60 Hz, ~8.3 ms at 120 Hz. Vitals splits jank into **slow frames** and **frozen frames** (over 700 ms).",
+        "Jank means a frame missed its deadline — about 17ms at 60Hz, 8ms at 120Hz. Vitals splits it into **slow frames** and **frozen frames**, over 700ms.",
         "Causes: main-thread work, too much recomposition, GC pressure from allocation, overdraw, synchronous I/O, and big bitmap decoding.",
         "Find it with Macrobenchmark `FrameTimingMetric` for regression tracking and Perfetto for a specific stutter — never by eyeballing."
       ],
@@ -71,12 +87,24 @@
         "Profiling on an emulator or a flagship device only; jank shows up on mid-range hardware."
       ],
       "refs": [
-        { "title": "Slow rendering", "url": "https://developer.android.com/topic/performance/vitals/render", "checked": "2026-08-07" },
-        { "title": "Macrobenchmark", "url": "https://developer.android.com/topic/performance/benchmarking/macrobenchmark-overview", "checked": "2026-08-07" },
-        { "title": "JankStats", "url": "https://developer.android.com/topic/performance/jankstats", "checked": "2026-08-07" }
+        {
+          "title": "Slow rendering",
+          "url": "https://developer.android.com/topic/performance/vitals/render",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Macrobenchmark",
+          "url": "https://developer.android.com/topic/performance/benchmarking/macrobenchmark-overview",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "JankStats",
+          "url": "https://developer.android.com/topic/performance/jankstats",
+          "checked": "2026-08-07"
+        }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     },
     {
       "id": "pe-0003",
@@ -84,8 +112,12 @@
       "topic": "App size",
       "level": 3,
       "type": "qa",
-      "tags": ["r8", "apk-size", "aab"],
-      "q": "How do you reduce app size, and what does R8 actually do?",
+      "tags": [
+        "r8",
+        "apk-size",
+        "aab"
+      ],
+      "q": "How do you reduce app size, and what does R8 do?",
       "shortAnswer": [
         "R8 does four things in one pass: **shrinking** (remove dead code), **optimization** (inlining, merging, devirtualization), **obfuscation** (renaming), and **desugaring** (backporting newer language APIs).",
         "Ship an **AAB**, not an APK — Play builds per-device splits for ABI, density, and language, usually the single largest saving.",
@@ -109,11 +141,19 @@
         "Losing `mapping.txt`, which makes every obfuscated stack trace useless."
       ],
       "refs": [
-        { "title": "Shrink, obfuscate, and optimize your app", "url": "https://developer.android.com/build/shrink-code", "checked": "2026-08-07" },
-        { "title": "Android App Bundle", "url": "https://developer.android.com/guide/app-bundle", "checked": "2026-08-07" }
+        {
+          "title": "Shrink, obfuscate, and optimize your app",
+          "url": "https://developer.android.com/build/shrink-code",
+          "checked": "2026-08-07"
+        },
+        {
+          "title": "Android App Bundle",
+          "url": "https://developer.android.com/guide/app-bundle",
+          "checked": "2026-08-07"
+        }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.28"
     }
   ]
 }

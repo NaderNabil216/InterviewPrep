@@ -15,9 +15,9 @@
         "spotless",
         "lint-gating"
       ],
-      "q": "detekt, ktlint, Spotless — what does each actually catch, and how do you keep static analysis from becoming noise?",
+      "q": "detekt, ktlint, Spotless — what does each catch? How do you keep static analysis from becoming noise?",
       "shortAnswer": [
-        "ktlint enforces formatting and the official style guide. Spotless is the Gradle wrapper that rewrites files to match. detekt is a static analyzer that scores complexity and smells — its thresholds need human tuning.",
+        "ktlint enforces formatting and the style guide; Spotless is the Gradle wrapper that rewrites files; detekt scores complexity and smells — its thresholds need human tuning.",
         "Wire the formatters into `check` so CI enforces style, and gate detekt on new violations only, never on an unbounded total count.",
         "Align rules with your style guide, keep a baseline for legacy code, and treat every `@Suppress` as a code review that needs a justification."
       ],
@@ -51,7 +51,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0024",
@@ -65,11 +65,11 @@
         "managed-devices",
         "flakes"
       ],
-      "q": "How do you structure Android CI — emulator strategy, test sharding, caching, and what do you do with a flaky test?",
+      "q": "How do you structure Android CI — emulator strategy, test sharding, caching? What do you do with a flaky test?",
       "shortAnswer": [
         "One fast merge pipeline — lint, unit tests, assemble — plus a separate, slower device-test job. Never make every developer wait on emulators.",
-        "Define emulators with Gradle Managed Devices so the AVD is built and torn down identically on every CI machine, then shard the `androidTest` run across jobs with `numShards`/`shardIndex`.",
-        "Cache the build cache, dependencies, and the pre-built AVD. Move a flaky test to a non-blocking quarantined suite with a ticket — and never add a test-level retry that hides the bug."
+        "Define emulators with Gradle Managed Devices so the AVD is built identically on every CI machine; shard `androidTest` across jobs with `numShards`/`shardIndex`.",
+        "Cache build cache, dependencies, and the pre-built AVD. Move a flaky test to a quarantined suite with a ticket — never add retries that hide bugs."
       ],
       "answer": "#### The shape of the pipeline\nOne merge pipeline runs lint, unit tests and an assemble as fast as possible; a separate, slower job runs `androidTest` on devices. Failing fast on the cheap checks keeps the developer loop short, and the device layer runs on a merge queue or timer where its minutes are affordable.\n\n#### Emulators vs Gradle Managed Devices\nGradle Managed Devices declare the device in `build.gradle.kts` (`device`, `apiLevel`, `systemImageSource`), so CI builds the AVD from the same configuration every time, runs tests, and disposes it automatically. That beats hand-rolled emulator provisioning, which drifts. Pin one API level near `targetSdk` plus an older baseline — the matrix should be stable and small, not exhaustive.\n\n#### Sharding and caching\nPass `numShards` and `shardIndex` to the instrumentation runner and split the test classes across parallel CI jobs so a large suite finishes in minutes. Cache what the jobs actually reuse: the Gradle build cache (ideally remote), dependency jars, and the pre-warmed AVD — otherwise every shard pays full cold-start cost.\n\n#### Flake quarantine\nA test that fails on main gets quarantined, not retried in place: move it to a non-blocking suite with the failure recorded and a ticket filed. Retries belong to flaky *infrastructure* (device provisioning), never to the test — a retrying test eventually passes for the wrong reason and hides the regression it exists to catch.",
       "code": [
@@ -106,7 +106,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0025",
@@ -120,11 +120,11 @@
         "app-signing",
         "ci-cd"
       ],
-      "q": "Walk me through shipping a release from a green main branch to production users.",
+      "q": "How do you ship a release from a green main branch to production users?",
       "shortAnswer": [
-        "A release is a separate CI job: assemble the release variant, pass the full quality gate, sign the AAB, bump the version, upload to the store — auditable and reproducible.",
+        "A release is a separate CI job: assemble the release variant, pass the quality gate, sign the AAB, bump the version, upload to the store.",
         "Use a dedicated upload keystore with Play App Signing. Google holds the app-signing key and backs it up. Inject credentials from secrets; never commit them.",
-        "Stage the rollout — internal, closed, then 1% → 10% → 100% — with the hold and rollback decision defined beforehand and Android vitals watched. Keep a remote kill switch, because Play cannot roll back."
+        "Stage the rollout — internal, closed, then 1% → 10% → 100% — hold and rollback decided beforehand, vitals watched. Keep a remote kill switch: Play cannot roll back."
       ],
       "answer": "#### The pipeline\nA release is a job, not a checklist. It assembles the `release` variant, runs the quality gate (lint, unit and instrumented tests, a smoke test), signs the artifact, bumps the version, drafts the changelog and tags the commit — so the exact bytes that shipped are reproducible from main.\n\n#### Signing\nUse a dedicated upload keystore with **Play App Signing**: you sign with the upload key, Google signs for distribution with the app-signing key it also backs up. If the upload key leaks you can rotate it, which is exactly why the key-backup feature exists. The keystore and its passwords come from secret injection, never from the repo.\n\n#### Staged rollout\nShip to an internal test track, then a closed test, then a production staged rollout — 1%, 10%, 50%, 100% — with the hold and rollback criteria defined *before* the first percentage goes out. Watch Android vitals (crash rate, ANR, and deltas against the previous version), not just raw crash counts, and halt the rollout on the pre-agreed threshold.\n\n#### The rollback that is not a rollback\nPlay cannot restore the previous version — a halted rollout is a pause, not a revert. The real safety net is a remote **kill switch** plus feature flags, so a bad code path can be disabled without shipping. The staged rollout contains the blast radius; the kill switch is what actually saves the release.",
       "code": [
@@ -161,7 +161,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0026",
@@ -174,10 +174,10 @@
         "test-types",
         "strategy"
       ],
-      "q": "Draw the testing pyramid for an Android app. What sits at each layer, and why is the shape the way it is?",
+      "q": "What is the testing pyramid for an Android app? What sits at each layer? Why is the shape the way it is?",
       "shortAnswer": [
-        "A broad base of fast JVM unit tests, a thinner integration layer, and a small apex of UI/end-to-end tests. Width is how many cases; height is cost and flakiness.",
-        "Android deforms the pyramid because logic is glued to framework types, so the base collapses into an inverted pyramid of UI tests. Robolectric and framework-free architecture push it back.",
+        "A broad base of JVM unit tests, a thinner integration layer, a small apex of UI/E2E tests. Width = case count; height = cost and flakiness.",
+        "Android deforms the pyramid: logic glued to framework types collapses the base into an inverted pyramid of UI tests. Robolectric pushes it back.",
         "Instrumented tests stay narrow but essential — locales, resources, real Room, process death — and Gradle Managed Devices keep that layer reproducible in CI."
       ],
       "answer": "#### The shape and the ratio\nBroad base of fast unit tests, a thinner integration layer, a small apex of UI/end-to-end tests. The width is the number of cases; the height is cost — time, and flakiness, climb with every layer up, so the apex can only carry a handful of journeys.\n\n#### The Android deformation\nPure framework-free logic is scarce in a typical Android app, so the naive pyramid collapses into an *inverted* one: UI tests end up covering behaviour that should have been a JVM unit test. Two things push it back.\n- **Robolectric** runs a shadow Android runtime on the JVM, so framework-coupled logic — a ViewModel on `Dispatchers.Main`, a repository, SharedPreferences — moves *down* into the fast layer.\n- **An architecture that keeps logic framework-free** (injected repositories, injected dispatchers, plain Kotlin domain) is what makes the fast layer possible at all. Testability is designed in, not bolted on.\n\n#### Where the device layer fits\nInstrumented tests stay narrow but essential: they validate OS behaviour — locales, resources, real SQLite, real network, process death — that no shadow reproduces faithfully. Gradle Managed Devices make that layer reproducible instead of random.\n\n#### The takeaway\nThe pyramid is a cost model. If a journey can be covered one layer down at the same fidelity, it belongs one layer down.",
@@ -210,7 +210,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0027",
@@ -223,11 +223,11 @@
         "robolectric",
         "instrumented-tests"
       ],
-      "q": "Compare a JVM unit test, an instrumented test, and a Robolectric test — where does each pay off, and where does each lie?",
+      "q": "Compare a JVM unit test, an instrumented test, and a Robolectric test. Where does each pay off? Where does each lie?",
       "shortAnswer": [
-        "A JVM unit test runs in the Gradle JVM with no Android runtime — milliseconds, correct for pure logic. Robolectric adds a shadow Android runtime, so `Context`, `Looper`, and `Main` work without a device.",
-        "An instrumented test runs in a real process on a device or emulator — full framework and real IO. It's the truth teller, and the slowest, most flaky option.",
-        "JVM tests lie about Android, Robolectric lies about hardware and device behavior, and instrumented tests lie least but cost minutes. So test logic on the JVM, framework coupling with Robolectric, and devices only at the real boundaries."
+        "A JVM unit test runs in the Gradle JVM — milliseconds, right for pure logic. Robolectric shadows Android: `Context`, `Looper`, `Main` work off-device.",
+        "An instrumented test runs in a real process on a device or emulator — full framework, real IO — the truth teller, and the slowest, flakiest option.",
+        "JVM tests lie about Android, Robolectric about hardware, instrumented tests lie least but cost minutes — logic on JVM, framework coupling with Robolectric, devices at boundaries."
       ],
       "answer": "#### The three runners\n- **JVM unit test** — `testDebugUnitTest` in the Gradle JVM. No `Context`, no Looper, no real time. Correct for pure logic: mappers, state machines, plain classes.\n- **Robolectric** — a JVM test that loads `android.jar` under a *shadow* runtime. It gives you a `Context`, a Looper, `SharedPreferences`, even a `Main` dispatcher, so ViewModels and repositories run without a device. Fidelity is good but it is emulation: rendering, sensors, audio and hardware acceleration are approximated or absent.\n- **Instrumented test** — an `androidTest` run on a device or emulator via Gradle Managed Devices. Full framework, full process, real IO. The truth teller, and the slowest, most brittle option.\n\n#### The cost model\nA JVM test is milliseconds; Robolectric adds seconds of per-class shadow setup; an instrumented test needs a booted device, minutes, and patience. Cost climbs roughly an order of magnitude per layer, which is exactly why the mix has to lean down.\n\n#### Where each lies\nJVM tests lie about Android (no framework at all); Robolectric lies about hardware and device-specific behaviour; instrumented tests lie least but flake most, and one device cannot prove behaviour across the API matrix.\n\n#### The rule\nTest logic on the JVM, test framework coupling with Robolectric, and reserve instruments for the boundaries only a real device answers: SQLite behaviour, locale and resources, deep-link entry, and the one or two journeys the business cannot afford to break.",
       "code": [
@@ -259,7 +259,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0028",
@@ -272,11 +272,11 @@
         "mocks",
         "test-doubles"
       ],
-      "q": "Define fake, stub, mock and spy — and why does over-mocking rot a test suite?",
+      "q": "What are fake, stub, mock, and spy? Why does over-mocking rot a test suite?",
       "shortAnswer": [
-        "A stub returns canned answers and asserts nothing. A mock is a stub that also verifies the calls. A spy wraps a real object and records what happened. A fake is a genuine lightweight implementation you assert state against.",
+        "A stub returns canned answers; a mock verifies calls; a spy wraps a real object, records; a fake is a lightweight implementation you assert against.",
         "Mocks couple tests to the implementation: a harmless refactor — merging two methods, reordering calls — breaks tests that had nothing to do with the change.",
-        "An over-mocked suite produces 'echo tests' that pass while real behavior regresses, because the mock only verifies that the code calls itself the way it currently does."
+        "An over-mocked suite produces 'echo tests' that pass while real behavior regresses, because the mock verifies that the code calls itself the way it does."
       ],
       "answer": "#### The taxonomy\nA **stub** returns canned answers so the test can reach the code under test; it asserts nothing about how it was used. A **mock** is a stub that *also* verifies interactions — \"`save()` was called exactly once with X\". A **spy** wraps a real object and records what happened to it. A **fake** is a genuine, lightweight implementation of an interface — an in-memory repository — that you assert *state* against and that serves every test.\n\n#### Why over-mocking rots the suite\n1. **Implementation coupling.** A mock asserts the *calls*, so any legitimate refactor — merging two methods, reordering an internal sequence — breaks hundreds of tests that were unrelated to the change. The suite starts dictating the shape of the code, not the other way round.\n2. **The echo test.** A repository mock configured to return what the ViewModel then echoes produces a test that still passes after the real behaviour regresses — it verifies nothing except that the code calls itself as it currently does.\n3. **Verified-by-construction drift.** `verify` statements accumulate because they are easy to write; the suite gets slower to maintain and its safety approaches zero while the confidence it appears to give stays high.\n\n#### The preference\nFake what you own — interfaces, repositories, clocks. Mock only what you do not own, or a genuine interaction you must prove, like \"analytics fired exactly once\". Never mock the class under test; Retrofit, Room and OkHttp get faked or wrapped instead.",
       "code": [
@@ -308,7 +308,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.33"
     },
     {
       "id": "bt-0029",
@@ -323,8 +323,8 @@
       ],
       "q": "Mockito or MockK on Kotlin — where does each fall down, and how do you mock final classes and suspend functions?",
       "shortAnswer": [
-        "Kotlin members are final by default, and classic Mockito mocks by subclassing, so it can't mock final classes. You need `open` or the inline mock maker; MockK handles final and internal natively.",
-        "MockK gives `coEvery`/`coVerify` for suspend functions and composes with `runTest`. Mockito needs mockito-kotlin and `runBlocking`, which poisons virtual-time tests.",
+        "Kotlin members are final by default, and Mockito mocks by subclassing, so it can't mock final classes without `open` or the inline mock maker.",
+        "MockK handles final and internal natively and gives `coEvery`/`coVerify` for suspend functions. Mockito needs mockito-kotlin and `runBlocking`, which poisons virtual-time tests.",
         "A suspend mock still returns canned values and never exercises real flow behavior — a fake backed by a `MutableStateFlow` is usually the better seam."
       ],
       "answer": "#### Why Kotlin breaks classic Mockito\nKotlin classes and their members are **final by default**. Classic Mockito creates a mock by *subclassing* the target, so it cannot subclass a final class or override a final method — the mock fails at runtime with a \"cannot mock final\" error. Two fixes exist: mark the class `open`, which leaks test concerns into the API, or opt into the inline mock maker (`mockito-inline`), which rewrites bytecode and mocks final classes without `open` sprinkles.\n\n#### MockK's model\nMockK is built for Kotlin: it mocks final and `internal` members natively, understands `val` properties, and has first-class coroutine support. Its API is less familiar to JVM developers and it can be slower on very large mocks. `relaxed = true` mocks stub *everything* silently, which masks real behaviour — every relaxed mock is a candidate bug.\n\n#### Coroutines\nMockito has no native suspend story; you reach for `mockito-kotlin` and wrap stubbing in `runBlocking`, a blocking call that fights `runTest`'s virtual clock. MockK provides `coEvery` and `coVerify`, which return the deferred-style results and compose cleanly with a `TestScope` as long as the mock itself holds no real dispatcher.\n\n#### The persistent pitfall\nA suspend mock still returns canned values, so it never exercises the *flow* of the real method — ordering, cancellation, downstream wiring. Where you own the seam, a hand-written fake with a `MutableStateFlow` you drive from the test reproduces behaviour instead of recording calls, and that is the better default.",
@@ -357,7 +357,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0030",
@@ -370,10 +370,10 @@
         "test-scope",
         "dispatcher-injection"
       ],
-      "q": "How does runTest control time, and what has to be true about your production code for a coroutine test to be deterministic?",
+      "q": "How does runTest control time? What has to be true about your production code for a coroutine test to be deterministic?",
       "shortAnswer": [
-        "`runTest` runs its block in a `TestScope` with one virtual scheduler, so `delay` advances without real waiting. But a child still running when the block returns hangs the test until the 60-second watchdog.",
-        "Determinism is a production-code contract: inject dispatchers so tests pass `StandardTestDispatcher(testScheduler)`, build every `TestDispatcher` from that one scheduler, and replace `Dispatchers.Main` with `setMain` for `viewModelScope`.",
+        "`runTest` runs its block in a `TestScope` with one virtual scheduler — `delay` advances without waiting; an unfinished child hangs — 60-second watchdog.",
+        "Determinism is a production-code contract: tests pass `StandardTestDispatcher(testScheduler)`, every `TestDispatcher` comes from one scheduler; `setMain` replaces `Dispatchers.Main` for `viewModelScope`.",
         "Drive the clock with `advanceUntilIdle()`, `advanceTimeBy(ms)`, or `runCurrent()` — depending on whether you assert the end state or intermediate states."
       ],
       "answer": "#### What runTest gives you\n`runTest { }` runs its block in a `TestScope` with a single virtual `TestCoroutineScheduler`. Every `delay` is skipped by advancing that clock, so a thirty-second timeout tests in microseconds. When the block returns, the scope's job is cancelled — and a child still running, typically a collector on a hot flow, hangs the test until the sixty-second watchdog fires. Keep long-lived collectors out of the test body (`backgroundScope`) or use a library that cancels its own collector.\n\n#### Driving the clock\n`advanceUntilIdle()` runs everything queued; `advanceTimeBy(ms)` moves the clock a fixed amount; `runCurrent()` drains tasks scheduled at the current instant. The choice follows your assertion: an end result needs `advanceUntilIdle()`, an intermediate state (Loading before Content) needs `advanceTimeBy` or `runCurrent`.\n\n#### The discipline in production code\nVirtual time only covers work that runs on the test's scheduler, so three things must hold:\n1. **Inject dispatchers.** A constructor taking `CoroutineDispatcher = Dispatchers.IO` lets a test pass `StandardTestDispatcher(testScheduler)` — same clock as the test. A hard-coded `Dispatchers.IO` runs at wall-clock time and virtual time cannot touch it.\n2. **One scheduler.** Every `TestDispatcher` must be built from the test's `testScheduler`; a bare `UnconfinedTestDispatcher()` creates a second clock and code waiting across the boundary deadlocks.\n3. **Replace `Main`.** `viewModelScope` uses `Dispatchers.Main`, swapped with `Dispatchers.setMain(StandardTestDispatcher())` in a rule sharing the test's scheduler.\n\nWith those three, the test asserts behaviour — the state a ViewModel exposes — with zero real timing.",
@@ -406,7 +406,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0031",
@@ -419,11 +419,11 @@
         "flows",
         "testing"
       ],
-      "q": "Turbine versus collecting a flow manually in a test — what does each buy you, and when is the plain collector actually better?",
+      "q": "Turbine versus collecting a flow manually in a test — what does each buy you, and when is the plain collector better?",
       "shortAnswer": [
-        "A plain collector — `backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { flow.toList(seen) }` — records emissions into a list you assert on. Simple, no extra dependency, right when you only care about the values that came out.",
-        "Turbine (`flow.test { }`) adds per-await timeouts, `awaitItem`/`awaitComplete`/`awaitError`/`expectNoEvents`, and fails on unconsumed events. It's right for hot flows and for asserting emission order against actions.",
-        "A plain `StateFlow` needs no collection at all — `state.value` is the assertion. And Turbine's own scope closes its collector, so it can't observe the upstream stopping after the last subscriber."
+        "A plain collector — `flow.toList(seen)` in a `backgroundScope` — records emissions into a list you assert on; no dependency, when you care about values.",
+        "Turbine (`flow.test { }`) adds per-await timeouts and `awaitItem`/`awaitError`/`expectNoEvents`, failing on unconsumed events — right for hot flows and emission-order assertions.",
+        "A plain `StateFlow` needs no collection — `state.value` is the assertion. Turbine's scope closes its collector, so it can't observe the upstream stopping."
       ],
       "answer": "#### The plain collector\n`backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { flow.toList(seen) }` records emissions into a list, then `advanceUntilIdle()` and assert `seen`. It uses only the coroutines-test API and is right when you care about the *sequence of values* and nothing else. Two traps: a hot flow never completes, so the collector must live in `backgroundScope` — cancelled when the test body returns — or the test hangs; and the list asserts nothing about *when* emissions happened relative to an action.\n\n#### Turbine\n`flow.test { }` collects in its own coroutine and gives `awaitItem()`, `awaitComplete()`, `awaitError()`, `expectNoEvents()` and `cancelAndIgnoreRemainingEvents()`. Each `await` has a timeout, and at the end the test fails if events were left *unconsumed* — catching the emission your assertions forgot. That makes it the tool for hot flows (`StateFlow`, `SharedFlow`) and for asserting ordering with timeouts, which a list cannot do.\n\n#### When the plain collector wins\n- A `StateFlow` whose `state.value` is already the assertion — no collection at all.\n- Proving *when* an upstream stops after the last subscriber leaves; Turbine's own scope closes its collector, hiding that.\n- One-off cold flows where only the final result matters.\n\nThe verdict: Turbine for interaction-style flow assertions, a recording collector for end-to-end \"what came out\", `state.value` for a plain `StateFlow`. Do not add the dependency where a `toList` does the job.",
       "code": [
@@ -455,7 +455,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "bt-0032",
@@ -470,9 +470,9 @@
       ],
       "q": "How do you test a ViewModel that reads and writes SavedStateHandle — and how do you prove the process-death restore contract?",
       "shortAnswer": [
-        "Construct the ViewModel directly with fakes, replace `Dispatchers.Main` with `setMain(StandardTestDispatcher())`, wrap in `runTest`, and assert on the public `StateFlow` — never on private fields.",
-        "A `SavedStateHandle(mapOf(\"itemId\" to \"42\"))` built from a real initial bundle tests the constructor-time restore path. Writing `handle[\"key\"] = value` and asserting the `getStateFlow`-backed flow re-emits proves writes propagate.",
-        "Process-death restore means the handle is rebuilt from the saved-state bundle before `init` runs. Reproduce it by constructing from the bundle that would have been saved, and assert `init` starts loading the restored id — with no repository memory."
+        "Construct the ViewModel with fakes, replace `Dispatchers.Main` with `setMain(StandardTestDispatcher())`, wrap in `runTest`, and assert on public `StateFlow` — never on private fields.",
+        "A `SavedStateHandle(mapOf(\"itemId\" to \"42\"))` from a real bundle tests constructor-time restore; `handle[\"key\"] = value` and `getStateFlow`-backed flow re-emits prove writes propagate.",
+        "Process-death restore: handle rebuilt from the saved-state bundle before `init`; construct from it, assert `init` loads the restored id — no repo memory."
       ],
       "answer": "#### The mechanics\nConstruct the ViewModel directly — `DetailViewModel(repo, dispatcher)` — and replace `Main` with `Dispatchers.setMain(StandardTestDispatcher())` in a rule, because all `viewModelScope` work lands on `Main`. Wrap in `runTest` and assert on the public state: `vm.state.value` after `advanceUntilIdle()`, or Turbine for emission order. Never assert on private fields or internal calls — the contract is the exposed flow.\n\n#### Testing SavedStateHandle\n`SavedStateHandle` is an ordinary class, so build one with a real initial bundle: `SavedStateHandle(mapOf(\"itemId\" to \"42\"))`. That exercises the *restore path*: `checkNotNull(handle[\"itemId\"])` in the constructor and `getStateFlow(key, default)` reading the restored value. A second test writes `handle[\"itemId\"] = \"99\"` and asserts the `getStateFlow`-backed flow re-emits — proving writes reach observers, which is the point of the flow-shaped API.\n\n#### Proving process-death restore\nThe contract is: the OS writes the saved-state bundle, then the new ViewModel's handle is reconstructed from it *before `init` runs*, so `init` can act on restored ids. Reproduce that exactly: take the bundle that *would* have been saved (a small, Bundle-compatible value — the id, the query), build the handle from it, construct the ViewModel, and assert `init`'s side effect — it starts loading the restored id. The test must pass with a repository holding *no memory of anything* — state must come from the handle alone.\n\n#### The trap\nRestoring from something not in the handle, or saving payloads (lists, bitmaps) instead of keys — the bundle cap throws `TransactionTooLargeException` in the field.",
       "code": [
@@ -504,7 +504,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     }
   ]
 }

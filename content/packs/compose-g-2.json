@@ -14,7 +14,7 @@
         "snapshot",
         "mvcc"
       ],
-      "q": "How does the snapshot system work under the hood?",
+      "q": "How does the snapshot system work internally?",
       "shortAnswer": [
         "Each `StateObject` holds a linked list of `StateRecord`s, each tagged with a snapshot id.",
         "A read walks the list to the newest record the current snapshot can see. A write allocates or reuses a record.",
@@ -37,7 +37,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0023",
@@ -50,7 +50,7 @@
         "snapshot",
         "isolation"
       ],
-      "q": "What is snapshot isolation good for outside of recomposition?",
+      "q": "What else is snapshot isolation good for?",
       "shortAnswer": [
         "`Snapshot.withMutableSnapshot { }` makes a multi-field update all-or-nothing — the UI never sees a half-applied state.",
         "Nested snapshots let you try work speculatively and throw it away instead of applying.",
@@ -73,7 +73,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0024",
@@ -86,7 +86,7 @@
         "snapshot",
         "observation"
       ],
-      "q": "How does Compose know which composable read which piece of state?",
+      "q": "How does Compose know which composable read which state?",
       "shortAnswer": [
         "A `readObserver` wraps each `RecomposeScope` and records every `StateObject` it reads.",
         "`Snapshot.registerApplyObserver` maps changed objects back to the scopes that read them and invalidates those scopes.",
@@ -109,7 +109,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0025",
@@ -122,9 +122,9 @@
         "derived-state",
         "performance"
       ],
-      "q": "When does `derivedStateOf` earn its keep, and when is it the wrong tool?",
+      "q": "When does `derivedStateOf` help? And when is it the wrong tool?",
       "shortAnswer": [
-        "It pays off when the input changes much more often than the result does.",
+        "It helps when the input changes much more often than the result does.",
         "`firstVisibleItemIndex > 0` flips twice across hundreds of scroll reads, so the derived UI recomposes twice, not per frame.",
         "It's not a cache — that's `remember(key)`. On a cheap mapping, it's a net loss."
       ],
@@ -145,7 +145,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0026",
@@ -158,7 +158,7 @@
         "state",
         "remember"
       ],
-      "q": "What breaks if you write `var count = mutableStateOf(0)` inside a composable body?",
+      "q": "Why does `var count = mutableStateOf(0)` in a composable body break?",
       "shortAnswer": [
         "Each recomposition creates a fresh state object, so your writes seem to do nothing.",
         "`remember` gives the state a slot in the slot table, so it survives recomposition.",
@@ -181,7 +181,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0027",
@@ -195,7 +195,7 @@
         "keys",
         "effects"
       ],
-      "q": "How do `remember` keys work, and how are they different from effect keys?",
+      "q": "How do `remember` keys work? And how are they different from effect keys?",
       "shortAnswer": [
         "Both compare keys with `equals` at the call site and react when the key changes.",
         "A changed `remember` key drops and recomputes the value. A changed `LaunchedEffect` key cancels and restarts the coroutine.",
@@ -218,7 +218,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0028",
@@ -231,7 +231,7 @@
         "saveable",
         "saver"
       ],
-      "q": "Write a custom `Saver` for a type that isn't Parcelable, and say where `rememberSaveable` still loses state.",
+      "q": "How do you write a custom `Saver` for a non-Parcelable type? Where does `rememberSaveable` still lose state?",
       "shortAnswer": [
         "`Saver(save = { ... }, restore = { ... })` converts your object into a Bundle-able form and back.",
         "`listSaver`/`mapSaver` help save container shapes; `@Parcelize` is the shortcut for Parcelable types.",
@@ -254,7 +254,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0029",
@@ -267,7 +267,7 @@
         "hoisting",
         "state"
       ],
-      "q": "Where should a piece of state live — and what are the two ways hoisting goes wrong?",
+      "q": "Where should a piece of state live? And what are the two ways hoisting goes wrong?",
       "shortAnswer": [
         "Keep state at the lowest common ancestor that needs it, and give the leaf a `value` plus `onValueChange` so it stays stateless.",
         "Too low: siblings can't coordinate, and the state dies when the subtree leaves composition.",
@@ -290,7 +290,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0030",
@@ -303,7 +303,7 @@
         "textfield",
         "async-state"
       ],
-      "q": "A `TextField` hoisted to a ViewModel drops characters and jumps the cursor. Explain and fix it.",
+      "q": "A `TextField` hoisted to a ViewModel drops characters and jumps the cursor. Why?",
       "shortAnswer": [
         "Each keystroke round-trips value → event → state → recompose across an async boundary like `stateIn` or a dispatcher hop.",
         "Fast typing beats the loop, so the field snaps back to a stale value and resets the selection.",
@@ -326,7 +326,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0031",
@@ -339,7 +339,7 @@
         "lifecycle",
         "flow"
       ],
-      "q": "`collectAsStateWithLifecycle` vs `collectAsState` — what actually breaks with the wrong one?",
+      "q": "`collectAsStateWithLifecycle` vs `collectAsState` — what breaks with the wrong one?",
       "shortAnswer": [
         "`collectAsState` keeps collecting while the app is in the background, so the upstream stays hot.",
         "The lifecycle-aware version from `androidx.lifecycle.compose` stops at STOPPED and restarts at STARTED.",
@@ -362,7 +362,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     }
   ]
 }

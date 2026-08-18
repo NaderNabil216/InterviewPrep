@@ -15,11 +15,11 @@
         "ci",
         "retries"
       ],
-      "q": "How do you eliminate flaky tests on Android, and why is a retry policy dangerous?",
+      "q": "How do you eliminate flaky tests on Android? Why is a retry policy dangerous?",
       "shortAnswer": [
-        "Flakiness has four root-cause families on Android: timing (real `delay` or `Thread.sleep`), shared mutable state between tests, device variance, and environment (network, locale, rotation, animations).",
-        "Detect it statistically — rerun the suite, tag tests that fail intermittently, and quarantine them into a separately-labeled job so CI reports flakiness instead of hiding it.",
-        "A retry policy turns a red build into a green lie: the flake stops surfacing, the underlying race survives, and the next engineer ships on a guarantee that isn't true."
+        "Flakiness has four root-cause families on Android: timing (real `delay` or `Thread.sleep`), shared mutable state, device variance, and environment (network, locale, animations).",
+        "Detect it statistically — rerun the suite, tag intermittent failures, and quarantine them into a separate job so CI reports flakiness instead of hiding it.",
+        "A retry policy turns a red build into a green lie: flakes stop surfacing, the race survives, and engineers ship on a false guarantee."
       ],
       "answer": "#### Root causes\nEvery flake traces to nondeterminism. Timing is the classic one: `Thread.sleep` or a real `delay` instead of virtual time makes the test race the scheduler. Shared mutable state — a static cache, a real clock, a process-global — lets a test pass in isolation and fail in a suite. Device and environment variance (emulator speed, locale, orientation, animations, network) is the third family. None of these is a test defect; each is a product defect the test failed to pin down.\n\n#### Detection\nA single rerun proves nothing. Collect evidence: run the suite repeatedly, watch for intermittent failures in CI, keep a flake ledger. `--tests` and `--rerun-tasks` let you reproduce a suspect test in isolation and in bulk. A flaky test should be quarantined — moved to a separate, explicitly-labeled job — so the merge gate stays trustworthy while the flake is worked.\n\n#### Retry policy\nRetrying a failed test restores green CI and hides the bug. The failure was real nondeterminism in the code; rerunning just postpones the moment a user hits it. Retries have a narrow place — genuinely external flakiness in an E2E harness you do not own — but the default has to be investigate-and-fix, never rerun-and-forget.",
       "code": [
@@ -51,7 +51,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0044",
@@ -64,11 +64,11 @@
         "metrics",
         "qa-gating"
       ],
-      "q": "Your team makes 80% line coverage a merge requirement. Is that a good rule, and what is wrong with it?",
+      "q": "Your team makes 80% line coverage a merge requirement. Is that a good rule? What is wrong with it?",
       "shortAnswer": [
         "Line coverage counts which code *ran*, not what the test *asserted*. A test that calls a function and checks nothing still counts as covered.",
         "An 80% gate therefore games itself: teams add shallow tests to hit the number, and the metric stops meaning anything about confidence.",
-        "Use coverage as a triage tool that names untested modules, and gate instead on what the suite actually proves."
+        "Use coverage as a triage tool that names untested modules, and gate instead on what the suite proves."
       ],
       "answer": "#### What coverage actually measures\nLine and branch coverage answer one question: did this line execute during the run? They say nothing about whether its behavior was verified. A function whose result is ignored is 100% covered. The metric rewards *reaching* code, not *asserting* about it.\n\n#### Why the gate backfires\nA number a team is measured on gets optimized. The cheap way to raise coverage is shallow tests — no assertions, or assertions that can hardly fail. The suite grows, the number rises, and the confidence it once implied evaporates. As Goodhart's law puts it, a measure stops being a good measure once people start aiming at it. A coverage percentage as a merge gate is precisely that situation.\n\n#### What to use instead\n- Branch coverage or mutation-style checks on the risky seams, which actually exercise false branches.\n- Coverage *deltas* per PR, flagging newly-added code that shipped with no assertions.\n- A written contract: every ViewModel and use case has tests, repositories have integration tests against real Room, the design system has screenshot tests.\n\nCoverage's real value is discovery: open the report and find the module nobody tests. Keep it as an exploration tool, not a number to defend.",
       "code": [
@@ -100,7 +100,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "bt-0045",
@@ -113,9 +113,9 @@
         "viewmodel",
         "red-green"
       ],
-      "q": "Show me how you would write a feature test-first on Android. Where does TDD pay off and where does it hurt?",
+      "q": "How do you write a feature test-first on Android? Where does TDD pay off, and where does it hurt?",
       "shortAnswer": [
-        "Write a failing JVM test against the pure-Kotlin layer — a ViewModel or use case — with a fake repository and virtual time, then make it pass with the minimum code.",
+        "Write a failing JVM test on the pure-Kotlin layer — ViewModel or use case — with fakes and virtual time, then make it pass with minimum code.",
         "The red/green/refactor loop gives you a regression net and a test that documents intended behavior before an implementation exists to rationalize it.",
         "Skip strict TDD for Compose UI, dependency wiring, and repository glue. Write those tests alongside the code, where test-first costs more than it buys."
       ],
@@ -149,7 +149,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0046",
@@ -162,11 +162,11 @@
         "characterization-tests",
         "seams"
       ],
-      "q": "You inherit a five-year-old codebase with zero tests, and a release is due. How do you introduce testing?",
+      "q": "You inherit a five-year-old codebase with zero tests; a release is due. How do you introduce testing?",
       "shortAnswer": [
-        "Start at the highest-risk seams — pure logic, and the boundary between UI and state. Write characterization tests that lock in *current* behavior before a refactor changes it.",
-        "Create a seam where it costs least: pull the decision logic into an object a JVM test can construct, and inject dependencies instead of letting the class build them.",
-        "Keep the suite fast and visible — a JVM run that takes seconds, plus a CI job with a no-new-regressions rule — so testing compounds instead of stalling behind 100 files."
+        "Start at the highest-risk seams — pure logic, the UI/state boundary. Write characterization tests locking in current behavior before a refactor changes it.",
+        "Create a seam where it costs least: pull decision logic into a JVM-testable object, and inject dependencies instead of the class building them.",
+        "Keep the suite fast and visible — a JVM run in seconds plus a CI no-new-regressions rule — so testing compounds instead of stalling."
       ],
       "answer": "#### Start where risk lives\nDo not begin with the easiest class; begin where a regression costs the most: payment logic, the mapping between the network model and the UI model, the state transitions behind a screen users depend on. With a release at stake, each test should pin the behavior the business actually relies on.\n\n#### Characterization tests\nA refactor without tests is a rewrite. Characterization tests record observed behavior — feed input, assert the current output — *before* you touch the code. They do not judge whether the behavior is right; they make change safe. Once the net exists you can refactor freely and gradually move assertions toward the behavior you actually want.\n\n#### Seams, not rewrites\nThe classic move is extracting a pure core: pull decision logic out of the activity or fragment into an object with an injectable delegate, so you can construct it in a plain JVM test without Android and without mocking the framework. That single seam lets the dangerous logic be tested today, even when the surrounding class is untestable.\n\n#### Culture and gating\nEnforce a no-new-regressions rule — new code ships tested — make the run take seconds, and put it in CI on the first day. The suite compounds and the legacy surface shrinks one seam at a time, which is the only version of this that survives contact with a deadline.",
       "code": [
@@ -193,7 +193,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0047",
@@ -206,11 +206,11 @@
         "pr-gates",
         "merge-pipeline"
       ],
-      "q": "What do you require on every Android PR before it merges, and what do you deliberately keep off the gate?",
+      "q": "What do you require on every Android PR before it merges? What do you deliberately keep off the gate?",
       "shortAnswer": [
-        "The merge gate runs only fast, deterministic checks: compile with warnings as errors, lint and formatting, all JVM unit tests, and a small set of non-flaky instrumented tests on the critical journeys.",
+        "The merge gate runs only fast, deterministic checks: compile with warnings-as-errors, lint, formatting, all JVM unit tests, and non-flaky instrumented tests on critical journeys.",
         "Full device coverage, sharded runs, and E2E run post-merge on main or nightly, where a flake delays a release instead of blocking a developer.",
-        "Scale the gate with risk — a dependency bump or a refactor earns stricter checks than a comment change — and make the whole thing finish in minutes."
+        "Scale the gate with risk — a dependency bump earns stricter checks than a comment change — and make it finish in minutes."
       ],
       "answer": "#### The merge gate\nA PR gate exists to certify \"this change is safe\", and it is only useful if it is fast and trustworthy. My minimum: a clean compile (warnings treated as errors), lint with the team's ruleset, formatting or detekt, the full JVM unit suite, and a deliberately short instrumented set — one or two journeys whose breakage would cost the most. Any flaky check is a liability, not a guarantee, so the instrumented subset must have a proven track record before it blocks merges.\n\n#### Off the gate\nRunning the full device matrix on every PR is how a gate becomes slow and flaky. Sharded device coverage and E2E belong on main or a nightly job; they still gate a *release*, just not an individual merge. The distinction is granularity — a merge is a small step, a release is the milestone.\n\n#### Risk-scaling\nNot every PR earns the same pipeline. A comment tweak should not queue behind the same checks as a library upgrade. Risk-based escalation — changed modules, dependency changes, large diffs — adds stricter verification where it matters while keeping the fast path fast. And the gate itself is a product: if it takes twenty minutes, developers start bypassing it, so measure and shrink its latency like any other code.",
       "code": [
@@ -242,7 +242,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0048",
@@ -256,7 +256,7 @@
         "task-provider",
         "configuration-cache"
       ],
-      "q": "How do you write a custom Gradle task in Kotlin DSL without slowing the build down?",
+      "q": "How do you write a custom Gradle task in Kotlin DSL without slowing the build?",
       "shortAnswer": [
         "Register it lazily with `tasks.register<MyTask>()` and configure through the returned `TaskProvider`, so nothing runs or materializes at configuration time.",
         "Declare `@Input`, `@InputFile`, and `@OutputFile` so up-to-date checks and the build cache reuse outputs instead of re-running the task.",
@@ -292,7 +292,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0049",
@@ -305,10 +305,10 @@
         "build-speed",
         "configuration-phase"
       ],
-      "q": "Your 40-module build spends 40 seconds in configuration before anything runs. What is wrong, and how do you fix it?",
+      "q": "Your 40-module build spends 40 seconds in configuration before anything runs. What is wrong? How do you fix it?",
       "shortAnswer": [
         "Measure first: `--profile` or a build scan splits configuration from execution time, so you know the 40 seconds is real and where it's spent.",
-        "Configuration-time work is the usual cause — `allprojects` and `subprojects` bodies, eager task creation, file scans, and `afterEvaluate` blocks doing real work instead of registering it.",
+        "Configuration-time work is the usual cause: `allprojects`/`subprojects` bodies, eager task creation, file scans, `afterEvaluate` doing real work instead of registering it.",
         "Replace it with lazy registration and execution-time work, then enable the configuration cache, which serializes the configured graph and skips configuration on later builds."
       ],
       "answer": "#### Measure the phases\nA Gradle build has two phases: configuration — every script evaluates and the task graph is built — and execution, where tasks run. `--profile` prints both, and a build scan splits them per project. Until you have that split you are guessing; \"the build is slow\" usually means \"configuration is slow\", and the two fixes are completely different.\n\n#### Configuration-time anti-patterns\n- `allprojects {}` and `subprojects {}` bodies doing I/O or resolving dependencies at configuration time, for every project, on every build.\n- Eager `tasks.create` calls, or reading task outputs inside a configuration block.\n- `afterEvaluate` performing real work — file reads, `exec` — instead of scheduling it.\n- Resolving a `configuration` in a build script, which forces the whole dependency graph.\n\nEach of these runs on every build, even a fully up-to-date one, because configuration always runs.\n\n#### Lazy by default\nThe fix is configuration avoidance: `tasks.register` instead of `tasks.create`, `provider {}` for values computed at execution time, and all I/O moved into task actions. An incremental build then configures a skeleton and executes only what changed.\n\n#### The configuration cache\nWith the configuration cache enabled, the fully configured task graph is serialized and reused — the second build skips configuration almost entirely. It forces your logic to be clean (no reading mutable state at execution time), which is exactly the discipline those anti-patterns were violating.",
@@ -341,7 +341,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0050",
@@ -354,10 +354,10 @@
         "dependency-substitution",
         "resolution"
       ],
-      "q": "When would you reach for dependency substitution, and how do you replace a published artifact with a local project?",
+      "q": "When would you reach for dependency substitution? How do you replace a published artifact with a local project?",
       "shortAnswer": [
-        "Substitution rewrites which artifact resolves for a requested coordinate at resolution time. It works even for transitive dependencies you never declared — that's its superpower over a plain declaration.",
-        "`dependencySubstitution { substitute(module(\"com.acme:lib\")).using(project(\":lib\")) }` swaps a binary artifact for a local project — ideal for building against a fork or an unpublished change.",
+        "Substitution rewrites which artifact resolves for a requested coordinate at resolution time — even for transitive dependencies you never declared; that's its superpower.",
+        "`dependencySubstitution { substitute(module(\"com.acme:lib\")).using(project(\":lib\")) }` swaps a binary for a local project — for forks or unpublished changes.",
         "Use it sparingly and centralize it. Substitution silently changes what ships, so every rewrite should be explicit, reviewed, and easy to see."
       ],
       "answer": "#### Why substitute\nDependency substitution changes which artifact resolves for a requested coordinate, and it happens at resolution time. The two big use cases: replace a published binary with a local project you want to build against (a fork, or a change not yet published), and redirect a coordinate to its replacement after a rename or a security fix. Because it acts on the resolved graph, it also catches transitive requests — something a normal `implementation()` line cannot express.\n\n#### module to project\nThe substitution block lives in `settings.gradle.kts`, typically under `dependencyResolutionManagement`, so it applies to every project. A module spec without a version matches any version of that coordinate; the rule rewrites it to the local project. Keep substitutions in one convention place — if they are scattered across module build files you get resolution surprises and reviewers cannot see what changed.\n\n#### Risks\nA substitution silently changes what is tested and shipped. Prefer declaring the project dependency directly when the code lives in your repo; use substitution for the boundary cases — a fork you cannot vendor, a vulnerable coordinate you must redirect, a temporary local override. Document every substitution and make CI fail if a pattern stops matching, so the rule does not rot into a no-op.\n\n#### Resolution rules\nSubstitution lives in the same resolution-rules family as component-metadata rules and version capturing. It is the sharpest tool there and the most dangerous, because it changes identity rather than just version.",
@@ -385,7 +385,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     },
     {
       "id": "bt-0051",
@@ -399,11 +399,11 @@
         "toolchains",
         "ci"
       ],
-      "q": "Why is 'it works on my machine' a build problem, and what do you pin so a build is reproducible in CI?",
+      "q": "Why is 'it works on my machine' a build problem? What do you pin so a build is reproducible in CI?",
       "shortAnswer": [
         "Commit the Gradle wrapper — `gradle/wrapper/gradle-wrapper.jar` and `gradle-wrapper.properties` — with the version and `distributionSha256Sum` pinned, so every machine runs the same Gradle.",
-        "Declare JDK toolchains in the build and provision them with the foojay-resolver plugin, so CI and laptops compile on the same JVM regardless of what's preinstalled.",
-        "Centralize dependency versions in a version catalog and enable dependency locking, so resolution — not just the toolchain — is deterministic."
+        "Declare JDK toolchains in the build and provision them with the foojay-resolver plugin, so CI and laptops compile on the same JVM whatever is preinstalled.",
+        "Centralize dependency versions in a version catalog and enable dependency locking, so resolution — not only the toolchain — is deterministic."
       ],
       "answer": "#### The wrapper\nThe wrapper is the build's entry point and the first reproducibility lever. Commit `gradle-wrapper.jar` and `gradle-wrapper.properties`, and pin the distribution checksum with `distributionSha256Sum` so a tampered or mismatched Gradle fails fast. Never let CI install its own Gradle version; every machine — laptop and pipeline — should run `./gradlew` from the repo.\n\n#### JDK toolchains\n\"Works on my machine\" is usually a JDK difference: code that compiles on 21 and dies on 17. Declare toolchains in the build — `java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }` — and let the foojay-resolver plugin provision the matching JDK in CI and on developers. The compiler then runs on the same JVM everywhere, independent of what the host had installed, and builds no longer depend on which JDK happened to be on `PATH`.\n\n#### Versions and locking\nA version catalog (`libs.versions.toml`) centralizes versions so the build script and every module agree on one number per library. For full determinism, Gradle dependency locking records the resolved graph in lockfiles, so resolution cannot drift the day someone publishes a new patch. CI then builds against a graph that is pinned at every level: Gradle, JDK, and dependencies.\n\n#### Verify in CI\nFinally, CI should fail when a change bumps the wrapper or a toolchain without intent — the pin is only honest if drift is caught.",
       "code": [
@@ -435,7 +435,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "bt-0052",
@@ -449,11 +449,11 @@
         "sharding",
         "incremental"
       ],
-      "q": "Your edit-to-verify loop is ten minutes: a full unit run, then an instrumented run. How do you make it fast?",
+      "q": "Your edit-to-verify loop is ten minutes: a full unit run plus an instrumented run. How do you make it fast?",
       "shortAnswer": [
-        "Run only what changed. `--tests` filters to one class, and up-to-date checks skip everything untouched, so an edit to one file re-runs a handful of tests in seconds.",
+        "Run only what changed: `--tests` filters to one class, and up-to-date checks skip everything untouched — an edit re-runs a handful of tests in seconds.",
         "Keep the incremental case fast with a remote build cache, and split JVM tests from instrumented tests so the common edit runs one targeted command.",
-        "When you must run devices, shard the suite across emulators and merge the results — and run known-flaky tests first, so a flake surfaces early instead of poisoning the whole run."
+        "When you must run devices, shard across emulators and merge results; run known-flaky tests first, so a flake surfaces early instead of poisoning the run."
       ],
       "answer": "#### Filtering\nThe full suite is not the everyday loop. Gradle's `--tests` filter runs a single class or method: `./gradlew testDebugUnitTest --tests '*SearchViewModelTest'`. Combined with up-to-date checks and the configuration cache, an edit to one file turns into a handful of tests in seconds. Add `--continue` so one failure does not stop the run and hide the rest.\n\n#### Incremental plus cache\nMake the \"nothing changed\" case cost nothing: a remote build cache reuses task outputs across branches and machines, and the configuration cache removes configuration time. Keep JVM tests and instrumented tests as separate commands — the common edit (a ViewModel, a mapper) needs only the JVM suite, and Robolectric gives instrumented-fidelity tests without an emulator when the class under test touches the framework.\n\n#### Sharding and merging\nThe full device run is a release gate, not a per-edit loop. AndroidX test sharding splits the suite across emulators and CI merges the JUnit XML into one report; Gradle's `maxParallelForks` parallelizes JVM tests on the host. Parallelism is only worth it once a single test's runtime dominates, so measure before adding devices.\n\n#### Flaky-first\nRun the tests with a history of flakiness first. If they are going to flake, you want to know immediately — not after twenty minutes when it is equally possible a real failure happened. Ordering flaky candidates first keeps the signal unambiguous.",
       "code": [
@@ -485,7 +485,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.24"
     }
   ]
 }

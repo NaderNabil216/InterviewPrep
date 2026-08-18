@@ -14,7 +14,7 @@
         "conflate",
         "collect-latest"
       ],
-      "q": "Explain `buffer`, `conflate` and `collectLatest` at the channel level, and what operator fusion does to them.",
+      "q": "What do `buffer`, `conflate` and `collectLatest` do at the channel level? What does operator fusion do?",
       "shortAnswer": [
         "`buffer(capacity, onBufferOverflow)` inserts a channel plus a second coroutine, so producer and collector run concurrently.",
         "`conflate()` is exactly `buffer(CONFLATED)`. `collectLatest` cancels and restarts the collector body on each new value.",
@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0040",
@@ -58,7 +58,7 @@
         "flat-map-latest",
         "search"
       ],
-      "q": "Build search-as-you-type and defend the position of every operator.",
+      "q": "Search-as-you-type — what does each operator do?",
       "shortAnswer": [
         "`query.debounce(300).filter { it.length >= 2 }.distinctUntilChanged().flatMapLatest { repo.search(it) }.catch { emit(Empty) }`.",
         "`debounce` fires the network call only after typing pauses; `distinctUntilChanged` removes delete-then-retype duplicates.",
@@ -89,7 +89,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0041",
@@ -102,7 +102,7 @@
         "zip",
         "merge"
       ],
-      "q": "`combine` vs `zip` vs `merge` — which one builds a UiState from three sources?",
+      "q": "`combine`, `zip` and `merge` — which one builds a UiState from three sources?",
       "shortAnswer": [
         "`combine` re-emits when any source changes, but only starts once every source has emitted at least once.",
         "`zip` pairs values in lock-step and completes with the shortest source. `merge` interleaves same-typed flows with no correlation.",
@@ -133,7 +133,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0042",
@@ -146,9 +146,9 @@
         "backoff",
         "jitter"
       ],
-      "q": "Add retry with exponential backoff to a network Flow.",
+      "q": "Retry a network Flow with exponential backoff: how?",
       "shortAnswer": [
-        "`retryWhen { cause, attempt -> ... }`: retry only transient errors, at most three tries, with `delay(base * (1 shl attempt) + jitter)` between attempts.",
+        "`retryWhen { cause, attempt -> ... }`: retry only transient errors, with `delay(base * (1 shl attempt) + jitter)` between attempts.",
         "`retry` re-collects the entire upstream — fine for a cold flow, meaningless for a hot one.",
         "Jitter matters because synchronized clients all retry at once and thundering-herd the backend on recovery."
       ],
@@ -177,7 +177,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0043",
@@ -190,7 +190,7 @@
         "callback-flow",
         "await-close"
       ],
-      "q": "`flow { }` vs `channelFlow { }` vs `callbackFlow { }` — how do you choose?",
+      "q": "`flow { }`, `channelFlow { }`, `callbackFlow { }` — how do you choose?",
       "shortAnswer": [
         "`flow {}` is the default: cold, sequential, context-preserving, and cheapest.",
         "`channelFlow {}` breaks the emission-context rule so multiple coroutines can `send` concurrently — at the cost of a channel plus a coroutine.",
@@ -221,7 +221,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0044",
@@ -234,7 +234,7 @@
         "try-send",
         "listener-leak"
       ],
-      "q": "Wrap a listener-based API (say `LocationManager`) in a Flow. What goes wrong?",
+      "q": "A listener-based API wrapped in a Flow: what goes wrong?",
       "shortAnswer": [
         "Omitting `awaitClose` throws at runtime and leaks the listener — it is both the suspension that keeps the flow alive and the unregister point.",
         "You cannot `send` from a non-suspending callback, so it has to be `trySend`.",
@@ -265,7 +265,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0045",
@@ -278,7 +278,7 @@
         "buffer-overflow",
         "telemetry"
       ],
-      "q": "Enumerate the Channel capacities and `BufferOverflow` modes, then design a telemetry pipeline that must never block the producer.",
+      "q": "What are the Channel capacities and `BufferOverflow` modes? A telemetry pipeline that never blocks the producer — how?",
       "shortAnswer": [
         "Capacities: RENDEZVOUS (0), BUFFERED (64 default), CONFLATED, UNLIMITED. Overflow: SUSPEND, DROP_OLDEST, DROP_LATEST.",
         "For telemetry, use a bounded buffer with DROP_OLDEST — never UNLIMITED, which is an OOM with extra steps.",
@@ -309,7 +309,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0046",
@@ -322,7 +322,7 @@
         "shared-flow",
         "state"
       ],
-      "q": "One-shot events (navigate, show a snackbar): `Channel`, `SharedFlow`, or state? Argue all three.",
+      "q": "One-shot events (navigate, show a snackbar): `Channel`, `SharedFlow`, or state? Case for each?",
       "shortAnswer": [
         "`SharedFlow(replay = 0)` drops events emitted while the UI is STOPPED — the exact window `repeatOnLifecycle` creates.",
         "A `Channel` gives exactly-once delivery to a single consumer, but breaks with two collectors and loses everything on process death.",
@@ -353,7 +353,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0047",
@@ -366,7 +366,7 @@
         "shared-flow",
         "live-data"
       ],
-      "q": "StateFlow vs SharedFlow vs LiveData — which do you expose for UI state, and why is LiveData out?",
+      "q": "StateFlow, SharedFlow, LiveData — which do you expose for UI state? Why is LiveData out?",
       "shortAnswer": [
         "StateFlow always has a value, is conflated, dedupes by `equals`, and `.value` is readable synchronously — the default for UI state.",
         "SharedFlow has no initial value, configurable replay, and no dedup — for events and broadcast.",
@@ -397,7 +397,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     },
     {
       "id": "co-0048",
@@ -410,7 +410,7 @@
         "mutable-state-flow",
         "update"
       ],
-      "q": "You update the state in the ViewModel but the UI does not change. Why?",
+      "q": "The state changes in the ViewModel, but the UI does not change. Why?",
       "shortAnswer": [
         "StateFlow conflates by `equals`, so re-emitting an equal value emits nothing.",
         "Mutating a `MutableList` in place and assigning the same reference back, or a data class with an `Array` field, produces a silent no-op.",
@@ -441,7 +441,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.22"
     }
   ]
 }

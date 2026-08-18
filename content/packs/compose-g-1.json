@@ -14,7 +14,7 @@
         "compiler",
         "recomposition"
       ],
-      "q": "Why can a `@Composable` function only be called from another `@Composable` function?",
+      "q": "Why can only a `@Composable` function call a `@Composable` function?",
       "shortAnswer": [
         "The compiler adds a hidden `$composer` parameter to every composable call.",
         "Only another composable has that composer in scope, so composables can only be called from composables.",
@@ -37,7 +37,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0013",
@@ -51,7 +51,7 @@
         "skipping",
         "slot-table"
       ],
-      "q": "What does the Compose compiler plugin actually generate for a composable function?",
+      "q": "What does the Compose compiler plugin generate for a composable function?",
       "shortAnswer": [
         "It adds a `$composer` parameter and a `$changed` bitmask to every composable.",
         "The body is wrapped in `startRestartGroup`/`endRestartGroup` with an `if (!skipping) body else skipToGroupEnd()` guard.",
@@ -74,7 +74,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0014",
@@ -87,7 +87,7 @@
         "slot-table",
         "performance"
       ],
-      "q": "Why is the slot table a gap buffer, and when does that data structure hurt you?",
+      "q": "Why is the slot table a gap buffer? When does that data structure hurt you?",
       "shortAnswer": [
         "It's a flat array of groups with a movable gap, so writes near the cursor are O(1).",
         "Moving the gap costs O(distance), so churn far from the cursor is the expensive case.",
@@ -110,7 +110,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0015",
@@ -124,7 +124,7 @@
         "applier",
         "recomposer"
       ],
-      "q": "Trace one state write all the way to pixels. Who does what — Composer, Applier, Recomposer?",
+      "q": "A state write moves all the way to pixels. Who does what — Composer, Applier, Recomposer?",
       "shortAnswer": [
         "A state write notifies snapshot apply observers, which invalidate the scopes that read that state.",
         "The Recomposer waits for the next frame, recomposes into a change list, and the Applier changes the LayoutNode tree.",
@@ -147,7 +147,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0016",
@@ -161,7 +161,7 @@
         "scope",
         "inline"
       ],
-      "q": "You read a state value inside a `Column { }` content lambda and the entire enclosing screen re-runs. Why?",
+      "q": "You read a state value inside a `Column { }` content lambda — the whole screen re-runs. Why?",
       "shortAnswer": [
         "`Column`, `Row`, and `Box` are inline, so their content lambdas get no restart group of their own.",
         "The nearest restartable scope is the caller of `Column`, so a read there restarts the whole screen.",
@@ -184,7 +184,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0017",
@@ -197,10 +197,10 @@
         "recomposition",
         "skipping"
       ],
-      "q": "What is donut-hole skipping, and how do you engineer one on purpose?",
+      "q": "What is donut-hole skipping? And how do you engineer one on purpose?",
       "shortAnswer": [
         "The parent recomposes, but every child skips because its arguments didn't change.",
-        "The 'hole' is wherever the changing state is actually read, so the cost collapses to that scope.",
+        "The 'hole' is wherever the changing state is read, so the cost collapses to that scope.",
         "Passing the changing value down as a parameter, or reading it high up via `CompositionLocal`, closes the hole."
       ],
       "answer": "When the parent restarts and each child's `$changed` bits report unchanged arguments, the children take the `skipToGroupEnd()` path — the parent's body runs but the subtree cost collapses to a bitmask test per child. The expensive work sits only in the scopes that actually read the changing state, and everything around it is a cheap 'hole' of skipped groups.\n\n#### Building one on purpose\nThe recipe is to isolate reads: hold the volatile state high (in a ViewModel or a top composable), read it once, and pass stable data down. Children that receive stable parameters skip. Two patterns engineer it deliberately — content slots: `Scaffold(topBar = { TopBar() })` where a changing lambda is hoisted out so it does not re-instantiate per recomposition; and `() -> T` parameters that let a child decide when to recompose itself.\n\n#### What closes the hole\nPassing the changing value down as a parameter makes its readers non-skippable on change. A non-skippable child defeats it. And a `CompositionLocal` read high in the tree invalidates the local's readers — wide scopes again — which is why locals should hold rarely-changing config.",
@@ -220,7 +220,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.34"
     },
     {
       "id": "cmp-0018",
@@ -233,7 +233,7 @@
         "stability",
         "tooling"
       ],
-      "q": "Turn on the Compose compiler reports. What do you look at first?",
+      "q": "What do you look at first in the Compose compiler reports?",
       "shortAnswer": [
         "Enable `composeCompiler { metricsDestination / reportsDestination }` and build a release variant.",
         "`composables.txt` shows restartable/skippable columns; `classes.txt` lists unstable classes.",
@@ -256,7 +256,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0019",
@@ -269,7 +269,7 @@
         "stability",
         "modules"
       ],
-      "q": "A model class from our `:domain` module is reported unstable even though every property is a `val`. Why, and what are your options?",
+      "q": "A model class from our `:domain` module is reported unstable even though every property is a `val`. Why? And what are your options?",
       "shortAnswer": [
         "Stability is inferred at compile time, and only for classes the Compose compiler itself compiled.",
         "Plain Kotlin compiles without that inference, so the class is treated as unstable.",
@@ -292,7 +292,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0020",
@@ -305,7 +305,7 @@
         "strong-skipping",
         "bug"
       ],
-      "q": "Strong skipping is on and one screen stopped updating. Diagnose it.",
+      "q": "Strong skipping is on and one screen stopped updating. Why?",
       "shortAnswer": [
         "Strong skipping compares unstable parameters with `===`, so an object mutated in place keeps the same reference.",
         "The call looks unchanged, the body is skipped, and the UI goes stale — that's the mode's trade-off.",
@@ -328,7 +328,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     },
     {
       "id": "cmp-0021",
@@ -341,7 +341,7 @@
         "stability",
         "lists"
       ],
-      "q": "`List<T>` is unstable. What do you actually do about it — and when is the right answer 'nothing'?",
+      "q": "`List<T>` is unstable. What do you do about it? When is the right answer 'nothing'?",
       "shortAnswer": [
         "Cheapest first: leave it, mark the holder `@Immutable`, use the stability config, or switch to `ImmutableList`.",
         "A composable that re-runs costs microseconds of function calls — not a redraw.",
@@ -364,7 +364,7 @@
         }
       ],
       "addedIn": "2026.08.10",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.21"
     }
   ]
 }

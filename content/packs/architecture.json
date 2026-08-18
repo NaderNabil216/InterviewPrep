@@ -15,11 +15,11 @@
         "mvi",
         "layers"
       ],
-      "q": "Describe the layered architecture you'd use, and compare MVVM with MVI.",
+      "q": "What layered architecture do you use? How do MVVM and MVI compare?",
       "shortAnswer": [
-        "Three layers: **UI** (Compose + state holder), **domain** (optional — use cases, pure Kotlin), **data** (repositories + data sources). Dependencies point inward; the data layer never knows about the UI.",
-        "Both MVVM and MVI use unidirectional data flow. MVI goes further: **one immutable state object** and **explicit intents** make inconsistent states impossible.",
-        "MVVM with a single `StateFlow<UiState>` is, in practice, MVI-lite — and that is what most modern Android codebases ship."
+        "Three layers: **UI** (Compose + state holder), **domain** (optional — use cases, pure Kotlin), and **data** (repositories + data sources). Dependencies point inward; data never touches UI.",
+        "MVVM and MVI both use unidirectional data flow. MVI goes further: **one immutable state object** plus **explicit intents** makes inconsistent states impossible.",
+        "MVVM with one `StateFlow<UiState>` is MVI-lite in practice. And that is what most modern Android codebases ship."
       ],
       "answer": "#### The layers\n- **UI layer** — composables plus a state holder (`ViewModel`). Holds no business logic; renders state, forwards events.\n- **Domain layer** (optional) — use cases encapsulating business rules, reusable across ViewModels; overhead for one-line pass-throughs.\n- **Data layer** — repositories own the single source of truth; data sources (network, database, DataStore) sit behind them.\n\n**Rule:** dependencies point inward (UI → domain → data); expose domain models, not DTOs.\n\n#### Unidirectional data flow\nState flows down, events flow up; the screen calls a ViewModel function that updates the single source of truth, which re-emits.\n\n#### MVVM vs MVI\n| | MVVM (common form) | MVI |\n|---|---|---|\n| State | often several `StateFlow`s | exactly one immutable `State` |\n| Input | public ViewModel methods | a sealed `Intent`/`Action` type sent to one `dispatch` |\n| Reducer | ad-hoc updates | explicit `(State, Action) -> State` |\n| Wins | less boilerplate | impossible states become unrepresentable; trivially testable |\n| Costs | multiple flows can drift out of sync | ceremony, and a large sealed hierarchy |\n\n#### What to actually say\n\"I use MVVM with a single immutable `UiState` as one `StateFlow`, events as a sealed type — MVI's guarantee without the ceremony. I'd add a formal reducer only for a screen with complex transitions worth unit-testing.\"\n\n#### Modeling state well\nPrefer a sealed hierarchy or explicit flags over independent booleans; `isLoading = true` **and** `error != null` must be unrepresentable.",
       "code": [
@@ -51,7 +51,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0002",
@@ -65,7 +65,7 @@
         "koin",
         "di"
       ],
-      "q": "Explain Hilt's components and scopes. How does it compare to Koin in 2026?",
+      "q": "How do Hilt's components and scopes work? How does it compare to Koin?",
       "shortAnswer": [
         "Hilt builds a component hierarchy that mirrors Android lifecycles: `SingletonComponent` → `ActivityComponent` → `FragmentComponent`, each with a matching scope.",
         "Scope annotations (`@Singleton`, `@ActivityRetainedScoped`, `@ViewModelScoped`, `@ActivityScoped`) control **instance reuse**; without a scope, every injection creates a new instance.",
@@ -101,7 +101,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0003",
@@ -150,7 +150,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     },
     {
       "id": "ar-0004",
@@ -163,9 +163,9 @@
         "gradle",
         "scale"
       ],
-      "q": "How would you modularize a large Android app, and what does it actually buy you?",
+      "q": "How would you modularize a large Android app? What does it buy you?",
       "shortAnswer": [
-        "Split by **feature** first, then by **layer inside the feature** (`feature:search:ui`, `feature:search:data`). Shared `core:*` modules hold the design system, network, database, and common models.",
+        "Split by feature first, then by layer inside feature (`feature:search:ui`, `feature:search:data`); shared core modules hold design system, network, database, common models.",
         "Use **api/impl separation**: modules depend on an `api` module that holds interfaces, so changing an implementation does not recompile its consumers.",
         "The real wins are build times, enforced boundaries, and independent team ownership — not architectural purity."
       ],
@@ -199,7 +199,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.17"
+      "updatedIn": "2026.08.26"
     }
   ]
 }

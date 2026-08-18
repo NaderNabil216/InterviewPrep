@@ -14,7 +14,7 @@
         "visibility",
         "bytecode"
       ],
-      "q": "What does `internal` compile to, and who can actually call it?",
+      "q": "What does `internal` compile to? And who can call it?",
       "shortAnswer": [
         "`internal` is enforced only by the compiler. In bytecode the member is public with a mangled name, so Java code or reflection can call it.",
         "Unit tests see internals because the test source set is an associated module. But that doesn't extend across Gradle modules.",
@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0030",
@@ -58,7 +58,7 @@
         "inline",
         "const"
       ],
-      "q": "Which Kotlin-specific changes silently break binary compatibility for a library's consumers?",
+      "q": "For a library, which Kotlin-specific changes silently break consumers' binary compatibility?",
       "shortAnswer": [
         "`inline` function bodies and `const val` values get copied into consumer bytecode. So a fix does nothing until consumers recompile.",
         "Default arguments compile to a synthetic `$default` method with an int bitmask. Adding or reordering a parameter changes its signature.",
@@ -94,7 +94,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0031",
@@ -107,11 +107,11 @@
         "Delegates",
         "KProperty"
       ],
-      "q": "How would you write a custom property delegate — and what does the stdlib already give you?",
+      "q": "How do you write a custom property delegate? And what does the stdlib already give you?",
       "shortAnswer": [
         "A delegate needs `operator fun getValue(thisRef, property: KProperty<*>)`, plus `setValue` for a `var`. Or you can implement `ReadOnlyProperty`/`ReadWriteProperty`.",
         "The stdlib ships `Delegates.observable`, `vetoable`, and `notNull`, plus `by map` for map-backed properties.",
-        "`provideDelegate` lets you validate or register per property at construction. That's how SavedStateHandle and preference delegates key off `property.name`."
+        "`provideDelegate` lets you validate or register per property at construction. That's how SavedStateHandle and preference delegates use `property.name` as the key."
       ],
       "answer": "The contract: for `var x: T by delegate`, the compiler calls `delegate.getValue(thisRef, property)` on read and `delegate.setValue(thisRef, property, value)` on write, where `property` is a `KProperty<*>` describing the field. Implement the two `operator` functions directly or implement the `ReadOnlyProperty`/`ReadWriteProperty` interfaces. `thisRef` is the containing instance (`null` for top-level).\n\n#### A minimal custom delegate\n`class TrimmingDelegate : ReadWriteProperty<Any?, String>` (shown in the code array) trims the value in `setValue` before storing.\n\n#### What the stdlib gives you\n- **`Delegates.observable(initial)`** — callback after a change (`onChange(property, old, new)`).\n- **`Delegates.vetoable(initial)`** — return `false` in the callback and the write is rejected (validation).\n- **`Delegates.notNull()`** — a `lateinit`-like delegate that throws `IllegalStateException` if read before write.\n- **`by map`** — `val name: String by mapOf(\"name\" to \"x\")` reads `map[\"name\"]`; the type must match, and `var` needs `MutableMap`. This is the JSON/config-to-object pattern.\n\n#### `provideDelegate`\n`operator fun provideDelegate(thisRef, property): ReadWriteProperty<...>` runs **at construction** of the object — before any get/set. That is how SavedStateHandle, preference, and Bundle delegates know `property.name` to key their storage, or reject an illegal delegate at field-declaration time. The cost to note: each delegated property holds a field for the delegate plus a `KProperty` reference.",
       "code": [
@@ -138,7 +138,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0032",
@@ -151,7 +151,7 @@
         "decorator",
         "by"
       ],
-      "q": "`class A(b: B) : B by b` — what does the compiler generate, and what is the self-call problem?",
+      "q": "`class A(b: B) : B by b` — what does the compiler generate? What is the self-call problem?",
       "shortAnswer": [
         "The compiler generates one forwarding method per interface member. Each one delegates to the `by` expression captured at construction.",
         "If you override a member, the delegate's internal calls still hit its own implementation, not your override. That's the broken-decorator trap.",
@@ -182,7 +182,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0033",
@@ -195,10 +195,10 @@
         "invokedynamic",
         "capture"
       ],
-      "q": "What does a lambda or a function reference actually cost at runtime in Kotlin 2.x?",
+      "q": "What does a lambda or a function reference cost at runtime in Kotlin 2.x?",
       "shortAnswer": [
         "Since Kotlin 2.0, non-inlined lambdas compile to `invokedynamic`/`LambdaMetafactory`, cutting JVM class count. But D8 turns that back into classes on Android.",
-        "Capturing lambdas allocate on every creation. Captured `var`s get boxed into `Ref.IntRef`/`ObjectRef`. A lambda that captures `this` keeps the enclosing Activity or ViewModel alive — the listener leak.",
+        "Capturing lambdas allocate per creation. Captured `var`s box into `Ref.IntRef`/`ObjectRef`. A lambda capturing `this` keeps the Activity or ViewModel alive — the listener leak.",
         "Bound references (`instance::method`) allocate. Top-level `::fun` references generally don't."
       ],
       "answer": "In Kotlin 2.x the cost profile changed in two directions.\n\n#### Class count: down, then back up on Android\nPre-2.0, every lambda compiled to an anonymous class. Since Kotlin 2.0, non-inlined lambdas compile to **`invokedynamic` + `LambdaMetafactory`** (`-Xlambdas=class` reverts), avoiding a class per site on the JVM. But **Android's D8 desugars `indy` back into classes**, so the dex win is mostly theoretical — the class count is re-created at build time.\n\n#### Allocation: still real, and the capture story\n- A **non-capturing** lambda can be a singleton, but a **capturing** lambda allocates on every evaluation.\n- A captured **`var`** is boxed into `Ref.IntRef`/`ObjectRef` on the heap.\n- A lambda capturing `this` holds a strong reference to the enclosing instance — the classic **listener leak**: `button.setOnClickListener { ... this.foo() }` keeps the Activity alive after it is destroyed. Capture `this@Activity` deliberately or null out listeners in `onDestroy`.\n\n#### Function references\n`::topLevelFun` typically compiles to a cached singleton. **Bound** references — `instance::method` — allocate per evaluation (they must capture the instance); cache them in hot loops.\n\n#### The net\nModern lambdas are cheap in *class* terms but not free: capture costs an allocation plus possibly a `Ref` box, and Android re-introduces the classes D8 synthesizes. The point is knowing *where* the remaining costs live.",
@@ -231,7 +231,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     }
   ]
 }

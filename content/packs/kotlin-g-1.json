@@ -14,7 +14,7 @@
         "casts",
         "smart-cast"
       ],
-      "q": "`is`, `as`, `as?` — how do type checks and casts work, and what is a smart cast?",
+      "q": "What do `is`, `as`, and `as?` do? And what is a smart cast?",
       "shortAnswer": [
         "`is` checks the runtime type, and it's the safe path. After a successful check the compiler smart-casts, so you don't repeat casts.",
         "`as` is the forced cast: it throws `ClassCastException` at runtime. `as?` returns null instead, so you can fall back with `?:`.",
@@ -45,7 +45,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0015",
@@ -58,7 +58,7 @@
         "null-safety",
         "compiler"
       ],
-      "q": "When does the compiler refuse to smart-cast, and how do you work around it?",
+      "q": "When does the compiler refuse to smart-cast? And how do you work around it?",
       "shortAnswer": [
         "Smart casts need the compiler to prove the value can't change between the check and the use. It refuses when the value isn't provably stable.",
         "A `var` property, an `open val`, a `val` with a custom getter, a property from another module, and a delegated property all block it.",
@@ -94,7 +94,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0016",
@@ -107,7 +107,7 @@
         "bytecode",
         "null-checks"
       ],
-      "q": "Which null checks does the Kotlin compiler actually emit, and where is there none?",
+      "q": "Which null checks does the Kotlin compiler emit? And where is there none?",
       "shortAnswer": [
         "The compiler emits `Intrinsics.checkNotNullParameter` on parameters of public and protected functions, and `checkNotNullExpressionValue` on platform-type results.",
         "`!!` becomes a `checkNotNull` that throws `NullPointerException`. Reading an uninitialized `lateinit` throws `UninitializedPropertyAccessException`.",
@@ -143,7 +143,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0017",
@@ -156,9 +156,9 @@
         "java-interop",
         "jspecify"
       ],
-      "q": "A Java dependency has no nullability annotations. How do you stop platform types leaking through your codebase?",
+      "q": "A Java dependency has no nullability annotations. How do you stop its platform types leaking through?",
       "shortAnswer": [
-        "A platform type `String!` gets no compiler check at all, so the NPE shows up far from the boundary. The fix starts with explicit types at the seam.",
+        "A platform type `String!` gets no compiler check, so the NPE appears far from the boundary. The fix: explicit types at the seam.",
         "Write a thin Kotlin facade at the Java boundary. It declares `String?` or `String` explicitly, so the rest of the code sees real types.",
         "JSpecify's `@NullMarked`/`@Nullable` with `-Xjsr305=strict` turns unannotated Java into annotated types. Generics need the same treatment — `List<String!>!`."
       ],
@@ -192,7 +192,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     },
     {
       "id": "kt-0018",
@@ -205,7 +205,7 @@
         "singleton",
         "data-object"
       ],
-      "q": "What does an `object` declaration compile to, and when is a singleton the wrong answer?",
+      "q": "What does an `object` compile to? And when is a singleton the wrong answer?",
       "shortAnswer": [
         "An `object` compiles to a class with a static `INSTANCE` field, set in `<clinit>`. JVM class-loading then gives you thread-safe lazy init.",
         "The singleton is created on the first thread that touches the class. Never before that, and always on that thread.",
@@ -236,7 +236,7 @@
         }
       ],
       "addedIn": "2026.08.9",
-      "updatedIn": "2026.08.19"
+      "updatedIn": "2026.08.20"
     }
   ]
 }
