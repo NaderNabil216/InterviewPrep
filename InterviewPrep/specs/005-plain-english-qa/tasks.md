@@ -568,8 +568,9 @@ Word-bound load: 71/120 bullets over 25 words (R-006).
 
 ### Performance — 40 items · 6 packs · release `2026.08.28` · gate-10 window ≤ 2026-09-06
 
-- [ ] T084 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`pe-0001`–`pe-0003`) in `content/packs/performance.json`, run the full batch gate, record the outcome inline under this task.
+- [X] T084 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`pe-0001`–`pe-0003`) in `content/packs/performance.json`, run the full batch gate, record the outcome inline under this task.
 
+    **Record (2026-08-18)**: 3 items. Validator exit 0, 0 warnings. Scope check 0 failures (ids 3/3). Screens: 0 collisions, 0 near-matches ≥ 24 shared chars. Read-through vs `fef2e12`: pe-0001 — **no change needed for q or any bullet (V18 verdict)**: q already direct (49 ≤ 49); cold/warm/hot-kinds + Macrobenchmark-measurement + Baseline-Profiles/lazy-init claims already at or under 25 words (24/16/20), plain, no instructional opener. pe-0002 — q unchanged (56 ≤ 56); jank-definition/frame-budgets + cause-list + Macrobenchmark/Perfetto-diagnosis claims kept (B0 31→25, both 60Hz/120Hz budgets and the 700ms frozen-frame threshold kept, decimals rounded to whole ms for the plain register — `16.7`→`17`, `8.3`→`8` — since the exact fraction is derivable from the Hz figure already stated; B1/B2 already ≤25, untouched). pe-0003 — q 57→48 (`actually` dropped per V14); R8's-four-passes + AAB-splits + resource/dependency-shrinking claims kept, bullets already at or under 25 words (23/20/17), untouched.
 - [ ] T085 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **9 items** (`pe-0004`–`pe-0012`) in `content/packs/performance-g-1.json`, run the full batch gate, record the outcome inline under this task.
 
 - [ ] T086 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **9 items** (`pe-0013`–`pe-0021`) in `content/packs/performance-g-2.json`, run the full batch gate, record the outcome inline under this task.
