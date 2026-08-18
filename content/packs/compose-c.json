@@ -14,10 +14,10 @@
         "performance",
         "keys"
       ],
-      "q": "How do you make a Compose lazy list fast? What do `key` and `contentType` actually do?",
+      "q": "How do you make a Compose lazy list fast? What do `key` and `contentType` do?",
       "shortAnswer": [
-        "`key = { it.id }` gives each item a stable identity. Without it Compose uses the index, so inserting or reordering recomposes everything below and breaks animations and scroll position.",
-        "`contentType` lets Compose reuse a slot only for items of the same shape — like RecyclerView view types. Mixed lists without it thrash the reuse pool.",
+        "`key = { it.id }` gives each item a stable identity. Without it Compose uses the index — reordering recomposes everything below, breaks animations and scroll.",
+        "`contentType` lets Compose reuse a slot for items of the same shape — like RecyclerView view types. Mixed lists without it thrash the reuse pool.",
         "Also: don't nest scrollables that scroll the same way, fix image sizes to avoid reflow, and keep item composables skippable."
       ],
       "answer": "#### key\nLazy layouts identify items positionally by default. Insert at the top and every index shifts, so Compose thinks every item changed: full recomposition of the visible window, lost scroll state, and animations that morph wrong rows. `items(posts, key = { it.id })` matches items across compositions, preserving `rememberSaveable` inside the item and animating correctly. Keys must be unique and stable — the index defeats the purpose and duplicates throw.\n\n#### contentType\nCompose keeps a reuse pool of item slots. Reusing a slot for a different structure forces a full subtree rebuild. `contentType = { it::class }` reuses slots only for compatible items — cheap reuse, a real win in a mixed feed.\n\n#### The rest of the checklist\n1. Keep the item composable skippable — one unstable parameter re-executes every visible row on any parent recomposition; check the compiler metrics report.\n2. Reserve image space up front; a size that resolves after load causes a reflow and visible jump.\n3. Don't nest same-direction scrolling — a `LazyColumn` inside a `verticalScroll` column throws; use the lazy list's own `item { }` blocks for headers.\n4. Avoid `SubcomposeLayout` (`BoxWithConstraints`) in items — it defers work into layout.\n5. Hoist expensive computation into `remember(input)` or the ViewModel.\n6. `animateItem()` for reorder/insert — it depends on keys being correct.\n\n#### Measuring\nLayout Inspector recomposition counts — a row counting up while scrolling idle is the smoking gun. Macrobenchmark `FrameTimingMetric` over a scripted fling for a CI regression number, on a release build with a Baseline Profile.",
@@ -62,9 +62,9 @@
         "animation",
         "performance"
       ],
-      "q": "How do you choose between Compose's animation APIs?",
+      "q": "How do you pick between Compose's animation APIs?",
       "shortAnswer": [
-        "Pick by need: `animate*AsState` for one value, `updateTransition` for several values from one state, `Animatable` for gestures, `AnimatedVisibility`/`AnimatedContent` for enter/exit, `rememberInfiniteTransition` for loops.",
+        "Pick: `animate*AsState` for one value, `updateTransition` for several, `Animatable` for gestures, `AnimatedVisibility`/`AnimatedContent` for enter/exit, `rememberInfiniteTransition` for loops.",
         "`spring()` feels better than fixed durations for anything interruptible, because it handles a target change mid-flight smoothly.",
         "Performance rule: animate through `graphicsLayer` or lambda modifiers, so only draw or layout re-runs — never composition."
       ],
@@ -112,11 +112,11 @@
         "interop",
         "views"
       ],
-      "q": "How do accessibility and View interop work in Compose?",
+      "q": "How does Compose handle accessibility + View interop?",
       "shortAnswer": [
         "Accessibility flows through the **semantics tree** — the same structure UI tests query. That's why testable Compose and accessible Compose are mostly the same work.",
-        "The basics: `contentDescription` for meaningful images (`null` for decorative ones), `mergeDescendants` to read a row as one unit, 48dp touch targets, and never colour alone to convey meaning.",
-        "Interop works both ways: `AndroidView` puts a View inside Compose; `ComposeView` puts Compose inside a View hierarchy. Both work but cost — deep nesting hurts performance."
+        "The basics: `contentDescription` for meaningful images (`null` for decorative), `mergeDescendants` for a row as one unit, 48dp targets, never colour alone.",
+        "Interop runs both ways: `AndroidView` puts a View inside Compose; `ComposeView` puts Compose inside a View hierarchy. Both work — deep nesting hurts performance."
       ],
       "answer": "#### Accessibility via semantics\nEvery composable contributes to a semantics tree consumed by TalkBack, Switch Access, and your tests.\n\n- **`contentDescription`** on meaningful images and icon buttons; pass `null` for decorative ones so screen readers skip them.\n- **`Modifier.semantics(mergeDescendants = true)`** so a card reads as one announcement instead of fragments; `Row`/`Card` with `clickable` merges automatically.\n- **Touch targets ≥ 48dp** — `Modifier.minimumInteractiveComponentSize()` or generous padding.\n- **State description** — `stateDescription` for toggles, `Modifier.toggleable`/`selectable` over a bare `clickable`, so the control announces role and state.\n- **Headings** — `semantics { heading() }` lets users jump between sections.\n- **`clearAndSetSemantics`** to replace a subtree's semantics with one meaningful description.\n- **Contrast ≥ 4.5:1** for body text; never colour as the only signal — add an icon or label.\n- **Respect font scale** — `sp` for text, no fixed heights, test at 200%.\n\nTest with the Accessibility Scanner and TalkBack on; since tests share the semantics tree, your UI tests already exercise it.\n\n#### Interop\nViews inside Compose use `AndroidView(factory = { MapView(it) }, update = { view -> view.setZoom(zoom) })` — factory runs once, update on recomposition. Use it for MapView, WebView, AdView, ExoPlayer's `PlayerView`; forward lifecycle with `DisposableEffect` + a `LifecycleEventObserver`, and `onRelease` for teardown.\n\nCompose inside Views uses `ComposeView` + `setContent`, the way you migrate incrementally. Set `ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed` in a Fragment or you leak the composition.\n\n**The cost**: each boundary means two layout systems coordinating. One map is fine; a `LazyColumn` where every row is an `AndroidView` is a disaster. Migrate screen-by-screen.",
       "code": [
