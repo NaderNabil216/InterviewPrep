@@ -16,9 +16,9 @@
       ],
       "q": "When would you use Ktor client instead of Retrofit, and what's its plugin model?",
       "shortAnswer": [
-        "Ktor client is a multiplatform HTTP client: the same `HttpClient` code runs on Android (OkHttp engine), iOS (Darwin engine), and the JVM. A KMP app writes its networking layer once.",
-        "Features are opt-in plugins — `ContentNegotiation`, `HttpTimeout`, `Auth`, `Logging`, `WebSockets` — installed with `install()`. Forget a plugin like `ContentNegotiation` and you silently get raw strings, not typed bodies.",
-        "The trade-off vs Retrofit is the typed interface API: Ktor is request-based with no compile-time endpoint checks. That's worth it when multiplatform sharing is the goal."
+        "Ktor client is a multiplatform HTTP client: same `HttpClient` code runs on Android (OkHttp engine), iOS (Darwin engine), JVM. KMP app writes networking layer once.",
+        "Features are opt-in plugins — `ContentNegotiation`, `HttpTimeout`, `Auth`, `Logging`, `WebSockets` — installed with `install()`. Forget plugin `ContentNegotiation` and you silently get raw strings, not typed bodies.",
+        "The trade-off vs Retrofit is the typed interface API: Ktor is request-based with no compile-time endpoint checks. That's worth when multiplatform sharing is the goal."
       ],
       "answer": "#### The pitch\nKtor client is a **multiplatform** HTTP client. The same `HttpClient(...)` code compiles for Android (OkHttp engine), iOS (Darwin engine), and the JVM (CIO engine). For a KMP app that means interceptors, serialization, auth, and repositories live once in shared code.\n\n#### The engine swap\nThe engine is chosen per platform in an `expect`/`actual` factory — `HttpClient(OkHttp)` on Android, `HttpClient(Darwin)` on iOS — while the call sites stay identical. You get suspend-first requests out of the box.\n\n#### Plugins, not magic\nEverything is opt-in:\n- `ContentNegotiation` with a `json()` serializer (kotlinx.serialization, Moshi, or Gson),\n- `HttpTimeout` for connect/socket/request timeouts,\n- `Auth` — including `bearer` with a `loadTokens` block and a `sendWithoutRequest` predicate (the Ktor analogue of OkHttp's Authenticator),\n- `Logging`, `WebSockets`, `HttpRequestRetry`.\n\nInstall nothing and `body<T>()` cannot work — you must wire ContentNegotiation yourself.\n\n#### The trade-off vs Retrofit\nNo interface, no `@GET` annotations, no compile-time endpoint checks; instead you write `client.get(\"path\") { parameter(...) }`. For a pure Android app Retrofit's typed service interface is still the ergonomic win. For KMP, Ktor's single stack across platforms usually wins — and it's the standard answer for shared networking.",
       "code": [
@@ -67,7 +67,7 @@
       "shortAnswer": [
         "kotlinx.serialization is compile-time and reflection-free: the plugin generates `Serializer` objects for `@Serializable` classes. Parsing is fast and deterministic, and it works in KMP.",
         "Moshi is reflection-based, but with KSP codegen it produces generated adapters. Its `KotlinJsonAdapterFactory` respects Kotlin nullability and default values.",
-        "Gson is the risky one: it creates instances via `Unsafe` and sets fields directly, so a missing JSON field silently becomes null in a Kotlin non-null property — the type system is bypassed."
+        "Gson is risky: it creates instances via `Unsafe` and sets fields directly — missing JSON field becomes null in a Kotlin non-null property, bypassing type system."
       ],
       "answer": "#### The mechanism split\nThe real difference is **compile-time vs runtime**. kotlinx.serialization adds a compiler plugin that *generates* `Serializer`s for `@Serializable` classes — no reflection, fast and deterministic, and it works in KMP. Moshi is reflection-based at heart, but with KSP codegen you get the same generated-adapters payoff, and `KotlinJsonAdapterFactory` handles Kotlin nullability and defaults correctly.\n\n#### Why Gson is the dangerous one\nGson uses **Unsafe** to instantiate classes and set fields directly — it skips constructors, treats a missing JSON field as `null`, and ignores Kotlin default values. Populate a `data class User(val name: String)` where the server omits `name` and Gson assigns null to a non-null property. It's the classic null-safety leak that interviews probe.\n\n#### Choosing\n- KMP app → kotlinx.serialization, because it works everywhere.\n- Android-only, want codegen → kotlinx.serialization or Moshi; both integrate with Retrofit via a converter factory.\n- Legacy JSON with dynamic shapes → Gson's looseness is a liability, not a feature.\n\n#### The setup\nkotlinx.serialization needs the plugin on *every* module that declares `@Serializable` classes, and `Json { ignoreUnknownKeys = true }` for tolerant reads of forward-compatible responses.",
       "code": [
@@ -114,8 +114,8 @@
       ],
       "q": "How do you serialize polymorphic types and evolve a schema without breaking old clients?",
       "shortAnswer": [
-        "Polymorphism needs a discriminator field both sides use to pick the concrete type. kotlinx.serialization emits `type` by default (overridable with `@JsonClassDiscriminator`) and matches it against the sealed hierarchy at the base.",
-        "Evolution rules: only add fields, always with defaults or nullable, and never rename or re-type existing ones. Renames corrupt stored offline data, not just the wire.",
+        "Polymorphism needs discriminator field: both sides use it to pick the concrete type. kotlinx.serialization emits `type` by default — overridable `@JsonClassDiscriminator` — matches sealed hierarchy.",
+        "Evolution rules: only add fields, always with defaults or nullable, and never rename or re-type existing ones. Renames corrupt stored offline data, not the wire.",
         "Unknown fields are handled by config: `ignoreUnknownKeys` keeps old clients alive when servers add fields, and tolerant readers keep new clients working against old servers."
       ],
       "answer": "#### Discriminators\nPolymorphic JSON carries a discriminator field so the deserializer knows the concrete type. kotlinx.serialization emits `type` by default — override with `@JsonClassDiscriminator(\"kind\")` — and matches it against the `sealed` hierarchy declared at the base type. Moshi does the same via `@JsonClass` plus `@TypeLabel` in a `polymorphic` adapter. Without a discriminator, a concrete-only payload hits a field the reader can't map and throws.\n\n#### Evolution rules\nOnly add fields, and give them a default or `null` so both directions work: an old app reads a new response (extra field ignored or defaulted), a new app reads an old response (missing field gets its default). Never remove, rename, or re-type a field — a `@SerialName` rename is wire-compatible but corrupts anything you stored locally, which is a silent data-loss bug.\n\n#### Unknown fields\nSet `Json { ignoreUnknownKeys = true }` for forward-compatible reads; without it, a new field the server adds breaks every old client. Moshi's codegen adapters tolerate unknown keys by design. The discipline is symmetric: be tolerant of what you read, and never emit removed fields.\n\n#### Versioning\nWhen semantics genuinely change, ship a `schemaVersion` in the payload and branch server-side rather than fighting the wire format.",
@@ -163,9 +163,9 @@
       ],
       "q": "When does protobuf beat JSON on mobile, and what does it cost you?",
       "shortAnswer": [
-        "Protobuf encodes each field as a tag (field number + wire type) plus a varint value. Numeric-heavy payloads get much smaller, and decoding builds no intermediate maps or strings.",
-        "proto3 is strongly typed and versioned: you add fields by number, and old and new binaries interoperate as long as numbers are never reused or renumbered.",
-        "The costs are ecosystem friction — no human-readable debugging, harder web interop — and on Android use the protobuf-lite runtime to keep APK size and per-class overhead down."
+        "Protobuf encodes field as a tag (field number + wire type) plus varint value. Numeric-heavy payloads get smaller, and decoding builds no intermediate maps or strings.",
+        "proto3 is strongly typed and versioned: you add fields by number, and old and new binaries interoperate as long as numbers never reused or renumbered.",
+        "The costs are ecosystem friction — no human-readable debugging, harder web interop — and on Android use protobuf-lite runtime to keep APK size and per-class overhead down."
       ],
       "answer": "#### The wire format\nEach field is a **tag** — field number plus wire type — followed by the value. Integers use **varints**: small numbers occupy a single byte, negative numbers get zigzag encoding, and strings/messages are length-delimited. Because the tag *is* the field name, a repeated message never repeats the keys, so numeric-heavy payloads are a fraction of the equivalent JSON.\n\n#### proto3\nA `.proto` file is the contract: typed fields, default values omitted on the wire. The compat rule is absolute — **never reuse or renumber a field**; add new numbers only, and old/new binaries interoperate.\n\n#### On Android\nUse the Gradle `com.google.protobuf` plugin and the `protobuf-javalite` runtime (`com.google.protobuf:protobuf-javalite`) — the `lite` variant keeps per-message class overhead and APK size far below full protobuf.\n\n#### The trade-offs\nSmaller, faster, strongly typed — but not human-readable (logs and proxies show bytes, not objects), awkward for web/JS consumers, and versioning discipline is on you. Pick it for large structured payloads or binary data (metrics batches, sync payloads); for small config-ish JSON, debuggability usually wins.\n\n#### Retrofitting\nWrap the generated message's `toByteArray()` in a `RequestBody` with `application/x-protobuf` and a custom converter makes it first-class.",
       "code": [
@@ -210,10 +210,10 @@
         "apollo",
         "trade-offs"
       ],
-      "q": "What are the real trade-offs of GraphQL on mobile?",
+      "q": "What are the trade-offs of GraphQL on mobile?",
       "shortAnswer": [
         "GraphQL lets a client ask for exactly the fields it needs in one round trip, removing the over-fetching and request chains of many REST screens.",
-        "The mobile costs are real: HTTP caching barely applies to one POST-ish endpoint, offline-first needs real work, errors can come with partial data, and schema management adds complexity.",
+        "The mobile costs are real: HTTP caching barely applies to POST-ish endpoint, offline-first needs real work, errors come with partial data, schema management adds complexity.",
         "Apollo Kotlin generates type-safe models from queries at build time, so a query referencing a removed field fails compilation instead of crashing at runtime."
       ],
       "answer": "#### The upside\nOne endpoint, one round trip: the client states the exact shape it wants, so a profile screen fetches `{ user(id) { name avatar } }` in a single request with no over-fetching and no REST call chain. Types flow from the schema down.\n\n#### Apollo's codegen\nApollo Kotlin generates Kotlin models from your `.graphql` queries at build time. A query referencing a removed field **fails compilation**, and nullability comes from the schema — a field declared non-null that goes missing surfaces as an explicit error path, not a silent gap.\n\n#### The mobile costs\n- **Caching**: HTTP caching semantics barely apply to a single POST-ish endpoint. Apollo keeps an in-memory normalized cache; real offline-first needs substantial extra engineering.\n- **Errors**: responses carry partial data plus an `errors` array — a 'failed' call can still return usable data, and you handle that explicitly.\n- **Complexity**: schema versioning, gateway/server work, and generated code in the build.\n- **Pagination**: Relay-style cursors, same discipline as REST cursors.\n\n#### The verdict\nGraphQL pays off for many-fields, many-endpoint backends where round trips and over-fetching hurt. For a small REST API, the caching, offline, and operational ceremony usually isn't worth it.",
@@ -257,7 +257,7 @@
       ],
       "q": "How do Room entities, relations, DAOs returning Flow, and threading fit together?",
       "shortAnswer": [
-        "An `@Entity` maps one class to one table, a `@Dao` owns all its queries, and a `@Relation` lets one query return a parent with its children assembled — instead of an N+1 loop.",
+        "`@Entity` maps a class to a table, `@Dao` owns its queries, `@Relation` assembles a parent with children — no N+1 loop.",
         "A DAO returning `Flow` re-emits whenever any table the query touches changes, so the UI observes data instead of polling or refreshing manually.",
         "`suspend` DAO methods and `Flow` run on Room's own executor, so you don't need `Dispatchers.IO` around them. Non-suspend calls run on the calling thread."
       ],
@@ -306,9 +306,9 @@
       ],
       "q": "How do you choose Room indices and verify them with EXPLAIN QUERY PLAN?",
       "shortAnswer": [
-        "An index is a separate B-tree SQLite keeps on the chosen columns, so lookups, joins, and sorts skip a full table scan. Room declares them on the entity: `@Entity(indices = [Index(\"userId\")])`.",
+        "An index is a separate B-tree SQLite keeps on chosen columns, so lookups, joins, sorts skip a full table scan. Room declares them on entity.",
         "Column order matters in a composite index: SQLite can use it for a prefix of its columns. Put the most selective, most-filtered column first.",
-        "Verify with `EXPLAIN QUERY PLAN`: it shows whether the query used `SEARCH` on an index or a `SCAN` of the whole table, plus a `USE TEMP B-TREE` line when the sort column isn't indexed."
+        "Verify with `EXPLAIN QUERY PLAN`: `SEARCH` means an index was used, `SCAN` the whole table, `USE TEMP B-TREE` when the sort column isn't indexed."
       ],
       "answer": "#### What an index is\nAn index is a separate **B-tree** SQLite maintains on the indexed columns, mapping values to rowids. A lookup that uses it is `SEARCH` — roughly O(log n); without one the query is a `SCAN` of every row. The rowid (`INTEGER PRIMARY KEY`) is already indexed automatically.\n\n#### Declaring\nRoom: `@Entity(indices = [Index(\"teamId\"), Index(value = [\"teamId\", \"role\"], unique = true)])`. Index foreign-key columns you join on; a `unique` index doubles as a constraint.\n\n#### Composite order\nA multi-column index is usable for a **prefix** of its columns — `(teamId, role)` serves `WHERE teamId = ?` but not `WHERE role = ?`. Put the most selective column first so the tree prunes as early as possible.\n\n#### Verifying\nRun `EXPLAIN QUERY PLAN SELECT ...` against a copy of the database (`adb shell sqlite3`, or a raw query). A good plan names the index — `SEARCH table USING INDEX idx_...`; a bad one shows `SCAN table` or `USE TEMP B-TREE FOR ORDER BY` when the sort column has no index.\n\n#### The cost\nEvery insert and update maintains *every* index on the table, so indexing everything is write amplification. Index what you filter, join, sort, or enforce unique on — nothing else.",
       "code": [
@@ -355,9 +355,9 @@
       ],
       "q": "How do you add full-text search with Room's FTS4/FTS5?",
       "shortAnswer": [
-        "`@Fts4(contentEntity = Article::class)` creates an FTS virtual table that SQLite keeps in sync with your content. Text is tokenized, so `MATCH` queries are fast instead of a `LIKE` scan.",
+        "`@Fts4(contentEntity = Article::class)` creates FTS virtual table SQLite keeps in sync. Text is tokenized, so `MATCH` queries beat a `LIKE` scan.",
         "You query it with `MATCH`; prefix queries use `term*`. The default tokenizer is `unicode61`, with `porter` for stemming.",
-        "The gotchas: escape `MATCH` syntax in user input, join back to the content table on `rowid` for full rows and `bm25()` ranking, and expect migration time to rebuild a large corpus."
+        "gotchas: escape `MATCH` syntax in user input, join to the content table on `rowid`, `bm25()` ranking, expect migration to rebuild large corpus."
       ],
       "answer": "#### Virtual tables\n`@Fts4(contentEntity = Article::class)` creates an FTS virtual table alongside your real table. SQLite maintains the tokenized index and syncs content from the referenced table (`contentEntity`), so you don't duplicate stored text.\n\n#### The DAO\nA `@Query(\"SELECT * FROM articleFts WHERE articleFts MATCH :term\")` returns matching rows. `MATCH` is the FTS operator — prefix queries are `term*`, and boolean operators like `AND` and `NEAR` are supported.\n\n#### How matching differs\nFTS splits text into tokens with a tokenizer — `unicode61` by default, `porter` adds stemming — then matches whole tokens. `LIKE '%term%'` is a full table scan of every row; it is not search, and it gets slower linearly.\n\n#### The gotchas\n- **Escaping**: `MATCH` treats quotes and parentheses as syntax, so raw user input can throw or silently match nothing — escape FTS special characters before binding.\n- **Ranking**: `MATCH` results carry rowids — join back to the content table on rowid and `ORDER BY bm25(articleFts)` for relevance.\n- **Cold start**: an FTS table is populated during migration; a large corpus adds real migration time.\n\n#### Coverage\nFTS indexes only the columns you declare on the `@Fts4` entity — keep searchable text there and full documents in the main table.",
       "code": [
@@ -397,11 +397,11 @@
         "kmp",
         "multiplatform"
       ],
-      "q": "What does Room in KMP look like, and what works today?",
+      "q": "What does Room in KMP look like, and what works?",
       "shortAnswer": [
-        "Room is officially multiplatform: the same `@Database`, `@Entity`, and `@Dao` code compiles for Android, iOS, and desktop. Each platform supplies its own SQLite driver.",
+        "Room is multiplatform: same `@Database`, `@Entity`, `@Dao` code compiles for Android, iOS, desktop. Each platform supplies its SQLite driver.",
         "`suspend` and `Flow` DAO queries, transactions, and migrations all work in shared code, so the data layer is written once for a KMP app.",
-        "Platform specifics — the driver (built-in on Android, SQLite C library on iOS) and schema export/verification — live in expect/actual. Each platform keeps its own database file."
+        "Platform specifics — driver (built-in on Android, SQLite C library on iOS), schema export/verification — live in expect/actual. Each platform keeps its own database file."
       ],
       "answer": "#### Status\nRoom is **KMP-ready** — `androidx.room:room-runtime` is multiplatform, so `@Database`, `@Entity`, `@Dao`, migrations, and transactions compile from shared code for Android, iOS, and desktop.\n\n#### Drivers\nEach platform supplies the SQLite driver. Android uses the built-in framework driver; iOS uses the SQLite C library through the `sqlite-driver` artifact; desktop can use `sqlite-bundled`. You pick the driver in an `expect`/`actual` factory — shared code never touches platform types.\n\n#### What works\n- `suspend` and `Flow` DAO queries,\n- auto and manual migrations, with schema export and `MigrationTestHelper` on Android,\n- `withTransaction`,\n- Room KMP integrates with Paging on Android for paged local data.\n\n#### What stays platform-specific\nSchema export/verification and driver-backed features (SQLCipher on Android) are per-platform. And multiplatform does not mean one shared database: each platform has its own file — cross-device sync is your feature to build, not Room's.\n\n#### The interview shape\nWith the stack snapshot listing Room, DataStore, ViewModel, and Paging as KMP-ready, a shared data layer is the expected architecture for a greenfield KMP app — not a party trick.",
       "code": [
