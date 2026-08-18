@@ -746,10 +746,11 @@ chars, median 45 — expect a mixed verdict distribution (R-011).
 
     **Record (2026-08-18)**: 5 items, 1 edit this batch. Validator exit 0, 0 warnings. Scope check 0 failures (ids 5/5). Screens: 0 collisions, 0 near-matches ≥ 24 shared chars. Per-item verdicts (scenario form preserved throughout, V17): sd-0014 — **already simple**: bullets already plain, ≤24 words, no filler. sd-0015 — **already simple**: bullets already plain, ≤24 words, no filler. sd-0016 — **already simple**: bullets already plain, ≤24 words, no filler. sd-0017 — **simplified**: B0 24→23 words, `actually` dropped per V14, never-charged-twice/never-told-failed-when-succeeded + ~10M-daily-checkouts-scale claims kept; B1/B2 already ≤24, untouched. sd-0018 — **already simple**: bullets already plain, ≤24 words, no filler.
 
-- [ ] T114 [US3] **Release gate — system-design** (19 items; the non-qa release-gate variant): as T107, via `tools/sync-manifest.mjs`, with `--release 2026.08.31 --summary "Task prompts and descriptions simplified (N items)." --date <YYYY-MM-DD>` (≤ **2026-09-08**; the T112 decision governs; N = items actually touched), or record "no release" if nothing was touched. Record the outcome inline under this task.
+- [X] T114 [US3] **Release gate — system-design** (19 items; the non-qa release-gate variant): as T107, via `tools/sync-manifest.mjs`, with `--release 2026.08.31 --summary "Task prompts and descriptions simplified (N items)." --date <YYYY-MM-DD>` (≤ **2026-09-08**; the T112 decision governs; N = items actually touched), or record "no release" if nothing was touched. Record the outcome inline under this task.
 
-**Checkpoint**: system-design reviewed 19/19 with verdicts; released as `2026.08.31` only if any item
-was touched.
+    **Record (2026-08-18)**: **4 of 19 items touched** (`sd-0003`, `sd-0004`, `sd-0012`, `sd-0017`), 15 recorded "already simple" and left untouched (including `sd-0000`, delivered zero-change by T003) — release cut per R-011. Only the 4 touched items are stamped `updatedIn: "2026.08.31"` (across 3 packs: system-design-b, system-design-g-2, system-design-g-3); the other 15 keep their prior `updatedIn`. Gate-13 audit over the full prose set: 223 flagged library-wide; screen population 2 (shipped by 2026.08.31) — both (`sd-0003`, `sd-0012`) have ≥1 ref, all `checked` ≥ 2026-06-18 (range 2026-08-09..2026-08-13). `check-refs.mjs system-design`: 6 ok · 15 unverified · 0 broken (d.android.com bot-block, same environmental cause as prior tracks). `sync-manifest.mjs --write --release 2026.08.31 --summary "Task prompts and descriptions simplified (4 items)." --date 2026-08-18` — manifest v2026.08.31. Validator exit 0, 0 warnings; gate 10 ✓ (all refs on items shipped by 2026.08.31 verified within 30 days), gate 11 ✓ (stackSnapshot 2026-08-14). Browser verification deferred to T120 batched pass.
+
+**Checkpoint**: system-design reviewed 19/19 with verdicts; released as `2026.08.31` (4 items touched).
 
 ---
 

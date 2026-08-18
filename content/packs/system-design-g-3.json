@@ -280,7 +280,7 @@
           "checked": "2026-08-13"
         }
       ],
-      "updatedIn": "2026.08.17",
+      "updatedIn": "2026.08.31",
       "clarifyingQuestions": [
         "Which payment methods must be supported — card, wallet, BNPL?",
         "How strong must idempotency be — what is the acceptable double-charge risk?",

@@ -290,7 +290,7 @@
           "checked": "2026-08-13"
         }
       ],
-      "updatedIn": "2026.08.17",
+      "updatedIn": "2026.08.31",
       "clarifyingQuestions": [
         "What are the goals — build time, ownership boundaries, test isolation — and which is primary?",
         "How large is the team, and how are ownership boundaries enforced today?",
