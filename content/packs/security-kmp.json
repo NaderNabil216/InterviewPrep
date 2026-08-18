@@ -14,7 +14,7 @@
         "keystore",
         "tokens"
       ],
-      "q": "Where do you store auth tokens? And how do you secure an Android app generally?",
+      "q": "Where do auth tokens live? How do you secure an Android app generally?",
       "shortAnswer": [
         "Tokens belong in the **Android Keystore**: keys are born in hardware (TEE/StrongBox) and never exported, so even a rooted device can only use them.",
         "Never store tokens in plaintext `SharedPreferences`, and never hardcode secrets in code or `BuildConfig` — anyone can recover both from the APK.",
@@ -68,7 +68,7 @@
         "cmp",
         "2026"
       ],
-      "q": "What is the state of KMP and Compose Multiplatform in 2026, and when would you choose it?",
+      "q": "What is the state of KMP and Compose Multiplatform? When would you choose it?",
       "shortAnswer": [
         "**Compose Multiplatform for iOS is stable** (1.11.0), and Google's big Jetpack libraries — Room, DataStore, ViewModel, Lifecycle, Paging — are KMP-ready.",
         "The Kotlin/Native memory model is modern: the old frozen-object and worker restrictions are gone, so coroutines behave the same on every platform.",
@@ -123,7 +123,7 @@
         "media3",
         "2026"
       ],
-      "q": "What modern Android capabilities should you be able to speak to in 2026?",
+      "q": "What modern Android capabilities should you be able to speak to?",
       "shortAnswer": [
         "**On-device AI** runs locally: ML Kit GenAI APIs and Gemini Nano via AICore handle summarization, rewriting, and image description — private and offline, but device-gated.",
         "**Credential Manager** is the one sign-in API for passkeys, passwords, and federated sign-in; passkeys are where auth is headed.",

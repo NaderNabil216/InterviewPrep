@@ -441,7 +441,9 @@ FR-012a recorded exceptions here. Its oldest ref is `checked` 2026-08-09, so its
 
 ### Security-KMP — 70 items · 8 packs · release `2026.08.25` · gate-10 window ≤ 2026-09-06
 
-- [ ] T058 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`sk-0001`–`sk-0003`) in `content/packs/security-kmp.json`, run the full batch gate, record the outcome inline under this task.
+- [X] T058 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`sk-0001`–`sk-0003`) in `content/packs/security-kmp.json`, run the full batch gate, record the outcome inline under this task.
+
+    **Record (2026-08-18)**: 3 items. Validator exit 0, 0 warnings. Scope check 0 failures (ids 3/3). Screens: 0 collisions (known `sk-0020`/`sk-0064` overlap only, outside this batch). Read-through vs `fef2e12`: sk-0001 — q 79→70 (`Where do you store auth tokens?`→`Where do auth tokens live?`); Keystore-hardware + no-plaintext + hostile-client claims kept, bullets untouched (25/21/22w). sk-0002 — q 89→77 (`in 2026, and`→`? `, split into two parts); CMP-iOS-stable + memory-model + business-logic claims kept, bullets untouched (21/23/25w). sk-0003 — q 72→64 (`in 2026` dropped); on-device-AI + Credential Manager + Media3 claims kept, bullets untouched (24/19/22w).
 
 - [ ] T059 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **10 items** (`sk-0004`–`sk-0013`) in `content/packs/security-kmp-g-1.json`, run the full batch gate, record the outcome inline under this task.
 
