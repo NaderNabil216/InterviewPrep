@@ -14,7 +14,7 @@
         "read-only",
         "defensive-copy"
       ],
-      "q": "`List` is read-only, not immutable. What actually goes wrong, and what are the alternatives?",
+      "q": "`List` is read-only, not immutable. What goes wrong? And what are the alternatives?",
       "shortAnswer": [
         "`val ids: List<Int> = mutableListOf(...)` is still mutable to whoever holds the mutable reference. Returning the backing field leaks writability.",
         "A Java caller or `(list as MutableList).add(...)` can write through the read-only type.",
@@ -63,11 +63,11 @@
         "filter",
         "allocation"
       ],
-      "q": "How do `map`, `filter` and `flatMap` allocate, and when should you drop to a loop?",
+      "q": "How do `map`, `filter`, and `flatMap` allocate? When should you drop to a loop?",
       "shortAnswer": [
-        "Each eager operator builds a new `ArrayList`, sized `collectionSizeOrDefault(10)`. A four-step chain over 10k items allocates four lists and walks 40k elements.",
+        "Each eager operator builds a new `ArrayList`, sized `collectionSizeOrDefault(10)`. Four-step chains over 10k items allocate four lists and walk 40k elements.",
         "`mapTo`/`filterTo`/`flatMapTo` write into a collection you own. `mapNotNull` fuses map plus filter, and `count { }` beats `filter { }.size`.",
-        "`any`/`all`/`none`/`first` short-circuit. And `for (i in indices)` skips the `Iterator` allocation that `forEach` on a generic `Iterable` still makes."
+        "`any`/`all`/`none`/`first` short-circuit. `for (i in indices)` skips the `Iterator` allocation `forEach` makes on generic `Iterable`."
       ],
       "answer": "Every eager transformation — `map`, `filter`, `flatMap` — creates a **new `ArrayList`** per operator. Default capacity is `collectionSizeOrDefault(10)` (a 10-slot array, growing as needed). A pipeline `list.map{}.filter{}.map{}` over 10,000 elements materializes **three intermediate lists** and touches 30,000 elements. For a four-step chain that's four lists and 40k element visits. The memory churn is real but rarely the headline; the *per-element lambda indirection* and list churn add up in hot paths.\n\n#### The leaner operators\n- **`mapTo`/`filterTo`/`flatMapTo`** write into a collection you own — reuse one `ArrayList` and avoid three intermediate allocations.\n- **`mapNotNull`** — map + filter-null in a single pass (avoids `map{}.filterNotNull()`).\n- **`count { pred }`** beats `filter { pred }.size` — no list built at all.\n- **`any`/`all`/`none`/`first`/`last`** short-circuit — they stop at the first matching element.\n- **`sumOf`** — fused sum, one pass, but beware its `Int`/`Long`/`Double` overload-ambiguity error when the selector's type is inferred ambiguously.\n\n#### When to drop to a loop\nWhen the chain is long and the data is large, or the transformation is simple enough that lambda indirection dominates: a plain `for (i in list.indices)` loop skips the `Iterator` allocation that `forEach` (on a generic `Iterable`) still creates and avoids per-element function calls. The rule of thumb: idiomatic chains for clarity; a loop when profiling shows a bottleneck — but always measure before rewriting readable code.",
       "code": [
@@ -107,11 +107,11 @@
         "groupingBy",
         "associate"
       ],
-      "q": "`groupBy` vs `groupingBy`, and `associate` vs `associateBy` vs `associateWith` — what are the real differences?",
+      "q": "`groupBy` vs `groupingBy` and `associate` vs `associateBy` vs `associateWith` — how do they differ?",
       "shortAnswer": [
         "`groupBy` builds a `Map<K, MutableList<V>>`, a list per key. `groupingBy {}.eachCount()` or `fold()` computes without intermediate lists.",
         "`associate` allocates a `Pair` per element where `associateBy`/`associateWith` do not.",
-        "All of them silently keep the LAST value on a duplicate key — quiet data loss. And stdlib map builders return a `LinkedHashMap`, so code accidentally depends on insertion order."
+        "All keep the LAST value on a duplicate key. And stdlib map builders return a `LinkedHashMap`, so code accidentally depends on insertion order."
       ],
       "answer": "#### `groupBy` vs `groupingBy`\n`groupBy(keySelector)` eagerly builds a `Map<K, MutableList<V>>` — one list per distinct key, plus the map. `groupingBy(keySelector)` returns a lazy `Grouping` that only materializes when you call a terminal op: `eachCount()`, `eachCountTo()`, `fold()`/`foldTo()`, `reduce()`, `aggregate()`. For counting or folding per group, `groupingBy` avoids building the per-key lists entirely — `list.groupingBy { it.type }.eachCount()` never constructs the group lists.\n\n#### `associate`, `associateBy`, `associateWith`\n- `associate { it to transform(it) }` — the block returns a `Pair` for **every** element, so the lambda *allocates a Pair per element* even though only the key/value escape.\n- `associateBy { key }` — derives only the **key** from the element (value is the element itself). No Pair.\n- `associateWith { value }` — derives only the **value** from the element (key is the element itself). No Pair.\n\n#### The duplicate-key trap — all of them\nAll `associate*` and `groupBy` **overwrite on duplicate keys**: the **last** element with a given key wins. There is no error and no accumulation. If your key isn't unique you silently lose data. Use `groupBy` (lists) or `associateBy { }` with a *guaranteed*-unique key — or fold explicitly.\n\n#### Ordering\nThe stdlib map builders return a **`LinkedHashMap`** (insertion order). Code that iterates the result and assumes the order you added it in works by accident — and breaks if a different Map implementation ever shows up.",
       "code": [
@@ -151,11 +151,11 @@
         "reduce",
         "scan"
       ],
-      "q": "`fold` vs `reduce` vs `runningFold`/`scan` — and how do you fold without going quadratic?",
+      "q": "`fold` vs `reduce` vs `runningFold`/`scan` — how do you fold without going quadratic?",
       "shortAnswer": [
         "`reduce` throws `UnsupportedOperationException` on an empty collection. `fold` returns the seed. That's why `reduceOrNull` exists.",
         "`runningFold`/`runningReduce` keep every intermediate state. Great for running totals or state replay.",
-        "The trap is `fold(emptyList()) { acc, x -> acc + x }`: it copies the accumulator on every step, O(n²). Use a mutable accumulator or the right operator."
+        "`fold(emptyList()) { acc, x -> acc + x }` copies the accumulator on every step: O(n²). Use a mutable accumulator or the right operator."
       ],
       "answer": "#### `fold` vs `reduce`\n`fold(seed) { acc, e -> ... }` starts from an explicit `seed` and returns it for an empty collection. `reduce { acc, e -> ... }` starts from the first element and throws **`UnsupportedOperationException` on an empty collection** — which is why `reduceOrNull()` exists. Rule: if your operation has a natural identity (sum → `0`, product → `1`, concat → `\"\"`), `fold`; otherwise `reduceOrNull` and handle the empty case.\n\n#### `runningFold` / `runningReduce`\n`runningFold(seed)` returns a **list of every intermediate accumulator**, not just the final one. Perfect for running totals, cumulative deltas, or replaying state history: `listOf(1,2,3).runningFold(0) { a, x -> a + x }` → `[0, 1, 3, 6]`. The `scan` name from other languages is the same idea.\n\n#### The O(n²) accumulator trap\n`fold(emptyList<Int>()) { acc, x -> acc + x }` is the classic offender: `acc + x` calls `plus`, which **copies the entire accumulator list** on every step. Over n elements that's 1+2+...+n copies — O(n²) time and allocation. Fixes:\n- Use a mutable accumulator: `fold(ArrayList<Int>()) { acc, x -> acc.add(x); acc }` (or `reduce` with a `MutableList` seed pattern).\n- Use the right operator: `map`, `filter`, `buildList` usually express the goal better than a hand-rolled fold.\n- For sums of numbers, `sum()`/`sumOf` are fused and faster than any fold.",
       "code": [
@@ -196,7 +196,7 @@
         "zip",
         "partition"
       ],
-      "q": "What do `chunked`, `windowed`, `zip`, `zipWithNext`, and `partition` each do?",
+      "q": "What do `chunked`, `windowed`, `zip`, `zipWithNext`, and `partition` do?",
       "shortAnswer": [
         "`windowed(size, step, partialWindows)` slides a window across the list. By default it DROPS the trailing partial window — silent data loss when batching.",
         "`chunked(n)` is `windowed(n, n, partialWindows = true)`. `zip` truncates to the shorter input and allocates a `Pair` per element.",
