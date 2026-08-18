@@ -1,6 +1,6 @@
 import { Store } from '../store.js';
 import { navigate, toast } from '../app.js';
-import { renderMarkdown, renderInline } from '../md.js';
+import { renderMarkdown, renderInline, renderSentences } from '../md.js';
 import { statusOf, rate } from '../srs.js';
 import { LEVEL_LABEL } from '../levels.js';
 
@@ -17,7 +17,7 @@ function renderList(el, snapshot) {
     ${framework ? `
       <div class="card card--interactive" data-id="${framework.id}" style="margin-bottom:18px; border-color:var(--accent);">
         <div class="eyebrow">Start here</div>
-        <h2>${renderInline(framework.q)}</h2>
+        <h2>${renderSentences(framework.q)}</h2>
         <p class="muted">The framework you'll reuse in every scenario below.</p>
       </div>` : ''}
 
@@ -58,13 +58,13 @@ function renderDetail(el, snapshot, item) {
       <span class="chip chip--level-${item.level}">${LEVEL_LABEL[item.level]}</span>
       ${(item.tags || []).map(t => `<span class="chip">${t}</span>`).join('')}
     </div>
-    <h1>${renderInline(item.q)}</h1>
+    <h1>${renderSentences(item.q)}</h1>
 
     <div class="grid grid-2" style="align-items:start;">
       <div class="stack">
         <div class="card">
           <h3>Scenario</h3>
-          <div class="answer-body">${renderMarkdown(item.prompt || '')}</div>
+          <div class="answer-body">${renderMarkdown(item.prompt || '', { splitSentences: true })}</div>
         </div>
 
         ${needsClarify ? `

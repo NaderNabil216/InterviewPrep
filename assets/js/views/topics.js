@@ -44,6 +44,14 @@ export function renderTopics(el, { snapshot, query }) {
       grouped[it.track][it.topic] = grouped[it.track][it.topic] || [];
       grouped[it.track][it.topic].push(it);
     }
+    // US5/FR-012-013: Basics → Lead within each category. Array.prototype.sort is stable
+    // (ES2019+), so same-level items keep their existing relative order for free — no secondary
+    // tiebreaker needed. A missing/undefined level sorts as if it were 1 (Basics).
+    for (const topics of Object.values(grouped)) {
+      for (const items of Object.values(topics)) {
+        items.sort((a, b) => (a.level || 1) - (b.level || 1));
+      }
+    }
     return `
       ${Object.keys(grouped).length === 0 ? '<div class="empty-state">No items match. Try clearing filters.</div>' : ''}
       ${Object.entries(grouped).map(([track, topics]) => `
@@ -57,8 +65,7 @@ export function renderTopics(el, { snapshot, query }) {
                   <span class="status-dot status-dot--${statusOf(it.id)}"></span>
                   <span class="item-row__q">${renderInline(it.q)}</span>
                   <span class="item-row__meta">
-                    ${it.addedIn === snapshot.version ? '<span class="chip chip--new">NEW</span>'
-                      : it.updatedIn === snapshot.version ? '<span class="chip chip--new">UPD</span>' : ''}
+                    ${it.addedIn === snapshot.version ? '<span class="chip chip--new">NEW</span>' : ''}
                     <span class="chip chip--level-${it.level}">${LEVEL_LABEL[it.level]}</span>
                   </span>
                 </div>

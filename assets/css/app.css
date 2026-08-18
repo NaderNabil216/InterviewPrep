@@ -238,7 +238,11 @@ h3 { font-size: 15px; margin: 0 0 8px; }
 
 /* ---------- item detail ---------- */
 .item-view__q { font-size: 21px; font-weight: 700; margin-bottom: 14px; letter-spacing: -.01em; }
-.short-answer { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; margin: 16px 0; }
+/* US1: each sentence of a q/prompt renders as its own line; a lone sentence (the common case)
+   gets no extra spacing, so single-sentence items look exactly as before. */
+.sentence { display: block; }
+.sentence + .sentence { margin-top: 4px; }
+.short-answer { padding: 4px 0 4px 22px; margin: 16px 0; }
 .short-answer li { margin-bottom: 6px; }
 .answer-body { font-size: 14.5px; }
 .answer-body p { margin: 0 0 12px; }

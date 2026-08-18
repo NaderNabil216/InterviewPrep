@@ -252,7 +252,11 @@ export const Store = {
       delete stored.judge0ApiKey;
       write('settings', stored);
     }
-    return { theme: 'auto', interviewDate: null, lastSeenChangelog: null, ...stored };
+    // US2: no default theme here — a first-ever read has no `theme` key at all, and
+    // app.js#resolveInitialTheme() resolves + persists an explicit 'dark'/'light' choice before
+    // the first render. This is not the same "unset" state as a legacy 'auto' value from before
+    // that fix shipped; app.js treats both cases the same way (re-resolve, then persist).
+    return { interviewDate: null, lastSeenChangelog: null, ...stored };
   },
   setSettings(s) { return write('settings', { ...this.getSettings(), ...s }); },
 
