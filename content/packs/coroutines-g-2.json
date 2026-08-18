@@ -14,7 +14,7 @@
         "structured-concurrency",
         "anti-pattern"
       ],
-      "q": "Why is `GlobalScope` effectively banned, and what replaces it?",
+      "q": "Why is `GlobalScope` effectively banned? What replaces it?",
       "shortAnswer": [
         "It has no parent and no `Job` you can cancel. Uncaught exceptions go straight to the thread's default handler.",
         "A `GlobalScope` coroutine outlives the screen while holding whatever it captured, so it leaks.",
@@ -58,7 +58,7 @@
         "process-death",
         "workmanager"
       ],
-      "q": "The user taps Save and immediately backs out. `viewModelScope` is cancelled and the POST dies. Fix it, and defend the design.",
+      "q": "The user taps Save and immediately backs out. `viewModelScope` is cancelled and the POST dies. Why? How would you fix it?",
       "shortAnswer": [
         "This is structured concurrency working as specified — no work outlives its scope.",
         "Give the work a scope whose lifetime matches the work: an application-scoped repository scope, or WorkManager.",
@@ -102,7 +102,7 @@
         "propagation",
         "root-coroutine"
       ],
-      "q": "Where exactly does a `CoroutineExceptionHandler` fire, and where does it silently do nothing?",
+      "q": "Where exactly does a `CoroutineExceptionHandler` fire? And where does it silently do nothing?",
       "shortAnswer": [
         "It is consulted only by the **root** coroutine of a scope.",
         "Installed on a child `launch`, it is ignored — the exception goes to the parent. It never applies to `async`.",
@@ -146,7 +146,7 @@
         "awaitall",
         "fail-fast"
       ],
-      "q": "Fetch profile, settings and feed in parallel. Show the code, then explain exactly what happens when one of them fails.",
+      "q": "Fetch profile, settings and feed in parallel. What happens when one of them fails?",
       "shortAnswer": [
         "`coroutineScope { async {} ... awaitAll(...) }` is fail-fast: the failing child cancels its siblings and rethrows at the first `await()`.",
         "For partial results, use `supervisorScope` with `runCatching` around each branch.",
@@ -190,7 +190,7 @@
         "racing",
         "cancellation"
       ],
-      "q": "Race a cache read against a network call and take whichever answers first. What are the options, and what leaks?",
+      "q": "Race a cache read against a network call and take whichever answers first. What are the options? What leaks?",
       "shortAnswer": [
         "`select { cacheDeferred.onAwait { }; networkDeferred.onAwait { } }` returns whichever branch finishes first.",
         "But the losing coroutine keeps running unless you cancel it — you leak the request and its callback.",
@@ -234,7 +234,7 @@
         "ensure-active",
         "cancel-and-join"
       ],
-      "q": "Cancellation is cooperative. What does that mean, and how do you make a CPU-bound loop cancellable?",
+      "q": "Cancellation is cooperative. What does that mean? And how do you make a CPU-bound loop cancellable?",
       "shortAnswer": [
         "`cancel()` only moves the Job to Cancelling and arms the next suspension point to throw.",
         "A loop with no suspension runs to completion anyway. Add `ensureActive()` or check `isActive`.",
@@ -278,7 +278,7 @@
         "try-catch",
         "run-catching"
       ],
-      "q": "Why does `try { api.load() } catch (e: Exception) { showError() }` break cancellation?",
+      "q": "What breaks cancellation in `try { api.load() } catch (e: Exception) { showError() }`?",
       "shortAnswer": [
         "Cancellation is delivered as a `CancellationException` thrown from the suspension point.",
         "A catch-all swallows that signal, so the coroutine 'recovers' and keeps running while its Job is Cancelling.",
@@ -322,7 +322,7 @@
         "non-cancellable",
         "cleanup"
       ],
-      "q": "How do you release a resource in a `finally` block when the coroutine has already been cancelled?",
+      "q": "How do you release a resource in a `finally` block after cancellation?",
       "shortAnswer": [
         "In a cancelled coroutine, every suspension point throws at once, so a suspending `finally` never completes.",
         "Wrap only the cleanup in `withContext(NonCancellable)`.",
@@ -366,7 +366,7 @@
         "timeout",
         "cancellation"
       ],
-      "q": "`withTimeout` vs `withTimeoutOrNull` — and what do people get wrong about both?",
+      "q": "`withTimeout` vs `withTimeoutOrNull` — what do people get wrong about both?",
       "shortAnswer": [
         "`withTimeout` throws `TimeoutCancellationException`; `withTimeoutOrNull` returns null instead.",
         "That exception **is** a `CancellationException`, so an outer catch-all swallows it.",
@@ -410,7 +410,7 @@
         "race",
         "resource-leak"
       ],
-      "q": "A `suspendCancellableCoroutine` wrapping a download is cancelled at the exact instant the response arrives. Who closes the response body?",
+      "q": "A `suspendCancellableCoroutine` wrapping a download is cancelled the instant the response arrives. Who closes the response body?",
       "shortAnswer": [
         "Nobody — if the continuation is already cancelled, the value passed to `resume()` is dropped.",
         "Use the `resume(value) { }` onCancellation overload so you get the resource back and can close it.",
