@@ -591,7 +591,9 @@ Word-bound load: 71/120 bullets over 25 words (R-006).
 
     **Record (2026-08-18)**: release `2026.08.28` dated 2026-08-18 sits 19 days inside gate 10 (≤ 2026-09-06, oldest ref `checked` 2026-08-07) and 26 days inside gate 11 (≤ 2026-09-13) — identical margins to prior tracks. Decision: **proceed, no action.**
 
-- [ ] T090 [US1] [US2] **Final performance batch** (do not begin until T089's checkpoint is decided): rewrite `q` + `shortAnswer` for the single item `pe-0040` in `content/packs/performance-g-5.json`, run the full batch gate, record the outcome inline under this task.
+- [X] T090 [US1] [US2] **Final performance batch** (do not begin until T089's checkpoint is decided): rewrite `q` + `shortAnswer` for the single item `pe-0040` in `content/packs/performance-g-5.json`, run the full batch gate, record the outcome inline under this task.
+
+    **Record (2026-08-18)**: 1 item. Validator exit 0, 0 warnings. Scope check 0 failures (id 1/1). Screens: 0 collisions, 0 near-matches ≥ 24 shared chars. Read-through vs `fef2e12`: pe-0040 — q 82→73 (`actually` dropped per V14); size-matters-in-low-storage-markets/listing-ratings-matter-more + AAB-cheapest-lever/asset-packs-conditional + measure-with-Play-Console-experiments claims kept, bullets already ≤25 (22/24/23), untouched.
 
 - [ ] T091 [US1] [US2] **Release gate — performance** (40 items): as T019, via `tools/sync-manifest.mjs`, with `--release 2026.08.28 --summary "Questions and short answers reworded in simple English (40 items)." --date <YYYY-MM-DD>` (≤ **2026-09-06**; the T089 decision governs), then validate again and run the per-release browser verification. Record the outcome inline under this task.
 
