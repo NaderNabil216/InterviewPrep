@@ -402,7 +402,7 @@
       "shortAnswer": [
         "Reverse a singly linked list, detect a cycle and its entry, and find the middle — three primitives, all O(n) time and O(1) space.",
         "Reverse with prev, current, and a saved next. Floyd's slow and fast pointers detect cycles; after meeting, walk both from the head to find it.",
-        "The gotcha is saving `next` before overwriting `current.next`, and comparing nodes with `===` in Kotlin. The same slow and fast trick finds the middle."
+        "The gotcha is saving `next` before overwriting `current.next`, and comparing nodes with `===` in Kotlin. That slow and fast trick finds the middle."
       ],
       "prompt": "Three linked-list primitives that compose into most list questions:\n\n1. **Reverse** a singly linked list, iteratively.\n2. **Detect a cycle** and return the node where it begins.\n3. **Find the middle** node in one pass.\n\nIf you can write all three without hesitation, you can build reorder-list, palindrome-list, and merge-k-lists from them on the spot.",
       "hints": [
