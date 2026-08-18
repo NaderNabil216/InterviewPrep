@@ -18,7 +18,7 @@
       "shortAnswer": [
         "Return the minimum time units to run all tasks, where the same task must wait `n` units between runs.",
         "The most frequent task dictates the skeleton: `(max - 1) * (n + 1) + tasksWithMaxCount`, then clamp to `tasks.size`.",
-        "The clamp is the detail that separates memorizing from understanding — when no idle is needed, extra tasks just extend the frame. Time O(tasks)."
+        "The clamp is the detail that separates memorizing from understanding — when no idle is needed, extra tasks extend the frame. Time O(tasks)."
       ],
       "prompt": "Given `tasks: CharArray` and a cooldown `n`, each unit of CPU can process one task (or idle). The same task must wait `n` units between runs. Return the minimum number of time units to complete all tasks.\n\nThe greedy insight: the most frequent task dictates the skeleton — arrange it with `n` gaps, then fill the gaps with other tasks. The formula `(maxCount - 1) * (n + 1) + numberWithMax` is the classic answer, with the caveat that it's only valid when no task exceeds the gaps.",
       "hints": [
@@ -65,7 +65,7 @@
       "q": "Coin Change — fewest coins to reach an amount",
       "shortAnswer": [
         "Return the fewest coins to make an amount with unlimited denominations, or -1 if impossible.",
-        "Bottom-up DP: `dp[a] = min(dp[a - c] + 1)` over coins at most `a`, seeding `dp[0] = 0` and everything else to a sentinel.",
+        "Bottom-up DP: `dp[a] = min(dp[a - c] + 1)` over coins at most `a`, seeding `dp[0] = 0`, everything else a sentinel.",
         "Greedy fails — (1, 3, 4) for amount 6 is the counterexample. The sentinel tells impossible from possible; O(amount × coins) time."
       ],
       "prompt": "Given coin denominations `coins: IntArray` (unlimited supply) and an amount, return the fewest number of coins to make that amount, or -1 if impossible.\n\nThe 1D DP classic: `dp[a]` = fewest coins for amount a, built bottom-up from the denominations. Interviewers will also expect you to know the greedy is wrong (25,10,5,1 works; 1,3,4 and amount 6 doesn't).",
