@@ -14,7 +14,7 @@
         "stride",
         "security"
       ],
-      "q": "Walk me through threat modeling a mobile feature. Pick a feature and show the analysis end to end.",
+      "q": "How do you threat-model a feature? Pick one and show the analysis end to end.",
       "shortAnswer": [
         "Threat modeling: list assets and entry points, find threats, rate likelihood and impact, then pick mitigations — it must produce an action, not a document.",
         "STRIDE (Spoofing, Tampering, Repudiation, Disclosure, DoS, Elevation of privilege) is the standard lens; a data-flow diagram is the map you apply it to.",
@@ -64,7 +64,7 @@
         "tls",
         "pinning"
       ],
-      "q": "How does secure networking differ across Android and iOS in a KMP app? Where does TLS and certificate pinning actually live?",
+      "q": "How does secure networking differ across Android and iOS in a KMP app? Where does TLS and certificate pinning live?",
       "shortAnswer": [
         "TLS comes from the platform either way, but the stacks differ: OkHttp on Android, NSURLSession-backed Ktor on iOS, so pinning behaves differently per platform.",
         "Certificate pinning lives at the client-stack level, not in shared Kotlin: OkHttp's `CertificatePinner` on Android, a pinned URL session evaluation on iOS.",
@@ -113,7 +113,7 @@
         "config",
         "security"
       ],
-      "q": "What should and shouldn't go in your app binary? Walk me through a secrets policy.",
+      "q": "What should and shouldn't go in your app binary? What is a good secrets policy?",
       "shortAnswer": [
         "Nothing secret belongs in the APK: anyone who downloads it can extract what's compiled in, so treat every client-side value as public.",
         "Keep non-secret configuration in the binary — API hosts, feature-flag defaults, app ids — while real secrets live server-side, issued at runtime.",
@@ -163,7 +163,7 @@
         "auth",
         "security"
       ],
-      "q": "You're reviewing a pull request that touches auth and stored data. What do you look for, and in what order?",
+      "q": "You're reviewing a pull request that touches auth and stored data. What do you look for? In what order?",
       "shortAnswer": [
         "Start with the data flow: how credentials arrive, where they're stored, who can read them — a review is a threat model on the diff.",
         "Then check the storage primitive itself — Keystore-backed vs plaintext, key alias handling, exportability — then credential handling: logging, lifecycle, refresh, revocation.",
@@ -212,7 +212,7 @@
         "safetynet",
         "attestation"
       ],
-      "q": "Walk me through migrating from SafetyNet to the Play Integrity API. What does it actually prove, and how do you verify server-side?",
+      "q": "How do you migrate from SafetyNet to the Play Integrity API? What does it prove? How do you verify server-side?",
       "shortAnswer": [
         "Play Integrity is the replacement for SafetyNet Attestation: it returns signed verdicts covering app authenticity, device integrity, and account licensing; SafetyNet is being turned down.",
         "The critical discipline is server-side verification: the client's token goes to your backend, which validates it with the Google API — never trust it on-device.",
@@ -262,10 +262,10 @@
         "keystore",
         "tokens"
       ],
-      "q": "In a shared KMP codebase, where do tokens and keys actually live on Android vs iOS?",
+      "q": "In a shared KMP codebase, where do tokens and keys live on Android vs iOS?",
       "shortAnswer": [
         "On Android, credentials go in Keystore-backed storage — encrypted preferences or explicit Keystore-wrapped data; on iOS the equivalent is the Keychain.",
-        "The KMP pattern: `expect`/`actual` (or an interface plus platform factory) exposes a secure-storage API — `commonMain` defines it, `androidMain` uses Keystore, `iosMain` uses Keychain.",
+        "The KMP pattern: `expect`/`actual` (or a factory) exposes secure-storage API — `commonMain` defines it, `androidMain` uses Keystore, `iosMain` uses Keychain.",
         "The properties differ per platform: Keychain items survive app uninstall and are system-backed; Android Keystore keys are per-app and disappear with the app."
       ],
       "answer": "#### The platform reality\nThere is no cross-platform secure store. Android's model is a hardware/software **Keystore** for keys plus encrypted storage for blobs; iOS's is the **Keychain** — a system-managed, hardware-backed store with its own item-access policy.\n\n#### Android\nKeep the key in the Android Keystore (non-extractable), use it to encrypt the token with `AES/GCM/NoPadding`, and persist the ciphertext (a file or DataStore). That way the raw token never sits on disk. Keystore keys are scoped to your app and removed on uninstall (unless `setKeystoreAlias`/backup options — default is app-scoped).\n\n#### iOS\nPut the token directly in the Keychain via `SecItemAdd`/`SecItemCopyMatching` through cinterop, or a wrapper. Keychain items survive app uninstall (a known gotcha — a reinstall can read stale tokens), are protected by the device's hardware, and can be scoped to `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.\n\n#### The KMP contract\nDefine a `SecureTokenStore` in commonMain with `suspend fun save(token)`, `suspend fun load(): String?`, and `suspend fun clear()`. Provide an Android impl in androidMain using the Keystore, and an iOS impl in iosMain using Keychain cinterop. Register the right one via your DI/factory in each platform's entry point.\n\n#### Differences to name in an interview\n- Uninstall behavior differs (Keychain persists, Keystore keys are app-scoped).\n- Keychain is a system service; Keystore is per-app (though a shared Keystore exists with attestation).\n- `kSecAttrAccessible` gives iOS data-protection classes; Android uses `setUserAuthenticationRequired` + StrongBox for the same intent.",
@@ -311,7 +311,7 @@
         "strategy",
         "org-design"
       ],
-      "q": "You're leading KMP adoption at a 50-engineer org. What ships first, how do you measure it, and when do you stop?",
+      "q": "You're leading KMP adoption at a 50-engineer org. What ships first? How do you measure it? When do you stop?",
       "shortAnswer": [
         "Start with a shared logic layer — domain, networking, serialization, DI — behind interfaces, not a UI rewrite; that's where KMP value is highest.",
         "Measure adoption by shipped value, not lines shared: shared-code ratio on the highest-traffic features, build health (CI time, flakiness), and per-platform quality regressions.",
