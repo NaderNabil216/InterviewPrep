@@ -14,7 +14,7 @@
         "viewmodel",
         "navigation"
       ],
-      "q": "How are ViewModels scoped in a Compose app, and what changes under Navigation 3?",
+      "q": "How are ViewModels scoped in a Compose app? And what changes under Navigation 3?",
       "shortAnswer": [
         "`viewModel()` asks `LocalViewModelStoreOwner` for a store. In a single-Activity app, the default owner is the Activity.",
         "So a 'screen' ViewModel can outlive its screen. Nav2 scopes to the `NavBackStackEntry`; Nav3 uses entry decorators.",
@@ -50,7 +50,7 @@
         "effects",
         "keys"
       ],
-      "q": "Show me the ways effect keys go wrong.",
+      "q": "How do effect keys go wrong?",
       "shortAnswer": [
         "`LaunchedEffect(Unit)` with a changing `userId` never refetches — the key never changes.",
         "Keying on a lambda or a fresh object cancels and relaunches the effect every composition.",
@@ -86,7 +86,7 @@
         "produce-state",
         "snapshot-flow"
       ],
-      "q": "Bridge both directions: a callback API into `State`, and Compose state out into a `Flow`.",
+      "q": "How do you bridge a callback API into `State`? And Compose state out into a `Flow`?",
       "shortAnswer": [
         "`produceState` is `remember { mutableStateOf(initial) }` plus a `LaunchedEffect`, with `awaitDispose` for unregistering listeners.",
         "It follows composition, not lifecycle — it doesn't pause when the app backgrounds.",
@@ -122,7 +122,7 @@
         "effects",
         "remember-observer"
       ],
-      "q": "When exactly does an effect run, and what happens to an effect in a composition that is thrown away?",
+      "q": "When exactly does an effect run? What happens to an effect in a composition that is thrown away?",
       "shortAnswer": [
         "`RememberObserver` drives it: `onRemembered` after apply, `onForgotten` on removal, `onAbandoned` on discard.",
         "A discarded (optimistic) recomposition never starts its coroutine or registers its listener.",
@@ -158,7 +158,7 @@
         "composition-local",
         "stability"
       ],
-      "q": "`compositionLocalOf` vs `staticCompositionLocalOf` — and when is a CompositionLocal the wrong tool entirely?",
+      "q": "`compositionLocalOf` vs `staticCompositionLocalOf` — and when is a CompositionLocal the wrong tool?",
       "shortAnswer": [
         "Dynamic locals track reads and invalidate only the readers. Static locals do no read tracking.",
         "Changing a static local recomposes the provider's whole `content` lambda — so use it only for values that rarely change.",
@@ -194,7 +194,7 @@
         "composition-local",
         "interop"
       ],
-      "q": "My theme and typography vanish inside a `Dialog` / `ComposeView` / `AndroidView`. What is going on?",
+      "q": "My theme and typography vanish inside a `Dialog` / `ComposeView` / `AndroidView`. Why?",
       "shortAnswer": [
         "CompositionLocals travel down the composition, not down the View hierarchy.",
         "`Dialog`/`Popup` and `SubcomposeLayout` inherit the parent composition. A fresh `ComposeView` starts a new root with only defaults.",
@@ -230,7 +230,7 @@
         "modifiers",
         "layout"
       ],
-      "q": "Why does the order of modifiers matter?",
+      "q": "Why does modifier order matter?",
       "shortAnswer": [
         "A modifier chain isn't a bag of properties — each element wraps the next.",
         "Constraints flow left to right down the chain, and the size comes back right to left.",
@@ -266,7 +266,7 @@
         "modifiers",
         "performance"
       ],
-      "q": "What does a modifier chain cost, and why is `composed { }` treated as a smell?",
+      "q": "What does a modifier chain cost? And why is `composed { }` treated as a smell?",
       "shortAnswer": [
         "`composed { }` runs a composable for each element each time, so it can't be hoisted or compared, and it reallocates.",
         "It also stops the composable that uses it from being skippable.",
@@ -302,7 +302,7 @@
         "modifier-node",
         "custom-layout"
       ],
-      "q": "Implement a node-backed modifier from scratch.",
+      "q": "How do you write a node-backed modifier?",
       "shortAnswer": [
         "Write a `ModifierNodeElement<T>` with `create`, `update`, `equals`/`hashCode`, and `inspectableProperties`.",
         "The node implements `DrawModifierNode` or `LayoutModifierNode`, and you call `invalidateDraw()`/`invalidateMeasurement()` yourself.",
@@ -339,7 +339,7 @@
         "graphics-layer",
         "performance"
       ],
-      "q": "How do you animate a property 120 times a second without recomposing anything?",
+      "q": "How do you animate a property 120 times a second without any recomposition?",
       "shortAnswer": [
         "Read the animated value inside a lambda modifier, so the read counts as layout or draw, not composition.",
         "`graphicsLayer { alpha = a() }` maps to a RenderNode, so translation, alpha, and rotation only re-issue the display list.",
