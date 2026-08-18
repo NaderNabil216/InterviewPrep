@@ -14,11 +14,11 @@
         "JvmStatic",
         "JvmField"
       ],
-      "q": "You expose a Kotlin module to a Java team. What has to be annotated, and why?",
+      "q": "You expose a Kotlin module to a Java team. What needs annotations, and why?",
       "shortAnswer": [
         "Top-level declarations land in `FooKt`. Rename it with `@file:JvmName`. And default arguments don't exist for Java without `@JvmOverloads`.",
-        "Companion members need `@JvmStatic`, or Java writes `Foo.Companion.bar()`. Properties surface as `getX`/`setX`, unless `@JvmField` is used.",
-        "`internal` appears mangled. Extension functions become statics with the receiver first. A `suspend fun` becomes a method with a trailing `Continuation`, returning `Object`/`COROUTINE_SUSPENDED`."
+        "Companion members need `@JvmStatic`, or Java writes `Foo.Companion.bar()`. Properties surface as `getX`/`setX` without `@JvmField`.",
+        "`internal` appears mangled. Extension functions become statics with the receiver first. `suspend fun` takes a trailing `Continuation` and returns `Object`/`COROUTINE_SUSPENDED`."
       ],
       "answer": "Kotlin's sugar has no Java equivalent, so the seam needs explicit annotations. What Java actually sees:\n\n#### Top-level functions and the facade class\n`fun doWork()` at the top level lands in a class named after the file: `WorkKt.doWork()`. Rename it deliberately with `@file:JvmName(\"WorkUtils\")` — and add `@file:JvmMultifileClass` when multiple files share a name.\n\n#### Default arguments\nJava has no named/default args; a `fun f(a: Int = 1)` is `f(int)` + the synthetic `$default`. Without `@JvmOverloads`, a Java caller must pass **every** parameter. `@JvmOverloads` generates real overloads.\n\n#### Companion members\nJava sees `Foo.Companion.bar()` — the nested `Companion` instance. `@JvmStatic` hoists `bar()` onto `Foo` itself, and `@JvmField` exposes a static field.\n\n#### Properties\nA Kotlin property `val name: String` becomes `getName()`/`setName()` methods. `@JvmField` replaces them with a public field — only when there's no custom accessor and no `lateinit`-style constraint.\n\n#### `internal`, extensions, suspend\n- `internal` members are **mangled** (`foo$module`) — Java callers see a weird name, not an error.\n- An extension `fun String.pad()` becomes a **static** `pad(String)` — receiver is the first parameter.\n- A `suspend fun load()` becomes a method `load(Continuation)` returning `Object` — either the result or `COROUTINE_SUSPENDED`. Java callers must use callbacks or the `kotlinx-coroutines-jvm` helpers.",
       "code": [
@@ -57,9 +57,9 @@
         "JvmSuppressWildcards",
         "Java-friendly"
       ],
-      "q": "What design rules apply to a Kotlin library whose main consumers write Java — and what do you keep out of the public surface?",
+      "q": "What design rules apply to a Kotlin library whose main consumers write Java? What do you keep out of the public surface?",
       "shortAnswer": [
-        "A Kotlin `List<out T>` parameter becomes `List<? extends T>` in Java signatures. That breaks Java callers and Dagger multibindings. `@JvmSuppressWildcards`/`@JvmWildcard` are the levers.",
+        "Kotlin `List<out T>` becomes `List<? extends T>` in Java, breaking Java callers and Dagger multibindings. `@JvmSuppressWildcards`/`@JvmWildcard` fix it.",
         "Value classes mangle method names. `Result`, inline+reified, default arguments, and sealed exhaustiveness are unusable or hostile from Java.",
         "A Java-friendly facade plus `@JvmOverloads` bridges is often worth it — but then the facade becomes ABI you must keep."
       ],
@@ -100,9 +100,9 @@
         "use-site-targets",
         "annotation"
       ],
-      "q": "What are annotation use-site targets, and which bug do they fix?",
+      "q": "What are annotation use-site targets? Which bug do they fix?",
       "shortAnswer": [
-        "`@Json val name: String` on a constructor property defaults to the `param` target. A reflective library that reads FIELDS finds nothing, and your JSON key silently falls back to the property name.",
+        "`@Json val name: String` defaults to `param`. Libraries reading FIELDS find nothing, so the JSON key falls back to the property name.",
         "`@field:`, `@get:`, `@set:`, `@setparam:`, `@delegate:`, `@receiver:` choose the target explicitly.",
         "That's the Moshi/Gson/Room/Dagger-qualifier class of bug. The grouped form is `@field:[A B]`."
       ],
@@ -144,7 +144,7 @@
         "OptIn",
         "preview"
       ],
-      "q": "How do you gate an unstable API in Kotlin, and how do you decide to adopt a preview language feature in a shipping app?",
+      "q": "How do you gate an unstable API in Kotlin? And how do you decide to adopt a preview language feature in a shipping app?",
       "shortAnswer": [
         "`@RequiresOptIn` defines the marker. `@OptIn(X::class)` accepts it locally. Propagating the marker pushes the decision to callers. `-opt-in=` accepts module-wide.",
         "A preview feature needs a compiler flag, can change syntax between releases, and leaks into your ABI. A stabilized one is safe to adopt.",
@@ -188,11 +188,11 @@
         "Unit",
         "Nothing"
       ],
-      "q": "`Any`, `Unit`, `Nothing` — how does Kotlin's type hierarchy differ from Java's?",
+      "q": "`Any`, `Unit`, `Nothing` — how is Kotlin's hierarchy different from Java's?",
       "shortAnswer": [
         "`Any` is the top type, but carries only `equals`/`hashCode`/`toString` — no wait/notify. `Any?` sits above it.",
         "`Unit` is a real singleton returned by 'void' functions. That's why `(T) -> Unit` works as a generic function type.",
-        "`Nothing` is the uninhabited bottom type, a subtype of everything. That's what makes `throw`/`return`/`TODO()` usable as expressions, and `UiState<Nothing>` assignable anywhere."
+        "`Nothing` is the uninhabited bottom type, a subtype of everything. `throw`/`return`/`TODO()` work as expressions; `UiState<Nothing>` assignable anywhere."
       ],
       "answer": "Kotlin's hierarchy has three players Java lacks.\n\n#### `Any` — the top type\n`Any` is the supertype of every non-null type, roughly Java's `Object` minus the baggage: it declares only `equals`, `hashCode`, `toString` — no `wait`/`notify`/`getClass`. `Any?` sits **above** `Any` and admits `null`. This split is why Kotlin functions are null-safe by default where Java's are implicitly nullable.\n\n#### `Unit` — 'void' as a value\nA function with no meaningful return is `Unit` — a **real singleton object**, not Java's `void` keyword. The payoff is that `Unit` is a *type*: `(T) -> Unit` is a valid generic function type, and `{ }`-style blocks can be used wherever a `() -> Unit` is expected. Callbacks, `run { }`, and generic wrappers over 'no result' all depend on Unit being a value.\n\n#### `Nothing` — the bottom type\n`Nothing` is the **uninhabited type** — no value exists. Because it is a subtype of *every* type (bottom), expressions typed `Nothing` are assignable anywhere. That is what makes these legal:\n- `throw` / `return` as expressions: `val x = value ?: throw IllegalStateException()` — `throw` has type `Nothing`, so it satisfies `String`.\n- `TODO()` in a stub: it returns `Nothing`.\n- `UiState<Nothing>` (empty flow state) is assignable to any `UiState<T>`.\n\nThe flip side: `val x = listOf()` fails to infer a type because without context `List<Nothing>` is the best guess — usually not what you want.",
       "code": [
