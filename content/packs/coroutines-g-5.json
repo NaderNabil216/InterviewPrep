@@ -14,11 +14,11 @@
         "event-bus",
         "backpressure"
       ],
-      "q": "Tune `MutableSharedFlow(replay, extraBufferCapacity, onBufferOverflow)` for an in-app event bus — what do you pass, and why?",
+      "q": "For an in-app event bus, what do you pass to `MutableSharedFlow(replay, extraBufferCapacity, onBufferOverflow)`? And why?",
       "shortAnswer": [
-        "The buffer is `replay + extraBufferCapacity`, so the default `MutableSharedFlow<T>()` has no buffer: `emit` suspends until every subscriber collects, and `tryEmit` always returns false.",
-        "For an event bus: `extraBufferCapacity = 1` with DROP_OLDEST so a slow collector never stalls the emitter, and `replay = 0` so a navigation event is not replayed to the next subscriber.",
-        "When nothing may be dropped and there is one consumer, use `Channel(Channel.BUFFERED).receiveAsFlow()`; use `subscriptionCount` to start and stop upstream work with its audience."
+        "The buffer is `replay + extraBufferCapacity`, so the default `MutableSharedFlow<T>()` has no buffer: `emit` suspends until every subscriber collects.",
+        "For an event bus: `extraBufferCapacity = 1` with DROP_OLDEST so collectors never stall, and `replay = 0` so navigation is never replayed.",
+        "When nothing may be dropped and there is one consumer, use `Channel(Channel.BUFFERED).receiveAsFlow()`; use `subscriptionCount` to start and stop upstream work."
       ],
       "answer": "#### The three parameters are one buffer\nCapacity is `replay + extraBufferCapacity`. `onBufferOverflow` only means anything when that sum is above zero — anything but `SUSPEND` on a zero buffer throws `IllegalArgumentException` at construction.\n\n#### The default is a rendezvous, not a mailbox\n`MutableSharedFlow<Event>()` is `replay = 0, extraBufferCapacity = 0, SUSPEND`:\n\n- `emit` suspends until **every** subscriber has collected. One collector doing a 300 ms disk write applies backpressure straight into your ViewModel.\n- `tryEmit` always returns false — there is never a free slot. Ignore that return value and you drop everything.\n- With **zero** subscribers `emit` returns instantly and the value is gone: the classic 'event fired in `init`, the screen never saw it' bug.\n\n#### The event-bus configuration\n\n| config | emit suspends? | replays history? | loss |\n| --- | --- | --- | --- |\n| `()` default | yes, on the slowest collector | no | none, but you stall |\n| `extraBufferCapacity = 1, DROP_OLDEST` | never | no | oldest pending event |\n| `replay = 1` | never | **yes** | none |\n\n`extraBufferCapacity = 1` with `DROP_OLDEST` is the pragmatic default: `emit` never suspends, `tryEmit` always succeeds, and only a genuinely stuck collector loses intermediate events.\n\n#### replay is a trap for events\n`replay = 1` re-delivers the last event to every new subscriber — rotate the device and the user lands on checkout twice. Use replay for *state*, and for state use `StateFlow`, which conflates.\n\nFor exactly-once delivery to a single consumer use `Channel(Channel.BUFFERED).receiveAsFlow()`: it suspends rather than drops, but two collectors split the stream. `subscriptionCount` is the mechanism `SharingStarted.WhileSubscribed` is built on.",
       "code": [
@@ -69,11 +69,11 @@
         "sharing-started",
         "viewmodel"
       ],
-      "q": "`stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState.Loading)` — justify every one of those three arguments.",
+      "q": "`stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState.Loading)` — justify each of the three arguments.",
       "shortAnswer": [
         "`viewModelScope` bounds the sharing coroutine to the ViewModel, so the upstream is cancelled at `onCleared()` and not a moment later.",
-        "`WhileSubscribed(5_000)` starts the upstream on the first collector and stops it five seconds after the last one leaves — a grace window spanning an Activity recreation, so rotation does not rebuild a Room query or socket.",
-        "The initial value is what every collector reads before the upstream has produced anything, so it must be a real `Loading` state, not a fabricated empty success."
+        "`WhileSubscribed(5_000)` starts on the first collector and stops five seconds after the last leaves — enough to survive rotation without rebuilding Room or sockets.",
+        "The initial value is what collectors read before the upstream produces anything — it must be a real `Loading` state, not a fabricated empty success."
       ],
       "answer": "#### What stateIn builds\nOne sharing coroutine in the given scope collects the cold upstream and conflates it into a `MutableStateFlow`. Five collectors mean one upstream execution, and `.value` is readable synchronously. Being a `StateFlow` it also **dedupes by `equals`** — a state class with identity-based equality silently breaks this.\n\n#### SharingStarted is a strategy object, not an enum\nAn interface emitting `START`, `STOP` or `STOP_AND_RESET_REPLAY_CACHE`. You can write your own.\n\n| strategy | starts | stops |\n| --- | --- | --- |\n| `Eagerly` | at the `stateIn` call | only when the scope dies |\n| `Lazily` | first subscriber | never |\n| `WhileSubscribed(t)` | first subscriber | `t` ms after the last leaves |\n\n#### Why 5 000\nBetween the old Activity's `onStop` and the new one's `onStart` there are zero subscribers. `WhileSubscribed(0)` cancels and restarts the upstream on every rotation: Room re-runs the query, the socket reconnects, the spinner flashes. Five seconds comfortably outlasts a recreation and still stops work for a genuinely backgrounded app. It is a grace window, and it has **nothing** to do with process death.\n\n#### The parts people trip over\n`replayExpirationMillis` defaults to `Long.MAX_VALUE`, so the cached value survives a `STOP` and the screen renders instantly on return; pass `0` and the state reverts to `initialValue`.\n\n`stateIn(scope, started, initialValue)` returns immediately. `stateIn(scope)` **suspends** until the first emission — call it in `init { }` on a flow that never emits and the coroutine never returns.\n\n`WhileSubscribed` reads `subscriptionCount`, so it is inert behind plain `collectAsState`, which never unsubscribes.",
       "code": [
@@ -124,10 +124,10 @@
         "lifecycle",
         "scopes"
       ],
-      "q": "What exactly are `viewModelScope` and `lifecycleScope`, and when is each one cancelled?",
+      "q": "What are `viewModelScope` and `lifecycleScope`? When is each cancelled?",
       "shortAnswer": [
         "Both are ordinary `CoroutineScope` objects with `SupervisorJob() + Dispatchers.Main.immediate`, created lazily and cached on their owner.",
-        "`viewModelScope` is cancelled when the ViewModel is cleared — the job is cancelled first, then `onCleared()` runs. `lifecycleScope` dies the moment its `Lifecycle` reaches `DESTROYED`.",
+        "`viewModelScope` is cancelled when the ViewModel is cleared — `onCleared()` runs last. `lifecycleScope` dies the moment its `Lifecycle` reaches `DESTROYED`.",
         "In a Fragment, use `viewLifecycleOwner.lifecycleScope`, because the Fragment object outlives its view on the back stack."
       ],
       "answer": "#### viewModelScope\nAn extension property on `ViewModel`. The first access creates a closeable scope with `SupervisorJob() + Dispatchers.Main.immediate`. `ViewModel.clear()` closes it — cancelling the job and every child — and *then* invokes `onCleared()`, so by the time your override runs the children are already gone.\n\nThe scope is cached, so touching it after clearing hands you an already-cancelled scope on which `launch` creates a coroutine that never runs its body. Clearing happens on Activity finish or Fragment removal — **not** on a configuration change, because the `ViewModelStore` is retained.\n\n#### lifecycleScope\n`lifecycle.coroutineScope`: the same `SupervisorJob() + Main.immediate`, plus an observer that cancels the job at `DESTROYED`. For an Activity that includes the destroy half of a rotation.\n\n#### The Fragment footgun\nA Fragment has two lifecycles — its own, `onAttach` to `onDetach`, and its **view's**, `onCreateView` to `onDestroyView`. On the back stack it loses its view but stays `CREATED`, so a collector launched from `lifecycleScope` in `onViewCreated` keeps running after the binding is nulled: NPE on the next emission, or a retained dead view hierarchy. `viewLifecycleOwner.lifecycleScope` is what you meant.\n\n#### Why Main.immediate\n`Dispatchers.Main` always posts to the main `Handler`; `immediate` executes synchronously when you are already on the main thread, so state set in a click listener is updated before the listener returns. The same property bites in tests: `Main` throws until `Dispatchers.setMain(...)`.\n\nAnything you build yourself, you cancel yourself. `GlobalScope` has no parent, no cancellation and no test story.",
@@ -179,11 +179,11 @@
         "repeat-on-lifecycle",
         "flow"
       ],
-      "q": "Why was `lifecycleScope.launchWhenStarted { }` deprecated, and what replaced it?",
+      "q": "Why was `launchWhenStarted { }` deprecated? What replaced it?",
       "shortAnswer": [
         "`launchWhenStarted` only freezes the **consumer** at STOP. The producer keeps running — Room observers, location callbacks, and sockets stay registered, filling a buffer nobody reads.",
         "`repeatOnLifecycle(Lifecycle.State.STARTED)` cancels the whole collection at STOP and runs the block again at the next START, which really unregisters the producer.",
-        "`flowWithLifecycle` is the operator form of the same mechanism, but it costs a coroutine, a channel, and an observer per flow — so nest several flows in one `repeatOnLifecycle` block."
+        "`flowWithLifecycle` is the operator form of the same mechanism — nest several flows in one `repeatOnLifecycle` block."
       ],
       "answer": "#### What launchWhenStarted did\nIt ran the block on a pausing dispatcher: below `STARTED` the dispatcher queues continuations instead of executing them. The coroutine is not cancelled — it is frozen at a suspension point, and everything upstream of it stays alive:\n\n- A `callbackFlow` never reaches `awaitClose`, so the `LocationListener`, receiver or sensor callback stays registered.\n- A Room `Flow` keeps its `InvalidationTracker` observer, so every write still re-runs the query.\n- Buffered elements pile up and flush as a burst of stale emissions on the next START.\n- The frozen continuation still holds everything it captured — views, adapters, the binding — until `DESTROYED`.\n- A block with no suspension point in it never pauses at all.\n\nIt was deprecated in `lifecycle-runtime-ktx` 2.4.\n\n#### repeatOnLifecycle\nA `suspend fun` on `Lifecycle`. Launch it once; it suspends until `DESTROYED`, starting a fresh child coroutine each time the state reaches the target and cancelling that child when the state falls below. The cancellation is genuine: `awaitClose` runs, observers are removed.\n\nTwo things people miss. Code placed after the call in the same `launch` block is unreachable until destroy. And the block re-runs from the top on every foreground, so a **cold** upstream refetches on every app switch — make it hot with `stateIn(WhileSubscribed(5_000))` and let `repeatOnLifecycle` manage only the subscription.\n\n`flowWithLifecycle` wraps the same machinery for a single flow: identical semantics, but N flows cost N coroutines and N channels against one block with N children. In Compose it is `collectAsStateWithLifecycle`.",
       "code": [
@@ -234,7 +234,7 @@
         "lifecycle",
         "state"
       ],
-      "q": "`collectAsState()` versus `collectAsStateWithLifecycle()` in Compose — and what does neither of them fix?",
+      "q": "`collectAsState()` vs `collectAsStateWithLifecycle()` in Compose. What does neither fix?",
       "shortAnswer": [
         "`collectAsState` collects while the composition lives, and composition is not lifecycle-aware — a backgrounded app keeps collecting and keeps the upstream hot.",
         "`collectAsStateWithLifecycle`, from `lifecycle-runtime-compose`, wraps the same collection in `repeatOnLifecycle` with a `minActiveState` that defaults to STARTED.",
@@ -289,11 +289,11 @@
         "process-death",
         "state-flow"
       ],
-      "q": "The user takes a phone call, Android kills your process, and they come back to the app. What happened to your `StateFlow`?",
+      "q": "The user takes a phone call, Android kills your process, and they come back. What happened to your `StateFlow`?",
       "shortAnswer": [
-        "It is gone. `StateFlow`, `SharedFlow`, and every ViewModel field are process-scoped memory. When the process dies, the `ViewModelStore` dies with it, and `onCleared()` is never called.",
+        "It is gone. `StateFlow` and `SharedFlow` are process-scoped memory — the `ViewModelStore` dies with the process, and `onCleared()` is never called.",
         "The only thing that comes back is the saved instance state bundle, and `SavedStateHandle.getStateFlow(key, default)` is its flow-shaped API in a ViewModel.",
-        "Store small parcelable identity — the selected id, query text, a scroll key — and re-derive the rest from Room or the network. The bundle crosses a Binder transaction with a practical 1 MB ceiling."
+        "Store small parcelable identity — the selected id, query text, a scroll key — and re-derive the rest from Room or the network. Bundle ceiling: ~1 MB."
       ],
       "answer": "#### What actually survives\n\n| | configuration change | process death |\n| --- | --- | --- |\n| ViewModel fields, `StateFlow`, `SharedFlow` | yes | **no** |\n| `SavedStateHandle` / `rememberSaveable` | yes | yes, via the bundle |\n| Room, DataStore, files | yes | yes |\n| Application singletons, DI caches | yes | **no** |\n\nWhen the system reclaims your process it keeps the task record and the state written by `onSaveInstanceState`, then recreates the top Activity and hands that `Bundle` back. Nothing in your object graph is restored, and `onCleared()` never runs — there is no process left to run it in.\n\n#### SavedStateHandle\nBacked by the `SavedStateRegistry` on the Activity, Fragment or `NavBackStackEntry`, delivered by `SavedStateViewModelFactory`, and pre-populated with navigation arguments. `getStateFlow(key, initialValue)` re-emits whenever you write `handle[key] = value`, and is serialised into the bundle at save time — so values must be bundle-compatible. Keep the **input** in the handle and derive the **output** with `flatMapLatest` and `stateIn`.\n\n#### The budget\nThe bundle crosses a Binder transaction shared by the whole task. The 1 MB limit covers all of it, and overflow gives `TransactionTooLargeException` in the field, usually on the deepest back stacks. Treat roughly 50 KB per screen as real: save the query, never the results. Since API 28 `onSaveInstanceState` is called *after* `onStop`.\n\n#### Myths to kill on the spot\n`WhileSubscribed(5_000)` is a subscriber-gap window for recreation, unrelated to process death. 'Don't keep activities' does **not** simulate it — your process, singletons and DI caches all survive, which is exactly the state that hides the bug. Use `adb shell am kill`.",
       "code": [
@@ -344,11 +344,11 @@
         "run-test",
         "test-dispatcher"
       ],
-      "q": "Your coroutine test hangs and eventually fails with 'After waiting for 60s, the test coroutine is not completing'. Debug it.",
+      "q": "Your coroutine test hangs and fails with \"After waiting for 60s, the test coroutine is not completing\". What went wrong?",
       "shortAnswer": [
-        "`runTest` waits for every coroutine in its `TestScope`. Collecting a hot flow — `StateFlow`, `MutableSharedFlow`, anything from `stateIn` — never completes, so the test hangs until the sixty-second timeout.",
+        "`runTest` waits until all its coroutines finish. Collecting a hot flow — `StateFlow`, `MutableSharedFlow` — never completes, so the test hangs until the timeout.",
         "Fix: launch that collector in `backgroundScope` — cancelled when the test body returns — or use Turbine, whose `test { }` block cancels its own collector.",
-        "Other usual suspects: a real dispatcher hard-coded in production code, two `TestDispatcher`s that do not share a scheduler, and never advancing virtual time under `StandardTestDispatcher`."
+        "Other usual suspects: a real dispatcher hard-coded in production code, two `TestDispatcher`s that do not share a scheduler, and never advancing virtual time."
       ],
       "answer": "#### Why it hangs at all\n`runTest`'s `TestScope` job parents everything the test launches, and will not return until that job completes. The default timeout is sixty seconds; the failure is followed by a dump of the coroutines still alive. Read it — it names the culprit.\n\n#### The checklist\n\n**1. A collector on a flow that never completes.** `launch { vm.state.toList(seen) }` in the test body is the classic — a `StateFlow` never completes, so neither does the test. Move it to `backgroundScope`, which `runTest` cancels after the body, or use Turbine's `state.test { }`.\n\n**2. A real dispatcher leaked into the code under test.** `Dispatchers.setMain` replaces `Main` and nothing else. `withContext(Dispatchers.IO) { delay(30_000) }` runs at wall-clock time, and virtual time cannot skip it. Inject dispatchers.\n\n**3. Two virtual clocks.** Every `TestDispatcher` must be built from the test's scheduler — `StandardTestDispatcher(testScheduler)`. A bare `UnconfinedTestDispatcher()` creates its own, so anything waiting across the boundary deadlocks.\n\n**4. Nothing was ever advanced.** `StandardTestDispatcher` queues work. `runCurrent()` drains what is due now, `advanceUntilIdle()` drains everything including delays, `advanceTimeBy(n)` moves the clock — and since 1.7 it does **not** run a task scheduled at exactly `currentTime + n`, so a 5 000 ms timeout needs `advanceTimeBy(5_001)`.\n\n**5. Genuinely blocking calls.** `Thread.sleep`, a latch, a nested `runBlocking`. Virtual time cannot compress them.\n\n**6. `UnconfinedTestDispatcher` everywhere.** It passes tests by running eagerly, hiding ordering bugs. Good for a recording collector, poor as a default.",
       "code": [
