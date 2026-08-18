@@ -19,7 +19,7 @@
       "q": "Design offline media downloads and playback (Spotify/Netflix style)",
       "shortAnswer": [
         "Offline media downloads and playback: the user pins an album or show, it downloads reliably in the background, respects storage limits, and licences expire.",
-        "Persist a download state machine in Room; resume via range requests to a `.part` file with atomic rename, a `dataSync` foreground service, and app-specific storage.",
+        "Persist a download state machine in Room; resume via range requests to a `.part` file with atomic rename, `dataSync` foreground service, and app-specific storage.",
         "The deep probes are resumable downloads, storage budgeting that never evicts pins, and licence lifecycle — offline expiry, proactive renewal, and signed-URL expiry mid-download."
       ],
       "prompt": "Design the client for downloading and playing media offline: the user marks an album or a show for download, it downloads reliably in the background, plays without a network, respects storage limits, and enforces licence expiry.\n\nScope to the client. Assume the backend provides signed URLs and a licence server.\n\n**45 minutes, out loud.** The deep probes here are almost always **resumable downloads**, **storage budgeting**, and **licence/DRM expiry** — budget time for all three.",
@@ -104,7 +104,7 @@
       ],
       "q": "Design an analytics / event-logging SDK",
       "shortAnswer": [
-        "An analytics SDK is a library-design question: events must never be lost, `log()` never blocks the caller, and battery, startup, and host stability is unhurt.",
+        "An analytics SDK is a library-design question: events must never be lost, `log()` never blocks the caller, and battery, startup, host stability is unhurt.",
         "Design the public API first — small, non-blocking — then in-memory ring, durable Room buffer, flush triggers, WorkManager upload, and batch ids for dedupe.",
         "Interviewers push on durable buffering with a bounded drop policy, startup cost off the critical path, crash isolation as a guest, and retry idempotency."
       ],

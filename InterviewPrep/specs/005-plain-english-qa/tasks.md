@@ -726,7 +726,9 @@ chars, median 45 — expect a mixed verdict distribution (R-011).
 
     **Record (2026-08-18)**: 3 items, 0 edits this batch. Validator exit 0, 0 warnings. Scope check: 0 diffs, 0 failures (ids 3/3, identical to HEAD). Screens: 0 collisions; **1 pre-existing near-match (`sd-0001`/`sd-0002`, sharing "Design an offline-capable ")** — neither item touched, not batch-introduced. Per-item verdicts (scenario form preserved throughout, V17): sd-0000 — **already simple**: delivered by T003 reference batch (all fields "no change needed", V18); carried forward unchanged here (q 66 ≤ 66; bullets 22/23/24, all ≤25). sd-0001 — **already simple**: scenario form intact, bullets already plain, ≤25 words, no filler. sd-0002 — **already simple**: scenario form intact, bullets already plain, ≤24 words, no filler.
 
-- [ ] T109 [P] [US3] Batch: rewrite `q` + `shortAnswer` for both **2 items** (`sd-0003`–`sd-0004`) in `content/packs/system-design-b.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+- [X] T109 [P] [US3] Batch: rewrite `q` + `shortAnswer` for both **2 items** (`sd-0003`–`sd-0004`) in `content/packs/system-design-b.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
+
+    **Record (2026-08-18)**: 2 items, 2 edits this batch. Validator exit 0, 0 warnings. Scope check 0 failures (ids 2/2). Screens: 0 collisions, 0 near-matches ≥ 24 shared chars. Per-item verdicts (scenario form preserved throughout, V17): sd-0003 — **simplified**: B1 26→25 words (`a` dropped before `dataSync`), pin-download-in-Room + resumable-range-requests/atomic-rename/foreground-service/app-specific-storage claims kept; B0/B2 already ≤24, untouched. sd-0004 — **simplified**: B0 26→25 words (`and host`→`, host`), library-design-question + never-lose-events/non-blocking-log + battery-startup-stability claims kept; B1/B2 already ≤24, untouched.
 
 - [ ] T110 [P] [US3] Batch: rewrite `q` + `shortAnswer` for all **4 items** (`sd-0005`–`sd-0008`) in `content/packs/system-design-g-1.json`, run the full batch gate, record the outcome and per-item verdicts inline under this task.
 
