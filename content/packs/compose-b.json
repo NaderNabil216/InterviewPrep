@@ -14,7 +14,7 @@
         "modifier-node",
         "internals"
       ],
-      "q": "How do you write a custom layout, and what is `Modifier.Node`?",
+      "q": "How do you write a custom layout? And what is `Modifier.Node`?",
       "shortAnswer": [
         "`Layout(content) { measurables, constraints -> ... }` measures each child **once**, picks your own size, then places the children. One pass, no measuring twice.",
         "`Modifier.Node` is the modern modifier design: a long-lived node in a tree. A modifier can hold state and be updated without reallocating each recomposition.",
@@ -63,7 +63,7 @@
         "semantics",
         "screenshot"
       ],
-      "q": "How do you test Compose UI, and how do you catch visual regressions?",
+      "q": "How do you test Compose UI? And how do you catch visual regressions?",
       "shortAnswer": [
         "Compose tests query the **semantics tree**, not the view hierarchy: `onNodeWithTag`, `onNodeWithText`, then assertions and actions.",
         "Prefer `Modifier.testTag` over text matching — text breaks when copy or translations change.",
