@@ -1,5 +1,5 @@
 {
-  "version": "2026.08.21",
+  "version": "2026.08.22",
   "generatedAt": "2026-08-18",
   "stackSnapshot": {
     "kotlin": "2.4.10 stable; 2.4.20-RC (Aug 2026); the 2.3 line stabilized nested typealiases, explicit backing fields, unused-return-value checker",
@@ -559,6 +559,11 @@
     }
   ],
   "releases": [
+    {
+      "version": "2026.08.22",
+      "date": "2026-08-18",
+      "summary": "Questions and short answers reworded in simple English (55 items)."
+    },
     {
       "version": "2026.08.21",
       "date": "2026-08-18",
