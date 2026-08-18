@@ -272,7 +272,7 @@
         "mocks",
         "test-doubles"
       ],
-      "q": "Define fake, stub, mock, and spy. Why does over-mocking rot a test suite?",
+      "q": "What are fake, stub, mock, and spy? Why does over-mocking rot a test suite?",
       "shortAnswer": [
         "A stub returns canned answers; a mock verifies calls; a spy wraps a real object, records; a fake is a lightweight implementation you assert against.",
         "Mocks couple tests to the implementation: a harmless refactor — merging two methods, reordering calls — breaks tests that had nothing to do with the change.",
@@ -308,7 +308,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.24"
+      "updatedIn": "2026.08.33"
     },
     {
       "id": "bt-0029",

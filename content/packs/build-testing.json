@@ -74,7 +74,7 @@
         "fakes",
         "pyramid"
       ],
-      "q": "Describe your testing strategy. Fakes or mocks?",
+      "q": "What is your testing strategy? Fakes or mocks?",
       "shortAnswer": [
         "Many unit tests for ViewModels, use cases, and mappers; fewer integration tests with Room and a fake network; a UI/E2E layer on critical journeys.",
         "Prefer fakes over mocks for code you own: a fake repository backed by a `MutableStateFlow` is readable, reusable, and survives refactors.",
@@ -115,7 +115,7 @@
         }
       ],
       "addedIn": "2026.08.1",
-      "updatedIn": "2026.08.24"
+      "updatedIn": "2026.08.33"
     }
   ]
 }

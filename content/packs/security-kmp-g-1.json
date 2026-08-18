@@ -14,7 +14,7 @@
         "selinux",
         "kernel"
       ],
-      "q": "Explain the Android security model. How does the OS keep one app from touching another app's data?",
+      "q": "What is the Android security model? How does the OS keep one app from touching another app's data?",
       "shortAnswer": [
         "Each app runs as its own Linux UID in its own process, so app A literally cannot open app B's private files.",
         "SELinux adds a second layer of control: even if file permissions allow an action, the kernel refuses it unless the process's policy domain permits it.",
@@ -50,7 +50,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.25"
+      "updatedIn": "2026.08.33"
     },
     {
       "id": "sk-0005",

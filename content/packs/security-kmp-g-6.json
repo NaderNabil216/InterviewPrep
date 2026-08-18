@@ -165,7 +165,7 @@
         "sso",
         "refresh-token"
       ],
-      "q": "Explain the OAuth 2.0 authorization-code flow with PKCE on Android. Where do tokens live? How does refresh rotation work? What does logout terminate?",
+      "q": "What is the OAuth 2.0 authorization-code flow with PKCE on Android? Where do tokens live? How does refresh rotation work? What does logout terminate?",
       "shortAnswer": [
         "A mobile app is a public client, so use authorization-code plus PKCE: a per-request verifier means a stolen code is worthless without it.",
         "Tokens live in Keystore-backed storage, not `SharedPreferences`; refresh tokens rotate on every use, and replay of a rotated token revokes the whole family.",
@@ -202,7 +202,7 @@
         }
       ],
       "addedIn": "2026.08.12",
-      "updatedIn": "2026.08.25"
+      "updatedIn": "2026.08.33"
     },
     {
       "id": "sk-0058",
