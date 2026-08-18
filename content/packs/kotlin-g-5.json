@@ -14,9 +14,9 @@
         "fun-interface",
         "lambda"
       ],
-      "q": "SAM conversion, `fun interface`, or a plain function type — when do you use which?",
+      "q": "When do you use a SAM conversion, a `fun interface`, or a plain function type?",
       "shortAnswer": [
-        "SAM conversion works for Java single-abstract-method interfaces, and since Kotlin 1.4 for `fun interface`. A normal Kotlin interface can never be built from a lambda.",
+        "SAM conversion works for Java single-abstract-method interfaces, and since Kotlin 1.4 for `fun interface`. A normal Kotlin interface can't be built from a lambda.",
         "A `fun interface` gives you a named type with default methods and room to grow. `(T) -> R` gives composability with no wrapper.",
         "The trap is identity: converting the same lambda twice gives different instances. So `removeListener { … }` never unregisters anything."
       ],
@@ -58,7 +58,7 @@
         "named-args",
         "bitmask"
       ],
-      "q": "How do default and named arguments compile, and what breaks when you override a function that has them?",
+      "q": "How do default and named arguments compile? What breaks when you override a function that has them?",
       "shortAnswer": [
         "Alongside the real method, the compiler emits a synthetic `foo$default` method that takes an int bitmask.",
         "Defaults are re-evaluated on every call. A `mutableListOf()` default is a fresh list each time.",
@@ -102,11 +102,11 @@
         "plusAssign",
         "complexity"
       ],
-      "q": "Which operators can you overload, and why is `+=` on a list a performance trap?",
+      "q": "Which operators can you overload? Why is `+=` on a list a performance trap?",
       "shortAnswer": [
         "Overloading is a fixed name mapping: `plus`, `minus`, `times`, `div`, `rem`, `inc`, `get`/`set`, `invoke`, `contains`, `rangeTo`, `compareTo`, `iterator`, `componentN`.",
-        "For `+=` the compiler prefers `plusAssign` — in-place, works on a `val` receiver — over `plus` plus reassign, which works on a `var`. If both exist, it's an error.",
-        "With `var items: List<T>`, `items += x` in a loop copies the whole list each time — O(n²). `val items = mutableListOf()` mutates in place instead."
+        "For `+=` the compiler prefers `plusAssign` — in-place, works on a `val` — over `plus` plus reassign for a `var`. If both exist, it's an error.",
+        "`var items: List<T>` — `items += x` in a loop copies the whole list each time: O(n²). `val items = mutableListOf()` mutates in place."
       ],
       "answer": "Operator overloading is **name-based, not symbol-based**: the compiler maps `a + b` to a function named `plus`, `a in b` to `contains`, `a[i]` to `get`, `a[i] = v` to `set`, `a()` to `invoke`, `a..b` to `rangeTo`, `a < b` to `compareTo`, `for (x in a)` to `iterator`, `a++` to `inc`, `!a` to `not`. These must be `operator` functions — member or extension. You cannot invent new symbols; only the fixed set overloads.\n\n#### `+=` and the `plusAssign` trap\nFor `a += b` the compiler searches, in preference order:\n1. `a.plusAssign(b)` — **in-place**, works on a `val` receiver.\n2. `a = a.plus(b)` — **reassigning**, works only on a `var` receiver.\n3. If both exist, it's a **compile error** (ambiguous).\n\nNow the trap: `var items: List<Int> = listOf(1, 2)` followed by `items += 3` — there is no `plusAssign` on `List`, so the compiler desugars it to `items = items.plus(3)`, which copies. Each `+=` builds a **new list** copying every element, then rebinds `items`; in a loop that is **O(n²)** — `var list: List<Int> = emptyList()` with `repeat(10_000) { list += it }` makes ~10k copies and ~50M element moves.\n\nThe fix is the mutable collection: `val items = mutableListOf<Int>()` then `items += x` calls `MutableList.plusAssign` → in-place `add`, O(1). The choice between `List` and `MutableList` isn't cosmetic — it's the difference between quadratic and linear building.",
       "code": [
@@ -146,7 +146,7 @@
         "tailrec",
         "precedence"
       ],
-      "q": "What are the rules for `infix` and `tailrec`, and when does each actually matter?",
+      "q": "What are the rules for `infix` and `tailrec`? And when does each matter?",
       "shortAnswer": [
         "`infix` needs a member or extension with one parameter: not vararg, no default. Its precedence sits below arithmetic but above comparison.",
         "`tailrec` rewrites self-recursion into a loop only when the recursive call is the last operation, and it's not inside try/catch/finally.",
@@ -190,7 +190,7 @@
         "callsInPlace",
         "smart-cast"
       ],
-      "q": "What is a `contract`, and what does `callsInPlace` let the compiler prove?",
+      "q": "What is a `contract`? What does `callsInPlace` let the compiler prove?",
       "shortAnswer": [
         "`contract { returns(true) implies (x is String) }` is how `isNullOrEmpty()`, `require()`, and `check()` enable smart casts across a function boundary.",
         "`callsInPlace(block, InvocationKind.EXACTLY_ONCE)` is why you can assign a `val` inside a `run {}` or `with {}` lambda.",
