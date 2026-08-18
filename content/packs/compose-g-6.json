@@ -14,7 +14,7 @@
         "adaptive",
         "window-size-class"
       ],
-      "q": "What is `WindowSizeClass`, what are the breakpoints, and why not just check the screen size?",
+      "q": "What is `WindowSizeClass`? What are the breakpoints? And why not just check the screen size?",
       "shortAnswer": [
         "Widths: compact < 600 dp, medium 600–840, expanded ≥ 840. Heights: compact < 480, medium 480–900, expanded ≥ 900.",
         "Read it with `currentWindowAdaptiveInfo()`.",
@@ -51,7 +51,7 @@
         "scaffold",
         "foldables"
       ],
-      "q": "Walk me through building an adaptive app: canonical layouts, pane scaffolds, foldables.",
+      "q": "How do you build an adaptive app: canonical layouts, pane scaffolds, foldables?",
       "shortAnswer": [
         "List-detail, supporting-pane, and feed are the canonical layouts. `NavigationSuiteScaffold` swaps bottom bar, rail, or drawer by size class.",
         "`ThreePaneScaffoldNavigator` owns its own pane back stack — watch it fight the app's navigation for back.",
@@ -87,7 +87,7 @@
         "material-3",
         "theming"
       ],
-      "q": "How does Material 3 theming work, and what do you need to know about dynamic color?",
+      "q": "How does Material 3 theming work? And what do you need to know about dynamic color?",
       "shortAnswer": [
         "`MaterialTheme` provides `ColorScheme`, `Typography`, and `Shapes` through CompositionLocals.",
         "`dynamicLightColorScheme(context)` needs Android 12+, so a static fallback scheme is required.",
@@ -123,7 +123,7 @@
         "insets",
         "edge-to-edge"
       ],
-      "q": "Edge-to-edge and window insets — how do you avoid double padding?",
+      "q": "Edge-to-edge and insets — how do you avoid double padding?",
       "shortAnswer": [
         "`enableEdgeToEdge()` plus `WindowInsets.safeDrawing`/`systemBars`/`ime` expose the bars.",
         "`Modifier.windowInsetsPadding` *consumes* the inset for descendants; `padding(insets.asPaddingValues())` doesn't. That asymmetry causes double padding.",
@@ -159,7 +159,7 @@
         "semantics",
         "accessibility"
       ],
-      "q": "Explain the semantics tree: merged vs unmerged, custom actions, and `testTag`.",
+      "q": "What is the semantics tree: merged vs unmerged, custom actions, and `testTag`?",
       "shortAnswer": [
         "`mergeDescendants = true` collapses a subtree into one announcement — the most common Compose test confusion.",
         "`clearAndSetSemantics` replaces a subtree's description. `customActions` exposes swipe-only actions to TalkBack. `onClick(label = ...)` names a tap.",
@@ -231,7 +231,7 @@
         "interop",
         "view-composition-strategy"
       ],
-      "q": "You're putting a `ComposeView` into an existing View screen. Which `ViewCompositionStrategy` and why?",
+      "q": "You put a `ComposeView` into an existing View screen. Which `ViewCompositionStrategy` and why?",
       "shortAnswer": [
         "The default `DisposeOnDetachedFromWindow` is wrong in a Fragment: the view detaches and reattaches, so state dies or the composition outlives the view.",
         "In a Fragment use `DisposeOnViewTreeLifecycleDestroyed`; in a RecyclerView item, `DisposeOnDetachedFromWindowOrReleasedFromPool`.",
@@ -339,7 +339,7 @@
         "testing",
         "synchronization"
       ],
-      "q": "How does a Compose test synchronize, and why does `Thread.sleep` never belong in one?",
+      "q": "How does a Compose test synchronize? And why does `Thread.sleep` never belong in one?",
       "shortAnswer": [
         "The test rule drives the composition clock, so assertions already wait for idle.",
         "An infinite animation means the clock never idles and the test hangs — fix it with `mainClock.autoAdvance = false` plus `advanceTimeBy`.",
