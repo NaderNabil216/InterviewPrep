@@ -14,7 +14,7 @@
         "threads",
         "scheduling"
       ],
-      "q": "How is a coroutine different from a thread?",
+      "q": "How is a coroutine unlike a thread?",
       "shortAnswer": [
         "A coroutine is a heap object a dispatcher schedules onto a thread pool, not an OS thread.",
         "It costs a few hundred bytes versus a roughly megabyte thread stack, so you can have a hundred thousand of them.",
@@ -58,7 +58,7 @@
         "main-safety",
         "dispatcher"
       ],
-      "q": "Does marking a function `suspend` make it run off the main thread?",
+      "q": "Does `suspend` make a function run off the main thread?",
       "shortAnswer": [
         "No — `suspend` is a compiler contract, not a threading keyword.",
         "It adds a hidden `Continuation` parameter, and the function runs on whatever dispatcher the caller was on.",
@@ -102,7 +102,7 @@
         "suspension",
         "testing"
       ],
-      "q": "What is the difference between `delay(1000)` and `Thread.sleep(1000)` inside a coroutine?",
+      "q": "What is the difference between `delay(1000)` and `Thread.sleep(1000)` in a coroutine?",
       "shortAnswer": [
         "`delay` suspends: it schedules a resume on the dispatcher's timer and hands the thread back.",
         "`Thread.sleep` parks the OS thread, so four sleeping coroutines on a four-core pool wedge the whole pool.",
@@ -146,7 +146,7 @@
         "state-machine",
         "internals"
       ],
-      "q": "What does a single suspension point actually cost at runtime?",
+      "q": "What does a single suspension point cost at runtime?",
       "shortAnswer": [
         "The fast path is nearly free: if the callee does not suspend, it returns the value directly instead of `COROUTINE_SUSPENDED`.",
         "The cost shows up only when it really suspends — locals spill into fields and the work dispatches to another thread.",
@@ -190,7 +190,7 @@
         "suspendCancellableCoroutine",
         "cancellation"
       ],
-      "q": "Turn a callback-based API into a suspend function.",
+      "q": "How to wrap a callback API in a suspend function?",
       "shortAnswer": [
         "Use `suspendCancellableCoroutine { }` and register `invokeOnCancellation { call.cancel() }`.",
         "Resume the continuation exactly once — a second resume throws `IllegalStateException`.",
@@ -234,7 +234,7 @@
         "dispatcher",
         "internals"
       ],
-      "q": "A callback resumes your continuation from a random OkHttp thread. How does the coroutine get back onto the main thread?",
+      "q": "A callback resumes your continuation from a random OkHttp thread. How does the coroutine get back to the main thread?",
       "shortAnswer": [
         "The `ContinuationInterceptor` is a context element — the dispatcher wraps your continuation in a `DispatchedContinuation`.",
         "On resume, `resumeWith` checks `isDispatchNeeded` and re-posts the work onto the target thread.",
@@ -278,7 +278,7 @@
         "android",
         "lifecycle"
       ],
-      "q": "Why can't you call a suspend function directly from `onCreate()` or a click listener, and what do you do instead?",
+      "q": "Why can't you call a suspend function directly from `onCreate()` or a click listener? What do you do instead?",
       "shortAnswer": [
         "A suspend function needs a `Continuation`, so it can only be called from inside a coroutine.",
         "So you need a `CoroutineScope`, and Android provides `viewModelScope` and `lifecycleScope`.",
@@ -322,7 +322,7 @@
         "job",
         "dispatcher"
       ],
-      "q": "What is a `CoroutineContext`, and what does the `+` operator actually do?",
+      "q": "What is a `CoroutineContext`? And what does the `+` operator do?",
       "shortAnswer": [
         "It is an immutable set of elements keyed by type — a map from `Key` to `Element`.",
         "The four elements you meet: `Job`, `ContinuationInterceptor` (the dispatcher), `CoroutineName`, and `CoroutineExceptionHandler`.",
@@ -366,7 +366,7 @@
         "cancel",
         "job"
       ],
-      "q": "What does `CoroutineScope(Dispatchers.Main + SupervisorJob())` create, and what happens to it after you call `cancel()`?",
+      "q": "What does `CoroutineScope(Dispatchers.Main + SupervisorJob())` create? And what happens to it after you call `cancel()`?",
       "shortAnswer": [
         "A `CoroutineScope` is just a holder for a `CoroutineContext`. The factory adds a `Job` if you did not supply one.",
         "You own cancelling it, and a cancelled scope is dead permanently.",
@@ -410,7 +410,7 @@
         "structured-concurrency",
         "failure"
       ],
-      "q": "`Job` vs `SupervisorJob` — and why does `launch(SupervisorJob())` supervise nothing?",
+      "q": "`Job` vs `SupervisorJob` — why does `launch(SupervisorJob())` supervise nothing?",
       "shortAnswer": [
         "`SupervisorJob` only changes how failures of its **own children** spread — each child fails on its own.",
         "Passing one to `launch` makes it that coroutine's own Job, so your siblings are unaffected.",
