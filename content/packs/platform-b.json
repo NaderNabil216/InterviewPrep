@@ -15,11 +15,11 @@
         "task",
         "intent"
       ],
-      "q": "Explain launch modes and task affinity. When does each actually matter?",
+      "q": "What are launch modes and task affinity? When does each matter?",
       "shortAnswer": [
         "`standard` makes a new instance every time. `singleTop` reuses the instance if it is already **at the top** and delivers `onNewIntent`. `singleTask` keeps one instance per task and clears everything above it. `singleInstance` sits alone in its own task.",
-        "`singleTop` is the one you use routinely — notifications, deep links, search. `singleTask` and `singleInstance` are rare, and usually a smell in a single-activity app.",
-        "Intent flags like `FLAG_ACTIVITY_CLEAR_TOP`, `NEW_TASK`, and `CLEAR_TASK` override the manifest per launch. That is how you build 'log out and reset the stack'."
+        "`singleTop` is what you use routinely: notifications, deep links, search. `singleTask` and `singleInstance` are rare and usually a smell in single-activity apps.",
+        "Intent flags like `FLAG_ACTIVITY_CLEAR_TOP`, `NEW_TASK`, and `CLEAR_TASK` override the manifest per launch. Use them to build 'log out and reset the stack'."
       ],
       "answer": "#### The four modes\n| Mode | Behaviour |\n|---|---|\n| `standard` | New instance in the calling task, always |\n| `singleTop` | Top of stack? reuse and call `onNewIntent`; else new instance |\n| `singleTask` | At most one instance, root of its task; relaunching **clears activities above it**, calls `onNewIntent` |\n| `singleInstance` | Like `singleTask`; nothing else may join its task |\n\n#### When they matter\n- **`singleTop`** — the routine choice: three notifications shouldn't stack three copies of a screen. On reuse, handle the payload in `onNewIntent` and call `setIntent(newIntent)`, or `getIntent()` stays stale.\n- **`singleTask`** — a genuine single entry point (kiosk apps). It *destroys* everything above it, losing state.\n- **`singleInstance`** — picture-in-picture players. Rare.\n\n#### Task affinity\nActivities share an affinity (your package name) by default; `taskAffinity` moves one into a different task (a separate Recents entry), interacting with `FLAG_ACTIVITY_NEW_TASK` and `allowTaskReparenting`. Change it only for a concrete reason — a known source of back-stack confusion.\n\n#### Flags, per launch\nFlags are set per call, so they're often the better tool:\n- `FLAG_ACTIVITY_CLEAR_TOP` — pop everything above the target.\n- `FLAG_ACTIVITY_NEW_TASK` — start in a new task (required from a non-Activity context).\n- `FLAG_ACTIVITY_CLEAR_TASK` + `NEW_TASK` — the standard \"log out, wipe the stack, go to login\".\n- `FLAG_ACTIVITY_SINGLE_TOP` — `singleTop` for this launch only.\n\n#### In a single-activity app\nIn a Compose single-activity app, this collapses to `singleTop` plus `onNewIntent` for deep links.",
       "code": [

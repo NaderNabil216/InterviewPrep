@@ -15,10 +15,10 @@
         "agp9",
         "2026"
       ],
-      "q": "How do you make a large Android build fast, and what changed in AGP 9?",
+      "q": "How do you make a large Android build fast? And what changed in AGP 9?",
       "shortAnswer": [
-        "Three wins for a fast build: the **configuration cache**, the **build cache**, and **KSP2** over kapt. Then module structure — prefer `implementation` over `api` so fewer modules recompile.",
-        "AGP 9 (Jan 2026) **applies the Kotlin plugin itself**, so you stop adding `org.jetbrains.kotlin.android` to module build files. AGP 9.3 is current as of Jul 2026.",
+        "Three wins: the **configuration cache**, the **build cache**, and **KSP2** over kapt. Then module structure: prefer `implementation` over `api`, so fewer modules recompile.",
+        "AGP 9 (Jan 2026) **applies Kotlin's plugin itself**, so `org.jetbrains.kotlin.android` leaves module build files. AGP 9.3 is current in Jul 2026.",
         "Measure first with a build scan or `--profile`; the slow part is rarely where people guess."
       ],
       "answer": "#### Configuration vs execution\nGradle configures every build script, then executes tasks. In a 50-module project configuration alone can take 10+ seconds per build.\n- **Configuration cache** serializes the configured task graph and reuses it — the single biggest win. It requires build logic that never reads mutable state at execution time.\n- **Build cache** reuses task *outputs* across builds and across machines (remote cache in CI).\n\n#### kapt to KSP\nkapt generates Java stubs for every Kotlin file so Java annotation processors can run — enormously expensive. KSP reads Kotlin directly and is typically 2x faster. Room, Hilt, Moshi and Glide all support it. One remaining kapt processor holds the module back, so migrating the last one matters more than it looks.\n\n#### AGP 9\nThe Android plugin applies Kotlin itself, so module scripts shrink and plugin versions cannot drift. AGP 9.0 (Jan 2026) was the breaking migration; 9.3 (Jul 2026) is incremental. Use the AGP Upgrade Assistant.\n\n#### Structure and levers\nBuild speed is mostly about how much has to recompile. api/impl separation means editing an implementation recompiles one module, not everything downstream — prefer `implementation` over `api`, which leaks onto consumers' compile classpath. Then: parallel, caching and configuration-cache in `gradle.properties`; enough daemon heap but not so much you swap; non-transitive R classes; unused build features off per module; in CI a remote cache, and never `clean`.\n\n#### Measuring\nA build scan gives configuration versus execution time, cache hit rates and the critical path. Optimize what it shows, not what you assume.",

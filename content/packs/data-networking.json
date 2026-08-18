@@ -14,11 +14,11 @@
         "retrofit",
         "interceptor"
       ],
-      "q": "How do OkHttp interceptors work, and how do you implement token refresh correctly?",
+      "q": "How do OkHttp interceptors work? And how do you refresh tokens correctly?",
       "shortAnswer": [
-        "**Application interceptors** run once per call and see the logical request; **network interceptors** run per network round trip, so they see redirects, retries, and the real headers/body.",
-        "Do token refresh in an `Authenticator`, not an interceptor — the `Authenticator` is called on a 401, and OkHttp does the retry for you.",
-        "The subtle bug is the **refresh stampede**: ten parallel requests all get 401 at once. Single-flight the refresh behind a mutex, and let the losers reuse the new token."
+        "**Application interceptors** run once per call, seeing the logical request. **Network interceptors** run per network round trip, seeing redirects, retries, and real headers and body.",
+        "Do token refresh in an `Authenticator`, not an interceptor. OkHttp calls the `Authenticator` on a 401 and does the retry for you.",
+        "The **refresh stampede** happens when ten parallel requests all get 401 together. Single-flight the refresh behind a mutex; losers reuse the new token."
       ],
       "answer": "#### Interceptor types\n- **Application interceptor** (`addInterceptor`): called once per `Call`, so it doesn't see intermediate responses. Best for auth headers, app-level logging, mocking.\n- **Network interceptor** (`addNetworkInterceptor`): called for every network round trip, sees redirects/retries and the real body. Best for wire-level logging, cache header inspection.\n\nOrder matters: interceptors form a chain, each calling `chain.proceed(request)`.\n\n#### Authenticator\nOkHttp invokes `Authenticator.authenticate()` on a **401**, hands you the failed request, and retries with whatever request you return. Return `null` to give up. This beats \"catch 401 in an interceptor and retry manually\" because OkHttp manages the retry count (`response.priorResponse` chain) and avoids infinite loops.\n\n#### The stampede\nWith 10 concurrent requests, all get 401 and all try to refresh — 9 invalidate tokens the others just obtained. Fix: a `Mutex` (or `synchronized`) around the refresh, re-checking inside the lock whether another thread already refreshed — the classic double-checked pattern.\n\n#### Other things worth naming\n- **Connection pooling** and HTTP/2 multiplexing are on by default; reuse **one** `OkHttpClient` via `newBuilder()` so pool and dispatcher are shared.\n- **Timeouts**: `connectTimeout`, `readTimeout`, `writeTimeout`, and `callTimeout` for the whole call — most people forget the last one.\n- **HTTP caching** via `Cache` + `Cache-Control` for cacheable GETs, not a substitute for real offline.\n- **Certificate pinning** with `CertificatePinner` — always pin a backup key, or a cert rotation bricks your app.\n- **Ktor client** is the KMP alternative with a similar plugin model.",
       "code": [

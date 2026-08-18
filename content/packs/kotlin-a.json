@@ -13,11 +13,11 @@
         "null-safety",
         "basics"
       ],
-      "q": "How does Kotlin's null safety actually work, and what's a platform type?",
+      "q": "How does Kotlin's null safety work? And what is a platform type?",
       "shortAnswer": [
-        "Nullability is part of the type system. `String` and `String?` are different types, so the compiler checks them at compile time.",
-        "At Java interop boundaries, the compiler inserts built-in null checks. NPEs then surface at the boundary, not deep in your code.",
-        "A platform type (`String!`) comes from Java, where nullability is unknown. The compiler relaxes its checks there — that's where NPEs still leak in."
+        "Kotlin puts nullability into the type system. `String` and `String?` are two different types. The compiler checks this when you build.",
+        "At Java interop boundaries, the compiler inserts built-in null checks. NPEs surface at the boundary, not deep in your code.",
+        "A platform type (`String!`) comes from Java, where nullability is unknown. The compiler relaxes its checks there — that is where you still hit NPEs."
       ],
       "answer": "Kotlin puts nullability in the type system itself — not in annotations, not in convention. `String` can never hold null; `String?` can. The compiler simply refuses unsafe calls on a nullable type, so you have to handle absence explicitly.\n\n#### The operators\n- `?.` safe call — returns null instead of throwing.\n- `?:` elvis — supplies a fallback. Because `throw` and `return` are expressions of type `Nothing`, `?: return` and `?: error(\"…\")` make clean guard clauses.\n- `!!` not-null assertion — deliberately ugly. It throws `NullPointerException` on purpose, so it stays greppable in review.\n\n#### Platform types — the real interview point\nWhen Kotlin calls into Java, the compiler often can't tell whether a value is nullable, so it assigns a **platform type** — written `String!` in error messages, and you can't write it yourself. On a platform type the compiler applies **no** null checks at all: you can assign it to `String` and it only blows up at runtime.\n\nMitigate it two ways: annotate the Java side (`@Nullable`/`@NonNull`, JSR-305), or declare the Kotlin type explicitly and let the compiler insert the check at assignment. Modern AndroidX is heavily annotated, so most framework calls come back as real nullable types.\n\n#### Where NPEs still come from in Kotlin\n1. `!!`\n2. Platform types from unannotated Java\n3. `lateinit` accessed before it's initialized (throws `UninitializedPropertyAccessException`)\n4. Leaking `this` from a constructor into code that reads not-yet-initialized properties\n5. External Java libraries returning null from a method declared non-null",
       "code": [

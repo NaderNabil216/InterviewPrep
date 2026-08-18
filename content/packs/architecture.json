@@ -15,11 +15,11 @@
         "mvi",
         "layers"
       ],
-      "q": "Describe the layered architecture you'd use, and compare MVVM with MVI.",
+      "q": "What layered architecture do you use? And how do MVVM and MVI compare?",
       "shortAnswer": [
-        "Three layers: **UI** (Compose + state holder), **domain** (optional — use cases, pure Kotlin), **data** (repositories + data sources). Dependencies point inward; the data layer never knows about the UI.",
-        "Both MVVM and MVI use unidirectional data flow. MVI goes further: **one immutable state object** and **explicit intents** make inconsistent states impossible.",
-        "MVVM with a single `StateFlow<UiState>` is, in practice, MVI-lite — and that is what most modern Android codebases ship."
+        "Three layers: **UI** (Compose + state holder), **domain** (optional — use cases, pure Kotlin), and **data** (repositories + data sources). Dependencies point inward; data never touches the UI.",
+        "MVVM and MVI both use unidirectional data flow. MVI goes further: **one immutable state object** plus **explicit intents** makes inconsistent states impossible.",
+        "MVVM with one `StateFlow<UiState>` is MVI-lite in practice. And that is what most modern Android codebases ship."
       ],
       "answer": "#### The layers\n- **UI layer** — composables plus a state holder (`ViewModel`). Holds no business logic; renders state, forwards events.\n- **Domain layer** (optional) — use cases encapsulating business rules, reusable across ViewModels; overhead for one-line pass-throughs.\n- **Data layer** — repositories own the single source of truth; data sources (network, database, DataStore) sit behind them.\n\n**Rule:** dependencies point inward (UI → domain → data); expose domain models, not DTOs.\n\n#### Unidirectional data flow\nState flows down, events flow up; the screen calls a ViewModel function that updates the single source of truth, which re-emits.\n\n#### MVVM vs MVI\n| | MVVM (common form) | MVI |\n|---|---|---|\n| State | often several `StateFlow`s | exactly one immutable `State` |\n| Input | public ViewModel methods | a sealed `Intent`/`Action` type sent to one `dispatch` |\n| Reducer | ad-hoc updates | explicit `(State, Action) -> State` |\n| Wins | less boilerplate | impossible states become unrepresentable; trivially testable |\n| Costs | multiple flows can drift out of sync | ceremony, and a large sealed hierarchy |\n\n#### What to actually say\n\"I use MVVM with a single immutable `UiState` as one `StateFlow`, events as a sealed type — MVI's guarantee without the ceremony. I'd add a formal reducer only for a screen with complex transitions worth unit-testing.\"\n\n#### Modeling state well\nPrefer a sealed hierarchy or explicit flags over independent booleans; `isLoading = true` **and** `error != null` must be unrepresentable.",
       "code": [
