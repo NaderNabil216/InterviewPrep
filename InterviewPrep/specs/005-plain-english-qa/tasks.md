@@ -608,7 +608,9 @@ Word-bound load: 71/120 bullets over 25 words (R-006).
 The register's second-person direct address is already native to STAR-scenario questions — lightest qa
 load (1/75 bullets over 25 words, R-006).
 
-- [ ] T092 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`bh-0001`–`bh-0003`) in `content/packs/behavioral.json`, run the full batch gate, record the outcome inline under this task.
+- [X] T092 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **3 items** (`bh-0001`–`bh-0003`) in `content/packs/behavioral.json`, run the full batch gate, record the outcome inline under this task.
+
+    **Record (2026-08-18)**: 3 items. Validator exit 0, 0 warnings. Scope check 0 failures (ids 3/3). Screens: 0 collisions, 0 near-matches ≥ 24 shared chars. Read-through vs `fef2e12`: bh-0001 — **already delivered by T003 (reference batch)**; fields verified unchanged here (q 82 ≤ 86 baseline; bullets 23/21/17, all ≤25). bh-0002 — q unchanged (77 ≤ 77); clarify-then-code-order + keep-talking-while-solving + hand-test-before-done claims kept, bullets already ≤25 (21/20/25), untouched. bh-0003 — q unchanged (62 ≤ 62); ask-what-only-they-know + good-question-topics + always-ask-something claims kept (B0/B2 already ≤25, untouched; B1 19→18, `really` dropped per V14).
 
 - [ ] T093 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **11 items** (`bh-0004`–`bh-0014`) in `content/packs/behavioral-g-1.json`, run the full batch gate, record the outcome inline under this task.
 
