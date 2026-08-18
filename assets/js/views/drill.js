@@ -1,6 +1,6 @@
 import { navigate, toast, App } from '../app.js';
 import { buildQueue, rate } from '../srs.js';
-import { renderMarkdown, renderCodeBlock, renderInline } from '../md.js';
+import { renderMarkdown, renderCodeBlock, renderInline, renderSentences } from '../md.js';
 import { SECTION_LABEL, isLabelled } from '../sections.js';
 
 export function renderDrill(el, { snapshot, param }) {
@@ -75,7 +75,7 @@ export function renderDrill(el, { snapshot, param }) {
       <div class="card drill-card" id="drill-card" style="cursor:pointer;">
         <div class="faint">${item.track} · ${item.topic}</div>
         ${isLabelled(item) && item.q ? `<h4 class="section-label">${SECTION_LABEL.question}</h4>` : ''}
-        <div class="item-view__q" style="margin-top:8px;">${renderInline(item.q)}</div>
+        <div class="item-view__q" style="margin-top:8px;">${renderSentences(item.q)}</div>
         <div id="drill-answer" style="display:none; margin-top:16px;">
           ${isLabelled(item) && item.shortAnswer?.length ? `<h4 class="section-label">${SECTION_LABEL.shortAnswer}</h4>` : ''}
           ${item.shortAnswer?.length ? `<ul class="short-answer">${item.shortAnswer.map(s => `<li>${renderInline(s)}</li>`).join('')}</ul>` : ''}

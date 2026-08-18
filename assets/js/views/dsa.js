@@ -1,6 +1,6 @@
 import { Store } from '../store.js';
 import { navigate, toast } from '../app.js';
-import { renderMarkdown, renderCodeBlock, renderInline } from '../md.js';
+import { renderMarkdown, renderCodeBlock, renderInline, renderSentences } from '../md.js';
 import { rate, statusOf } from '../srs.js';
 import { LEVEL_LABEL } from '../levels.js';
 
@@ -53,13 +53,13 @@ function renderDetail(el, snapshot, item) {
       <span class="chip chip--level-${item.level}">${LEVEL_LABEL[item.level]}</span>
       <span class="chip">${item.pattern}</span>
     </div>
-    <h1>${renderInline(item.q)}</h1>
+    <h1>${renderSentences(item.q)}</h1>
 
     <div class="grid grid-2" style="align-items:start;">
       <div class="stack">
         <div class="card">
           <h3>Problem</h3>
-          <div class="answer-body">${renderMarkdown(item.prompt || item.answer || '')}</div>
+          <div class="answer-body">${renderMarkdown(item.prompt || item.answer || '', { splitSentences: true })}</div>
         </div>
 
         <div class="card">

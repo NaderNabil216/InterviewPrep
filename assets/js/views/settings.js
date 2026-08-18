@@ -21,7 +21,6 @@ export function renderSettings(el, { snapshot }) {
         <select id="theme-select" style="background:var(--bg-card); border:1px solid var(--border); color:var(--text); padding:8px; border-radius:8px;">
           <option value="dark" ${settings.theme==='dark'?'selected':''}>Dark</option>
           <option value="light" ${settings.theme==='light'?'selected':''}>Light</option>
-          <option value="auto" ${settings.theme==='auto'?'selected':''}>Match system</option>
         </select>
       </div>
 

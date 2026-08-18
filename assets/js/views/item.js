@@ -1,6 +1,6 @@
 import { Store } from '../store.js';
 import { navigate } from '../app.js';
-import { renderMarkdown, renderCodeBlock, renderInline, stripMarkdown } from '../md.js';
+import { renderMarkdown, renderCodeBlock, renderInline, renderSentences, stripMarkdown } from '../md.js';
 import { rate, statusOf } from '../srs.js';
 import { toast } from '../app.js';
 import { LEVEL_LABEL } from '../levels.js';
@@ -36,7 +36,7 @@ export function renderItem(el, { snapshot, param }) {
 
     <div class="card">
       ${isLabelled(item) && item.q ? `<h4 class="section-label">${SECTION_LABEL.question}</h4>` : ''}
-      <div class="item-view__q">${renderInline(item.q)}</div>
+      <div class="item-view__q">${renderSentences(item.q)}</div>
 
       ${isLabelled(item) && item.shortAnswer?.length ? `<h4 class="section-label">${SECTION_LABEL.shortAnswer}</h4>` : ''}
       ${item.shortAnswer?.length ? `

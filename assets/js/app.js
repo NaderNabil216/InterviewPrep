@@ -165,20 +165,32 @@ function render() {
 window.addEventListener('hashchange', render);
 
 // ---------- theme ----------
+// US2/FR-001-004: the toggle is a plain two-way Dark/Light switch — no third, system-matching
+// state is reachable by clicking it, and the icon always matches the persisted explicit choice
+// (contract C1). System preference is consulted only to resolve the very first render.
 function applyTheme(theme) {
-  const root = document.documentElement;
-  if (theme === 'auto') root.removeAttribute('data-theme');
-  else root.setAttribute('data-theme', theme);
-  document.getElementById('theme-toggle').textContent =
-    (theme === 'dark' || (theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)) ? '🌙' : '☀️';
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('theme-toggle').textContent = theme === 'dark' ? '🌙' : '☀️';
+}
+function resolveInitialTheme() {
+  // No stored value (first-ever visit) or a legacy 'auto' value from before this fix shipped —
+  // both count as "no explicit choice yet." Resolve once via the device's system preference and
+  // persist the result as an explicit 'dark'/'light' choice, so every later read (including a
+  // later OS-level preference change) sees an explicit choice, never a live re-resolution. If
+  // `matchMedia` is unavailable, default to 'dark'.
+  const stored = Store.getSettings().theme;
+  if (stored === 'dark' || stored === 'light') return stored;
+  const hasMatchMedia = typeof matchMedia === 'function';
+  const resolved = hasMatchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark'
+    : hasMatchMedia ? 'light' : 'dark';
+  Store.setSettings({ theme: resolved });
+  return resolved;
 }
 function initTheme() {
-  const settings = Store.getSettings();
-  applyTheme(settings.theme || 'dark');
+  applyTheme(resolveInitialTheme());
   document.getElementById('theme-toggle').addEventListener('click', () => {
-    const cur = Store.getSettings().theme || 'dark';
-    const order = ['dark', 'light', 'auto'];
-    const next = order[(order.indexOf(cur) + 1) % order.length];
+    const cur = Store.getSettings().theme === 'dark' ? 'dark' : 'light';
+    const next = cur === 'dark' ? 'light' : 'dark';
     Store.setSettings({ theme: next });
     applyTheme(next);
   });

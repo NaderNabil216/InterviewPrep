@@ -1,6 +1,6 @@
 import { Store } from '../store.js';
 import { navigate, toast, App } from '../app.js';
-import { renderMarkdown, renderCodeBlock, renderInline } from '../md.js';
+import { renderMarkdown, renderCodeBlock, renderInline, renderSentences } from '../md.js';
 import { rate } from '../srs.js';
 import { SECTION_LABEL, isLabelled } from '../sections.js';
 
@@ -138,8 +138,8 @@ function runSession(el, snapshot, modeKey, itemCount) {
       <div class="card">
         <div class="faint">${item.track} · ${item.topic}</div>
         ${isLabelled(item) && item.q ? `<h4 class="section-label">${SECTION_LABEL.question}</h4>` : ''}
-        <div class="item-view__q" style="margin-top:8px;">${renderInline(item.q)}</div>
-        ${item.prompt ? `<div class="answer-body" style="margin-top:10px;">${renderMarkdown(item.prompt)}</div>` : ''}
+        <div class="item-view__q" style="margin-top:8px;">${renderSentences(item.q)}</div>
+        ${item.prompt ? `<div class="answer-body" style="margin-top:10px;">${renderMarkdown(item.prompt, { splitSentences: true })}</div>` : ''}
         <div id="reveal-body" style="display:none; margin-top:16px;">
           ${isLabelled(item) && item.shortAnswer?.length ? `<h4 class="section-label">${SECTION_LABEL.shortAnswer}</h4>` : ''}
           ${item.shortAnswer?.length ? `<ul class="short-answer">${item.shortAnswer.map(s=>`<li>${renderInline(s)}</li>`).join('')}</ul>` : ''}
