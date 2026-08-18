@@ -18,7 +18,7 @@
       "shortAnswer": [
         "Compute the longest common subsequence and the minimum edit distance between two strings — one shared 2D DP grid.",
         "`dp[i][j]` answers prefix questions: matching last characters extend the diagonal; otherwise take the best of the two ways to shrink the problem.",
-        "Base cases differ: LCS seeds zero row and column with 0, edit distance with `i` and `j`. Both are O(m·n); one row suffices unless reconstructing."
+        "Base cases differ: LCS seeds zero row/column with 0, edit distance with `i`/`j`. Both are O(m·n); one row suffices unless reconstructing."
       ],
       "prompt": "Two string DP problems that share one grid:\n\n1. **LCS** — length of the longest subsequence present in both strings (not necessarily contiguous).\n2. **Edit distance** — minimum insert/delete/replace operations to turn `a` into `b`.\n\nIf you can derive the grid and the recurrence for one, the other is a small edit. This pattern also covers regex matching, distinct subsequences, and longest palindromic subsequence.",
       "hints": [
