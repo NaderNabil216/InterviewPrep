@@ -14,7 +14,7 @@
         "preview",
         "testing"
       ],
-      "q": "What does `@Preview` actually render, and why can't you preview a screen that takes a ViewModel?",
+      "q": "What does `@Preview` render? And why can't you preview a screen that takes a ViewModel?",
       "shortAnswer": [
         "Previews render a composable with no real Activity, no ViewModelStore, and no data layer.",
         "So `viewModel()`/`hiltViewModel()` can't resolve — the practical argument for stateless composables with a thin stateful wrapper.",
@@ -50,7 +50,7 @@
         "testing",
         "screenshots"
       ],
-      "q": "How do you screenshot-test a Compose UI across theme, font scale and locale?",
+      "q": "How do you screenshot-test Compose UI across theme, font scale, and locale?",
       "shortAnswer": [
         "Test a matrix that catches real bugs: light/dark, font scale 1.0 and 2.0, RTL, the longest translation, compact vs expanded width.",
         "Pin the device config so CI renders identically every run.",
@@ -86,7 +86,7 @@
         "multiplatform",
         "cmp"
       ],
-      "q": "What actually differs when you move Compose UI to Compose Multiplatform?",
+      "q": "What differs when you move Compose UI to Compose Multiplatform?",
       "shortAnswer": [
         "The runtime, compiler, and most of Foundation/Material are shared. Everything Android-specific is not.",
         "Resources move to `compose.components.resources`. There's no `Context`, `AndroidView`, or Activity result APIs, and back handling, fonts, and insets differ.",
@@ -122,7 +122,7 @@
         "glance",
         "widgets"
       ],
-      "q": "Glance looks like Compose — where does the illusion break?",
+      "q": "Glance looks like Compose — where does it break?",
       "shortAnswer": [
         "Glance reuses the Compose runtime and compiler, but its Applier emits `RemoteViews`, not LayoutNodes.",
         "You get a small composable set: no arbitrary custom layouts, no `Modifier.Node`, no per-frame animation.",
