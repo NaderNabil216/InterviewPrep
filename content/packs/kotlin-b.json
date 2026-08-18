@@ -15,10 +15,10 @@
         "when",
         "modeling"
       ],
-      "q": "`sealed class` vs `sealed interface` vs `enum` — when do you reach for each?",
+      "q": "`sealed class` vs `sealed interface` vs `enum` — when do you use each?",
       "shortAnswer": [
-        "`enum` — a fixed set of **singleton** constants, all the same shape. Each constant is one instance.",
-        "`sealed class`/`interface` — a closed set of **types** that can each carry different data and have multiple instances.",
+        "`enum` is a fixed set of **singleton** constants, all the same shape. Each constant is one instance.",
+        "`sealed class` and `sealed interface` give a closed set of **types**. Each type can carry different data and have multiple instances.",
         "`sealed interface` is the modern default: a type can implement several of them, so you can model overlapping categories that a sealed class hierarchy can't."
       ],
       "answer": "#### The distinction that matters\nAn `enum` constant is a single instance with fixed data — `Status.LOADING` is always the same object. A sealed subtype is a *type*: `Error(cause)` can have thousands of distinct instances carrying different payloads.\n\nIf the variants need to carry different data, you need sealed. If they're just labels, `enum` is lighter and gives you `values()`, `entries`, `valueOf`, and `ordinal` for free.\n\n#### Exhaustiveness\nBoth give the compiler a closed set, so `when` is exhaustive without an `else`. **Always omit the `else`** — add a variant and it becomes a compile error at every site that must handle it; `else` throws that safety away. Kotlin 2.3 made exhaustiveness data-flow-aware.\n\n#### Why sealed interface is usually better\n- A class can implement **multiple** sealed interfaces, modeling cross-cutting categories — an error that is both `Retryable` and `UserFacing`.\n- No forced inheritance relationship, so implementations stay free to extend something else.\n- Existing types can join the hierarchy.\n\n`sealed class` is still right when the variants genuinely share state or behaviour that belongs in a base class.\n\n#### Sealed + data object\n`data object Loading : UiState` gives a proper `toString()` — `Loading` rather than the object default with a hash — which matters in logs and test failures.\n\n#### Permitted subtypes\nSubtypes must live in the same package and module (previously the same file). That's what makes the set closed and the check sound.",
@@ -64,7 +64,7 @@
         "dispatch",
         "interop"
       ],
-      "q": "How are extension functions resolved, and why does that surprise people?",
+      "q": "How are extension functions resolved? Why does that surprise people?",
       "shortAnswer": [
         "Extensions are **statically dispatched**: the compiler picks them from the receiver's *declared* type, not the runtime type.",
         "They compile to static methods with the receiver as the first parameter. They don't modify the class and can't be overridden.",
@@ -108,11 +108,11 @@
         "k2",
         "2026"
       ],
-      "q": "What's actually new in Kotlin 2.x that you'd use day to day?",
+      "q": "What's new in Kotlin 2.x that you use day to day?",
       "shortAnswer": [
         "**K2** is the compiler. It's faster, has one frontend across platforms, and gives much better type inference and error messages.",
         "Kotlin **2.3** stabilized nested type aliases, explicit backing fields, an unused-return-value checker, and data-flow `when` exhaustiveness. **2.4** is the current release (Jun 2026).",
-        "For Android the practical impact: better inference, faster builds, and `expect`/`actual` plus Swift export maturing for KMP."
+        "What you notice on Android: better inference, faster builds, and `expect`/`actual` plus Swift export maturing for KMP."
       ],
       "answer": "#### K2\nThe rewritten compiler frontend. What you notice:\n- Materially faster compilation, especially on large codebases.\n- Smarter smart-casts and inference, so code that used to need explicit types now compiles.\n- Clearer diagnostics.\n- One frontend for JVM/Native/JS/Wasm, which is why KMP features now land uniformly.\n\n#### Kotlin 2.3 highlights\n- **Explicit backing fields** — `val flow: StateFlow<T> field = MutableStateFlow(...)`. This kills the `_state`/`state` boilerplate pair every ViewModel has been writing: one property, private mutable type inside, public read-only type outside.\n- **Nested type aliases** — `typealias` can now be declared inside a class, so an alias is scoped where it is meaningful.\n- **Unused return value checker** — flags calls whose result you discarded but shouldn't have, catching the `list.filter { }`-with-no-assignment bug class.\n- **Data-flow-based `when` exhaustiveness** — the compiler proves more `when` expressions complete.\n- Stable time-tracking APIs and improved `Uuid` in the stdlib.\n\n#### Kotlin 2.4 (Jun 2026)\nThe current stable line (2.3.20 added name-based destructuring and an immutable-copy API for `Map.Entry`). Verify the current number against the release notes.\n\n#### Context parameters\nThe successor to experimental context receivers — ambient dependencies (a logger, a transaction, a scope) without threading them through every signature. Check its stability level before relying on it.\n\n#### How to answer this well\nDon't recite a changelog. Pick the one or two that changed how you write code — for most Android developers that's **explicit backing fields** and **K2 build speed** — and say what they replaced.",
       "code": [
@@ -162,7 +162,7 @@
         "result",
         "modeling"
       ],
-      "q": "How do you model errors in Kotlin — exceptions, `Result`, or a sealed type?",
+      "q": "How do you model errors in Kotlin? Exceptions, `Result`, or a sealed type?",
       "shortAnswer": [
         "Kotlin has **no checked exceptions**, so the type system says nothing about what can fail. That's why explicit error modeling matters more than in Java.",
         "Use a **sealed result type** for expected, recoverable domain failures the UI must render differently. Use **exceptions** for programming errors and truly exceptional conditions.",
@@ -211,9 +211,9 @@
         "lambda-with-receiver",
         "builders"
       ],
-      "q": "How do type-safe builders / DSLs work, and where do you meet them in Android?",
+      "q": "How do type-safe builders and DSLs work? Where do you meet them in Android?",
       "shortAnswer": [
-        "The mechanism is a **lambda with receiver**: `T.() -> Unit`. Inside the lambda, `this` is a `T`, so its members are in scope without a qualifier.",
+        "The mechanism is a **lambda with receiver**: `T.() -> Unit`. Inside the lambda, `this` is a `T`, so members are in scope without a qualifier.",
         "That's why `build.gradle.kts`, `buildString`, Compose `Modifier` chains, and Kotlin serialization config all read like small languages.",
         "`@DslMarker` blocks implicit access to outer receivers. That's what stops nesting bugs in nested builders."
       ],
