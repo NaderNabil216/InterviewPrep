@@ -14,11 +14,11 @@
         "widgets",
         "compose"
       ],
-      "q": "How do you build a home-screen widget with Glance, and what are its constraints compared to a Compose screen?",
+      "q": "How do you build a home-screen widget with Glance? What are its constraints compared to a Compose screen?",
       "shortAnswer": [
-        "Glance is a Compose-like DSL that compiles down to `RemoteViews`: you describe a `GlanceAppWidget` with `provideGlance`/`GlanceComposable` and back it with a `GlanceAppWidgetReceiver`.",
+        "Glance is a Compose-like DSL compiling down to `RemoteViews`: describe a `GlanceAppWidget` with `provideGlance`/`GlanceComposable`, backed by a `GlanceAppWidgetReceiver`.",
         "There's no recomposition loop — you push state by calling `update(context, glanceId)`, and the composition runs synchronously to emit `RemoteViews`.",
-        "The constraints are real: input is clicks via `PendingIntent` only, the component set is small, and you must handle launcher sizing explicitly with `SizeMode`."
+        "The constraints are real: input is clicks via `PendingIntent` only, the component set is small, and you must handle launcher sizing with `SizeMode`."
       ],
       "answer": "#### What Glance is\nGlance is Jetpack's Compose-like API for home-screen widgets. It is not Compose running on your GPU — it is a DSL that describes a widget and is compiled to a **RemoteViews** hierarchy. A widget is a `GlanceAppWidget` subclass plus a `GlanceAppWidgetReceiver`, and its UI is declared in a `GlanceComposable` block inside `provideGlance`.\n\n#### The rendering and update model\nThere is no recomposition in the Compose sense. State that should appear on the widget is pushed from your app — or from a WorkManager job, because app processes get killed — by calling `update(context, glanceId)`. The composition then runs synchronously to produce RemoteViews, so it must be fast and free of blocking work.\n\n#### The constraints to know\nInput is clicks only: `clickable` launches a `PendingIntent`, which must be `FLAG_IMMUTABLE`. The component set is deliberately small (Box, Column, Row, Text, Button, Image, and a few more). Sizing is explicit: `SizeMode.Exact`, `SizeMode.Responsive`, or `SizeMode.Single`, because a launcher grid can resize your widget. Glance's recent releases have expanded the surface, but the RemoteViews ceiling is permanent — no custom layouts, no arbitrary drawing.\n\n#### When to use it\nFor glanceable views of existing state — a timer, a tracker, a trip summary. If you need rich interactive behavior, that is a signal to link back into the app rather than fight the widget surface.",
       "code": [
@@ -64,7 +64,7 @@
         "android-xr",
         "form-factors"
       ],
-      "q": "You have a mature phone app. What actually changes when you add Wear OS, Android TV, Android Auto, and Android XR?",
+      "q": "You have a mature phone app. What changes when you add Wear OS, Android TV, Android Auto, and Android XR?",
       "shortAnswer": [
         "The domain, data, and ViewModel layers survive untouched — what changes is the input model, the UI toolkit, and each surface's hard constraints.",
         "Wear brings rotary input, complications, and ambient mode; TV is D-pad focus; Auto allows only distraction-safe templates; XR renders Compose UI as spatial panels.",
@@ -113,7 +113,7 @@
         "subscriptions",
         "entitlements"
       ],
-      "q": "Walk me through implementing Play Billing for a subscription. What are the moving parts, and where does server verification come in?",
+      "q": "How do you implement Play Billing for a subscription? What are the moving parts? Where does server verification come in?",
       "shortAnswer": [
         "The client uses the Play Billing library: `queryProductDetailsAsync`, then `launchBillingFlow` — and every purchase must be acknowledged within three days or it's refunded.",
         "Subscriptions add base plans with layered offers, upgrades and downgrades with proration, and renewals on Google's infrastructure — your job is tracking the purchase-state transition.",
@@ -162,9 +162,9 @@
         "in-app-review",
         "play-core"
       ],
-      "q": "How do you prompt users to update your app, and how do you ask for a Play Store rating?",
+      "q": "How do you prompt users to update your app? How do you ask for a Play Store rating?",
       "shortAnswer": [
-        "In-app updates use `AppUpdateManager`: fetch the update info, then `startUpdateFlowForResult` with `IMMEDIATE` or `FLEXIBLE` mode, routing the result through the activity result callback.",
+        "In-app updates use `AppUpdateManager`: fetch update info, then `startUpdateFlowForResult` with `IMMEDIATE` or `FLEXIBLE` mode, routing the result through the activity-result callback.",
         "`FLEXIBLE` lets the user keep using the app while the update downloads and installs on restart; `IMMEDIATE` blocks with a full-screen, non-dismissible flow.",
         "In-app review is a separate `ReviewManager` flow that Google quota-limits: gate it on milestones, never every launch, and treat `ReviewErrorCode` as non-fatal."
       ],
@@ -211,7 +211,7 @@
         "feature-delivery",
         "asset-delivery"
       ],
-      "q": "Why did Play move to App Bundles, and how do Play Feature Delivery and Play Asset Delivery let you ship smaller?",
+      "q": "Why did Play move to App Bundles? How do Play Feature Delivery and Play Asset Delivery let you ship smaller?",
       "shortAnswer": [
         "The App Bundle is what you upload; Play generates and signs the per-device APKs — base APK plus ABI, density, and language splits.",
         "Play Feature Delivery splits code into dynamic features that install with the app, on demand, or conditionally, cutting the install-time download.",
@@ -260,7 +260,7 @@
         "target-sdk",
         "16kb-pages"
       ],
-      "q": "Which Play policies actually gate a release for an Android engineer, and how do you keep a release unblocked?",
+      "q": "Which Play policies gate a release for an Android engineer? How do you keep a release unblocked?",
       "shortAnswer": [
         "The hard gates are mechanical and date-bound: `targetSdk 36` by 2026-08-31 (extension to 2026-11-01), and 16 KB page-size support for updates from 2027-02-01.",
         "The second gate is behavioral: the Data Safety form, permissions policy, and content policies are enforced via review, and violations carry strikes.",
@@ -314,7 +314,7 @@
         "crashlytics",
         "observability"
       ],
-      "q": "Where does Firebase fit in a modern Android stack, and how do you make Crashlytics actually useful?",
+      "q": "Where does Firebase fit in a modern Android stack? How do you make Crashlytics useful?",
       "shortAnswer": [
         "Firebase is a managed backend: analytics, crash reporting, remote config, auth, Firestore, messaging, and functions — a strong default when speed beats infrastructure ownership.",
         "The durable core is Analytics plus Crashlytics plus Remote Config; before adopting Firestore for core state, think hard about vendor lock-in, security rules, and cost.",
@@ -363,7 +363,7 @@
         "advertising-id",
         "attribution"
       ],
-      "q": "What is the Privacy Sandbox on Android, and what changed about the advertising ID that a mobile engineer must know?",
+      "q": "What is the Privacy Sandbox on Android? What changed about the advertising ID that a mobile engineer must know?",
       "shortAnswer": [
         "The Privacy Sandbox replaces cross-app tracking with privacy-preserving APIs — Topics, Protected Audience, Attribution Reporting — plus an SDK Runtime isolating ad-tech code.",
         "The advertising ID is no longer a stable key: it needs `ACCESS_ADSERVICES_AD_ID`, resets on opt-out, and ships disabled on Android 16+.",
@@ -412,7 +412,7 @@
         "foldables",
         "adaptive-layout"
       ],
-      "q": "Your app runs on phones only today. What does it take to meet the large-screen and foldable quality guidelines?",
+      "q": "Your app runs on phones only. What does it take to meet the large-screen and foldable quality guidelines?",
       "shortAnswer": [
         "The bar is adaptive layout, not separate builds: UI responds to `WindowSizeClass` (Compact, Medium, Expanded) and reflows across a foldable's postures.",
         "Use Compose's adaptive Material3 scaffolds — `ListDetailPaneScaffold` and `SupportingPaneScaffold` with pane expansion — rather than hardcoded phone breakpoints.",
@@ -461,10 +461,10 @@
         "semantics",
         "talkback"
       ],
-      "q": "Why is accessibility a shipping requirement, and what is the minimum bar for an Android engineer?",
+      "q": "Why is accessibility a shipping requirement? What is the minimum bar for an Android engineer?",
       "shortAnswer": [
         "Accessibility is a legal and product requirement — WCAG-style compliance and Play's quality expectations — and it's good engineering that benefits every user.",
-        "The minimum bar: every image has a `contentDescription` or is decorative, elements have names and roles, touch targets are at least 48dp, and contrast is sufficient.",
+        "The minimum bar: every image has a `contentDescription` or is decorative, elements have names and roles, touch targets are at least 48dp, contrast sufficient.",
         "Compose derives semantics from components for free; extend them with `semantics {}`, roles, and `clearAndSetSemantics {}`, then verify with TalkBack and the Accessibility Scanner."
       ],
       "answer": "#### Why it is a requirement\nAccessibility is a shipping condition, not a feature. Software accessibility has regulatory teeth (WCAG and its equivalents), Play's quality expectations call it out, and enterprises will not approve a product that fails it. The engineering case is the durable one: better semantics, targets, and contrast improve usability for everyone — the elderly user, the user in bright glare, the one-thumb user.\n\n#### The minimum bar — a practical checklist\n- Every meaningful `Image`/`Icon` has a `contentDescription`; decorative ones are explicitly null.\n- Every interactive element exposes a name and role. Compose does this by default for `Button`, `Checkbox`, and friends; custom clickables need `semantics { role = Role.Button }`.\n- Touch targets are at least 48dp — Material does this, a raw `Modifier.clickable` may not.\n- Text contrast is at least 4.5:1 for body copy, and no information is conveyed by color alone.\n- Focus order is meaningful, and custom views implement `onInitializeAccessibilityEvent`.\n\n#### How you verify\nDo not assume — run TalkBack over the real user flows, including dialogs and error states; run the Accessibility Scanner; and inspect Compose's semantics tree with the testing APIs. Build it into the definition of done. Retrofitting accessibility after launch is the expensive way to do it, and it is where the risk actually lives.",
