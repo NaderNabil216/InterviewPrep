@@ -534,7 +534,9 @@ question (`ar-0001`, 215 chars — the reference batch already worked the shape)
 
 Word-bound load: 71/120 bullets over 25 words (R-006).
 
-- [ ] T077 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **4 items** (`dn-0001`–`dn-0004`) in `content/packs/data-networking.json`, run the full batch gate, record the outcome inline under this task.
+- [X] T077 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **4 items** (`dn-0001`–`dn-0004`) in `content/packs/data-networking.json`, run the full batch gate, record the outcome inline under this task.
+
+    **Record (2026-08-18)**: 4 items. Validator exit 0, 0 warnings. Scope check 0 failures (ids 4/4). Screens: 0 collisions. Read-through vs `fef2e12`: dn-0001 — q 73→69 (`And how`→`How`, `correctly` kept); app/network-interceptor split + Authenticator + single-flight claims kept (bullets already 25/22/23). dn-0002 — q unchanged (59 ≤ 59); version-bump + auto-migration + fallbackToDestructive claims kept (B0 30→25: `a` and `and commit it`→`— that's what makes…` merged). dn-0003 — q unchanged (74 ≤ 74); blocking-I/O + Flow-transactional + proto claims kept (B0 29→25: `the`×2 and `failed` dropped, `writes dropped` tail). dn-0004 — q unchanged (94 ≤ 94); bullets already 23/20/24.
 
 - [ ] T078 [P] [US1] [US2] Batch: rewrite `q` + `shortAnswer` for all **9 items** (`dn-0005`–`dn-0013`) in `content/packs/data-networking-g-1.json`, run the full batch gate, record the outcome inline under this task.
 

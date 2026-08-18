@@ -14,7 +14,7 @@
         "retrofit",
         "interceptor"
       ],
-      "q": "How do OkHttp interceptors work? And how do you refresh tokens correctly?",
+      "q": "How do OkHttp interceptors work? How do you refresh tokens correctly?",
       "shortAnswer": [
         "**Application interceptors** run once per call, seeing the logical request. **Network interceptors** run per network round trip, seeing redirects, retries, and real headers and body.",
         "Do token refresh in an `Authenticator`, not an interceptor. OkHttp calls the `Authenticator` on a 401 and does the retry for you.",
@@ -65,7 +65,7 @@
       ],
       "q": "How do Room migrations work, and what breaks in production?",
       "shortAnswer": [
-        "Bump `version`, add a `Migration(from, to)` with raw SQL, and Room runs each step in order. Export the schema JSON and commit it — that's what makes migration tests possible.",
+        "Bump `version`, add `Migration(from, to)` with raw SQL, Room runs each step in order. Export schema JSON — that's what makes migration tests possible.",
         "**Auto-migrations** (`@AutoMigration`) handle additive changes. Renames, deletes, and type changes need an `@RenameColumn`/`@DeleteColumn` spec or a manual migration.",
         "`fallbackToDestructiveMigration()` silently deletes user data — never ship it."
       ],
@@ -113,7 +113,7 @@
       ],
       "q": "DataStore vs SharedPreferences — why did SharedPreferences need replacing?",
       "shortAnswer": [
-        "`SharedPreferences.apply()` is async, but the **first load and `commit()` are blocking disk I/O on the calling thread** — a known ANR source — and failed writes are silently ignored.",
+        "`SharedPreferences.apply()` is async, but first load and `commit()` are blocking disk I/O on calling thread — a known ANR source — writes dropped.",
         "DataStore is Flow-based and fully async. Writes are transactional, and read/write errors surface as exceptions you can catch and handle.",
         "Preferences DataStore is key-value with no type safety. Proto DataStore uses a typed protobuf schema — worth it for structured settings."
       ],
