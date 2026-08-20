@@ -1,7 +1,7 @@
 import { Store } from '../store.js';
 import { navigate } from '../app.js';
 import { renderInline } from '../md.js';
-import { isDrillable, dueCountOf, coverageByTrack, coverageTotals, notCompleted } from '../progress.js';
+import { isDrillable, dueCountOf, coverageByTrack, coverageTotals, notCompleted, weakestTracks } from '../progress.js';
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -48,12 +48,11 @@ export function renderDashboard(el, { snapshot }) {
   // Free study still gets a "today" surface — never an empty or broken slot (FR-012).
   const freeMode = (Store.getPlanState().mode || 'free') === 'free';
   const notDone = shellPhase ? [] : notCompleted(snapshot.items, progress);
-  const weakestTracks = Object.entries(coverage)
-    .filter(([, m]) => m.total > 0)
-    .sort((a, b) => a[1].pct - b[1].pct)
-    .slice(0, 3)
-    .map(([track]) => track);
-  const nextUp = weakestTracks
+  // The shared ranking: pct ascending, then total descending, then name — deterministic even on
+  // an all-zero fresh history, and identical to the plan's (US4). "Next up" draws from
+  // not-completed material only, so a fully completed track contributes nothing (US4 #4).
+  const weakTracks = shellPhase ? [] : weakestTracks(coverage, 3);
+  const nextUp = weakTracks
     .flatMap(track => notDone.filter(i => i.track === track).slice(0, 2))
     .slice(0, 5);
 
