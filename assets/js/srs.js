@@ -1,15 +1,12 @@
-// srs.js — SM-2-lite spaced repetition. Ratings: again(1) hard(2) good(3) easy(4).
-// Intervals are in whole days; `due` is stored as an ISO date string (no time component matters).
+// srs.js — storage-bound adapter over progress.js (feature 007).
+// The single definition of completion and every derived figure live in progress.js; this module
+// only reads storage and delegates. It MUST NOT reimplement any rule (contracts/progress-api.md
+// C11). `rate()` keeps its interval maths and still writes the vestigial `status` field so
+// records written before and after this change have an identical shape — nothing reads it.
 import { Store } from './store.js';
+import * as P from './progress.js';
 
 const MIN_EASE = 1.3;
-const DAY_MS = 86400000;
-
-function todayISO(offsetDays = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
-}
 
 export function rate(itemId, rating) {
   const prev = Store.getItemProgress(itemId) || {};
@@ -31,7 +28,7 @@ export function rate(itemId, rating) {
   const status = rating === 'again' ? 'learning' : (interval >= 21 ? 'known' : 'learning');
   const next = {
     status, ease, interval, reps, lapses,
-    due: todayISO(interval),
+    due: P.todayLocalISO(new Date(), interval),
     lastRated: new Date().toISOString(),
     lastRating: rating,
   };
@@ -40,49 +37,25 @@ export function rate(itemId, rating) {
 
 export function isDue(itemId) {
   const p = Store.getItemProgress(itemId);
-  if (!p) return false;
-  return p.due <= todayISO();
+  return P.isCompletedRecord(p) && p.due <= P.todayLocalISO();
 }
 
 export function statusOf(itemId) {
-  const p = Store.getItemProgress(itemId);
-  if (!p || !p.status) return 'new';
-  if (p.due <= todayISO() && p.status !== 'new') return 'due';
-  return p.status;
+  return P.statusOf(Store.getProgress(), itemId);
 }
 
-// Build a drill queue: due items first (oldest due first), then unseen items, capped at `limit`.
+// Build a drill queue: due items first (oldest due first), then not-yet-completed items, capped
+// at `limit`. Callers pass the drillable subset.
 export function buildQueue(items, limit = 9999) {
-  const progress = Store.getProgress();
-  const today = todayISO();
-  const due = [];
-  const unseen = [];
-  for (const it of items) {
-    const p = progress[it.id];
-    if (!p) unseen.push(it);
-    else if (p.due <= today) due.push({ item: it, due: p.due });
-  }
-  due.sort((a, b) => a.due < b.due ? -1 : 1);
-  const queue = [...due.map(d => d.item), ...unseen];
-  return queue.slice(0, limit);
+  return P.reviewQueue(items, Store.getProgress(), P.todayLocalISO(), limit);
 }
 
 export function dueCount(items) {
-  const progress = Store.getProgress();
-  const today = todayISO();
-  return items.filter(it => progress[it.id] && progress[it.id].due <= today).length;
+  return P.dueCountOf(items, Store.getProgress(), P.todayLocalISO());
 }
 
-export function masteryByTrack(items) {
-  const progress = Store.getProgress();
-  const byTrack = {};
-  for (const it of items) {
-    byTrack[it.track] = byTrack[it.track] || { total: 0, known: 0, learning: 0, new: 0 };
-    byTrack[it.track].total += 1;
-    const p = progress[it.id];
-    if (!p) byTrack[it.track].new += 1;
-    else if (p.status === 'known') byTrack[it.track].known += 1;
-    else byTrack[it.track].learning += 1;
-  }
-  return byTrack;
+// Renamed from `masteryByTrack`: the old name was the retired `interval >= 21` reading, and an
+// alias is how a retired definition survives a refactor. `known` became `completed`.
+export function coverageByTrack(items) {
+  return P.coverageByTrack(items, Store.getProgress());
 }

@@ -24,6 +24,7 @@ node tools/sync-manifest.mjs --write
 node tools/sync-manifest.mjs --write --release 2026.08.7 --summary "..."
 node tools/check-refs.mjs        # network-probe every ref URL (all packs)
 node tools/check-refs.mjs kotlin-g   # only packs whose filename contains this string
+node tools/check-progress.mjs   # progress accounting — the single definition of completion, self-verified (also gate 16)
 ```
 
 The site **must** be served over `http://localhost` — `fetch()` of local JSON is blocked over
@@ -125,9 +126,11 @@ listeners — there is no virtual DOM, no reactivity, and no re-render on state 
 navigating. Adding a view means: create the module, import it, add it to `routes`, and add a
 `data-nav="<name>"` button in `index.html` (all `[data-nav]` elements are auto-wired to `navigate()`).
 
-Shared modules: `store.js` (localStorage), `content.js` (fetch/diff/merge), `srs.js` (SM-2-lite
-scheduling, `rate`/`buildQueue`/`masteryByTrack`), `search.js` (in-memory index, rebuilt after every
-snapshot swap), `md.js`, `levels.js`.
+Shared modules: `store.js` (localStorage), `content.js` (fetch/diff/merge), `progress.js` (the single
+pure definition of completion — `isCompleted`/`coverageByTrack`/`reviewQueue`/`weakestTracks`/
+`todayLocalISO`, imports nothing, no storage/DOM/Date-now), `srs.js` (storage adapter over
+`progress.js` — SM-2-lite `rate` + delegation, `masteryByTrack` is gone), `search.js` (in-memory
+index, rebuilt after every snapshot swap), `md.js`, `levels.js`.
 
 `assets/css/app.css` is versioned by query string in `index.html` (`app.css?v=5`) — bump `v` when a
 stale cache would matter. It carries the light/dark token sets and the print styles the cheat sheets
@@ -137,12 +140,14 @@ depend on.
 
 - `README.md` is user-facing and its item counts drift; `node tools/validate.mjs` prints the truth
   (629 items across 89 registered packs as of manifest 2026.08.17).
-- `validate.mjs` carries 15 gates and a `--final` flag. Gates 4, 5, 8, 9, 12 are warnings during a
+- `validate.mjs` carries 16 gates and a `--final` flag. Gates 4, 5, 8, 9, 12 are warnings during a
   staged expansion and errors at `--final`; gates 2, 3 and 14 are **release-scoped** — an error on
   an item the current release ships, a warning on untouched remediation backlog, an error at
   `--final`. Gate 15 errors on any ` ``` ` in a prose field (`q`, `answer`, `shortAnswer`,
   `prompt`, `referenceAnswer`, `framework`, `followUps`, `traps`, `hints`, `summary`, `label`,
-  `description`) — `md.js` has no fenced-code support, so prose must never carry one.
+  `description`) — `md.js` has no fenced-code support, so prose must never carry one. Gate 16 is an
+  **error in both modes** (never staged): it runs `tools/check-progress.mjs`'s assertion battery
+  against `progress.js` plus six defect stand-ins, each of which must be caught.
 - `InterviewPrep/` (a nested subdirectory of the same name) is a Spec Kit scaffold. Its tooling —
   `.specify/` templates, `.opencode/`, `speckit-*` skills — has nothing to do with this app and is
   untracked; ignore it unless explicitly asked about Spec Kit. **`InterviewPrep/specs/` is the

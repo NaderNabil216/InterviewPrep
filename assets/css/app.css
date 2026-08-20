@@ -213,18 +213,16 @@ h3 { font-size: 15px; margin: 0 0 8px; }
 .progress-bar__fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--accent)); border-radius: 6px; transition: width .3s ease; }
 
 .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--border); flex-shrink: 0; }
-.status-dot--new { background: var(--blue); }
-.status-dot--learning { background: var(--amber); }
-.status-dot--known { background: var(--accent); }
-.status-dot--due { background: var(--red); }
+.status-dot--not-started { background: var(--blue); }
+.status-dot--completed { background: var(--accent); }
 
 /* ---------- dashboard ---------- */
 .hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; margin-bottom: 22px; }
 .countdown { text-align: right; }
 .countdown__num { font-size: 34px; font-weight: 800; color: var(--accent); line-height: 1; }
 .resume-card { background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 14%, var(--bg-card)), color-mix(in srgb, var(--accent) 10%, var(--bg-card))); border: 1px solid var(--border); }
-.mastery-row { display: grid; grid-template-columns: 160px 1fr 46px; align-items: center; gap: 12px; font-size: 13.5px; }
-.mastery-row + .mastery-row { margin-top: 10px; }
+.coverage-row { display: grid; grid-template-columns: 160px 1fr 96px; align-items: center; gap: 12px; font-size: 13.5px; }
+.coverage-row + .coverage-row { margin-top: 10px; }
 
 /* ---------- topics browser ---------- */
 .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; align-items: center; }

@@ -106,7 +106,13 @@ export function renderDrill(el, { snapshot, param }) {
     el.querySelector('#drill-card').addEventListener('click', () => { if (!flipped) reveal(); });
     el.querySelector('#mark-complete').addEventListener('click', (e) => {
       e.stopPropagation();
-      rate(item.id, 'good');
+      try {
+        rate(item.id, 'good');
+      } catch (err) {
+        // A failed write is not a completion (FR-024): no paused-time absorption, no counter, no
+        // advance — the frozen card with the storage banner is correct. The banner is the notice.
+        return;
+      }
       if (revealedAt) {
         pausedMs += Date.now() - revealedAt;
         revealedAt = null;

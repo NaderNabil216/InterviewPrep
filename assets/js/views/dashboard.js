@@ -1,7 +1,7 @@
 import { Store } from '../store.js';
 import { navigate } from '../app.js';
 import { renderInline } from '../md.js';
-import { masteryByTrack, dueCount } from '../srs.js';
+import { isDrillable, dueCountOf, coverageByTrack, coverageTotals, notCompleted, weakestTracks } from '../progress.js';
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -35,23 +35,25 @@ export function renderDashboard(el, { snapshot }) {
   // genuine zero still renders as 0 once content is loaded.
   const shellPhase = snapshot.items.length === 0;
   const totalItems = shellPhase ? null : snapshot.items.length;
-  const knownCount = shellPhase ? null : Object.values(progress).filter(p => p.status === 'known').length;
-  const seenCount = shellPhase ? null : Object.keys(progress).length;
-  const due = shellPhase ? null : dueCount(snapshot.items);
-  const mastery = shellPhase ? {} : masteryByTrack(snapshot.items);
+  // Coverage totals over the library, never over progress keys — a record for a retired question
+  // is not counted (FR-012). completed + notStarted === total, self-checking (FR-016).
+  const totals = shellPhase ? null : coverageTotals(snapshot.items, progress);
+  // The review-queue figure is scoped to what the drill actually offers: the 550 drillable
+  // questions, never the 629-item library (FR-010, SC-013).
+  const due = shellPhase ? null : dueCountOf(snapshot.items.filter(isDrillable), progress);
+  const coverage = shellPhase ? {} : coverageByTrack(snapshot.items, progress);
   const days = daysUntil(settings.interviewDate);
   const { day, plan } = planTasksForToday(snapshot);
 
   // Free study still gets a "today" surface — never an empty or broken slot (FR-012).
   const freeMode = (Store.getPlanState().mode || 'free') === 'free';
-  const unseen = shellPhase ? [] : snapshot.items.filter(i => !progress[i.id]);
-  const weakestTracks = Object.entries(mastery)
-    .filter(([, m]) => m.total > 0)
-    .sort((a, b) => (a[1].known / a[1].total) - (b[1].known / b[1].total))
-    .slice(0, 3)
-    .map(([track]) => track);
-  const nextUp = weakestTracks
-    .flatMap(track => unseen.filter(i => i.track === track).slice(0, 2))
+  const notDone = shellPhase ? [] : notCompleted(snapshot.items, progress);
+  // The shared ranking: pct ascending, then total descending, then name — deterministic even on
+  // an all-zero fresh history, and identical to the plan's (US4). "Next up" draws from
+  // not-completed material only, so a fully completed track contributes nothing (US4 #4).
+  const weakTracks = shellPhase ? [] : weakestTracks(coverage, 3);
+  const nextUp = weakTracks
+    .flatMap(track => notDone.filter(i => i.track === track).slice(0, 2))
     .slice(0, 5);
 
   const lastItem = session.lastItemId ? snapshot.byId[session.lastItemId] : null;
@@ -61,7 +63,7 @@ export function renderDashboard(el, { snapshot }) {
       <div>
         <div class="eyebrow">Dashboard</div>
         <h1>Welcome back</h1>
-        <p class="muted">Snapshot v${snapshot.version} · ${totalItems ?? '—'} items · ${seenCount ?? '—'} touched · ${knownCount ?? '—'} known</p>
+        <p class="muted">Snapshot v${snapshot.version} · ${totalItems ?? '—'} questions · ${totals ? totals.completed : '—'} completed · ${totals ? totals.notStarted : '—'} not started</p>
       </div>
       ${days !== null ? `
         <div class="countdown">
@@ -88,8 +90,8 @@ export function renderDashboard(el, { snapshot }) {
 
       <div class="card">
         <div class="eyebrow">Review queue</div>
-        <h2 style="margin-top:6px;">${due === null ? '—' : due} due for drill</h2>
-        <p class="faint">${due === null ? 'Loading your review queue…' : due > 0 ? 'Spaced-repetition items are ready to review now.' : 'Nothing due right now — keep reading new material.'}</p>
+        <h2 style="margin-top:6px;">${due === null ? '—' : due} due for review</h2>
+        <p class="faint">${due === null ? 'Loading your review queue…' : due > 0 ? 'Completed questions ready to come back. DSA and System Design have their own workspaces and are not counted here.' : 'Nothing due right now — keep reading new material.'}</p>
         <button class="btn ${due && due > 0 ? 'btn--primary' : ''}" id="go-drill" style="margin-top:10px;">Start drill →</button>
       </div>
     </div>
@@ -113,8 +115,8 @@ export function renderDashboard(el, { snapshot }) {
       <div class="row" style="justify-content:space-between;">
         <div>
           <div class="eyebrow">Today · Free study</div>
-          <h2 style="margin-top:6px;">${due === null ? '—' : due} due · ${shellPhase ? '—' : unseen.length} still unseen</h2>
-          <p class="faint">No fixed schedule. Clear what is due, then take the next thing from your weakest track.</p>
+          <h2 style="margin-top:6px;">${due === null ? '—' : due} due for review · ${totals ? totals.notStarted : '—'} of ${totalItems ?? '—'} not started</h2>
+          <p class="faint">Due counts your review queue — DSA and System Design have their own workspaces and are not in it. Not started counts the whole library.</p>
         </div>
         <button class="btn" data-nav="plan">Change mode →</button>
       </div>
@@ -125,20 +127,19 @@ export function renderDashboard(el, { snapshot }) {
               <span class="item-row__q">${renderInline(i.q)}</span>
               <span class="faint">${i.track}</span>
             </div>`).join('')}
-        </div>` : shellPhase ? '<p class="faint" style="margin-top:10px;">Loading your library…</p>' : '<p class="faint" style="margin-top:10px;">You have seen every item — drill what is due.</p>'}
+        </div>` : shellPhase ? '<p class="faint" style="margin-top:10px;">Loading your library…</p>' : '<p class="faint" style="margin-top:10px;">You have completed every question — drill what is due.</p>'}
     </div>` : ''}
 
     <div class="card">
-      <div class="eyebrow">Mastery by track</div>
+      <div class="eyebrow">Coverage by track</div>
       <div style="margin-top:12px;">
-        ${shellPhase ? '<p class="faint">Loading track mastery…</p>' : Object.entries(mastery).sort((a,b) => b[1].total - a[1].total).map(([track, m]) => {
-          const pct = Math.round((m.known / m.total) * 100);
+        ${shellPhase ? '<p class="faint">Loading track coverage…</p>' : Object.entries(coverage).sort((a,b) => b[1].total - a[1].total).filter(([, m]) => m.total > 0).map(([track, m]) => {
           const label = (snapshot.packMeta.find(p => p.track === track) || {}).title || track;
           return `
-          <div class="mastery-row">
+          <div class="coverage-row">
             <span>${label}</span>
-            <div class="progress-bar"><div class="progress-bar__fill" style="width:${pct}%"></div></div>
-            <span class="faint">${pct}%</span>
+            <div class="progress-bar"><div class="progress-bar__fill" style="width:${m.pct}%"></div></div>
+            <span class="faint">${m.completed}/${m.total} · ${m.pct}%</span>
           </div>`;
         }).join('')}
       </div>

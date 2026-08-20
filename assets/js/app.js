@@ -120,7 +120,12 @@ export function navigate(view, param, query) {
   if (query && Object.keys(query).length) {
     hash += '?' + Object.entries(query).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
   }
-  location.hash = hash;
+  // Assigning an identical hash fires no hashchange — and hashchange is the only thing wired to
+  // render() — so asking for the surface you are already on was a no-op and its figures stayed as
+  // they were on arrival. Render directly instead: the view re-reads stored history, so the
+  // numbers are current by construction (FR-021).
+  if (hash === location.hash) render();
+  else location.hash = hash;
 }
 
 function setActiveNav(view) {

@@ -206,8 +206,13 @@ function renderDetail(el, snapshot, item) {
     toggleBtn.textContent = 'Start';
   });
   el.querySelector('#mark-complete').addEventListener('click', () => {
-    const res = rate(item.id, 'good');
-    toast(`Marked complete — next review ${res.due}.`);
+    try {
+      const res = rate(item.id, 'good');
+      toast(`Marked complete — next review ${res.due}.`);
+    } catch (err) {
+      // A failed write is not a completion (FR-024): no success toast — the persistent storage
+      // banner is the notice.
+    }
   });
 }
 

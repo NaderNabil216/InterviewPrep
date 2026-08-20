@@ -1,0 +1,56 @@
+§B — progress reflects completions
+✓ B1 hero all-zero
+✓ B1 coverage all zero
+✓ B1 review queue 0
+✓ B2 10 of track = correct %
+✓ B3 no threshold no delay
+✓ B4 full track 100%
+✓ B5 due-ness separate from completion
+✓ B6 five completions count once
+✓ B7 cold start loading not zero
+✓ B8 same-surface re-request fresh
+✓ B10 failed save not a completion
+§C — every surface agrees
+✓ C1 full task -> done + auto chip
+✓ C1 hero counts them
+✓ C2 partial task unticked
+✓ C3 topics completed = 10
+✓ C4 status options exactly four
+✓ C4b legacy status falls back
+✓ C3b SC-003 cross-check 11 tracks
+✓ C5 populations named
+✓ C6 due figure driven to 0
+§D — US3 notes are notes
+✓ D1 note != completion
+✓ D2 noted question offered in review
+✓ D4 topics state not-started
+✓ D5 F2 silently corrected + offered
+✓ D5 note persists in textarea
+§D — US4 recommendations
+✓ US4#1 weaker track ranks lower
+✓ US4#2 next-up uncompleted from weak tracks
+✓ US4#3 stable non-empty next-up
+✓ US4#4 finished track not a source
+§D — US5 local calendar
+✓ US5#1 ahead of UTC offered today
+✓ US5#2 behind UTC no early release
+✓ US5#3 due exactly on the next local day
+§E — SC-009 preservation
+  before.json: 6 records, 1 ticks
+✓ E progress records changed: 0
+✓ E plan.done identical
+✓ E plan.checked identical
+✓ E mockResults identical
+✓ E pre-existing completions counted
+✓ E note-only back in queue
+§F — edge cases
+✓ F6 orphan counted nowhere, pct bounded
+✓ F import byte-identical + plan ticks
+✓ F note on completed keeps completion
+✓ F workspace in coverage, not in due figure
+✓ F cheatsheet Mark complete action present
+✓ F print preview hides the rate row
+✓ F content arrival drops 100% bar to the true count
+
+============================================================
+45/45 checks passed
