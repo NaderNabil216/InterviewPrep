@@ -1,7 +1,7 @@
 import { Store } from '../store.js';
 import { navigate } from '../app.js';
 import { renderInline } from '../md.js';
-import { masteryByTrack, dueCount } from '../srs.js';
+import { coverageByTrack, dueCount } from '../srs.js';
 
 function daysUntil(dateStr) {
   if (!dateStr) return null;
@@ -38,7 +38,7 @@ export function renderDashboard(el, { snapshot }) {
   const knownCount = shellPhase ? null : Object.values(progress).filter(p => p.status === 'known').length;
   const seenCount = shellPhase ? null : Object.keys(progress).length;
   const due = shellPhase ? null : dueCount(snapshot.items);
-  const mastery = shellPhase ? {} : masteryByTrack(snapshot.items);
+  const mastery = shellPhase ? {} : coverageByTrack(snapshot.items);
   const days = daysUntil(settings.interviewDate);
   const { day, plan } = planTasksForToday(snapshot);
 
@@ -47,7 +47,7 @@ export function renderDashboard(el, { snapshot }) {
   const unseen = shellPhase ? [] : snapshot.items.filter(i => !progress[i.id]);
   const weakestTracks = Object.entries(mastery)
     .filter(([, m]) => m.total > 0)
-    .sort((a, b) => (a[1].known / a[1].total) - (b[1].known / b[1].total))
+    .sort((a, b) => (a[1].completed / a[1].total) - (b[1].completed / b[1].total))
     .slice(0, 3)
     .map(([track]) => track);
   const nextUp = weakestTracks
@@ -132,7 +132,7 @@ export function renderDashboard(el, { snapshot }) {
       <div class="eyebrow">Mastery by track</div>
       <div style="margin-top:12px;">
         ${shellPhase ? '<p class="faint">Loading track mastery…</p>' : Object.entries(mastery).sort((a,b) => b[1].total - a[1].total).map(([track, m]) => {
-          const pct = Math.round((m.known / m.total) * 100);
+          const pct = Math.round((m.completed / m.total) * 100);
           const label = (snapshot.packMeta.find(p => p.track === track) || {}).title || track;
           return `
           <div class="mastery-row">

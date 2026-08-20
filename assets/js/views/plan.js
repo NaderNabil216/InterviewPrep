@@ -1,7 +1,7 @@
 import { Store, signature } from '../store.js';
 import { navigate } from '../app.js';
 import { renderInline } from '../md.js';
-import { dueCount, masteryByTrack } from '../srs.js';
+import { dueCount, coverageByTrack } from '../srs.js';
 import { levelLabel } from '../levels.js';
 
 // The three study modes. `14day` keeps its id while its label reads "15-day deep plan": the id is
@@ -44,10 +44,10 @@ function renderFreeStudy(el, snapshot, chooser) {
   const progress = Store.getProgress();
   const due = dueCount(snapshot.items);
   const unseen = snapshot.items.filter(i => !progress[i.id]);
-  const mastery = masteryByTrack(snapshot.items);
+  const mastery = coverageByTrack(snapshot.items);
   const weakest = Object.entries(mastery)
     .filter(([, m]) => m.total > 0)
-    .sort((a, b) => (a[1].known / a[1].total) - (b[1].known / b[1].total))
+    .sort((a, b) => (a[1].completed / a[1].total) - (b[1].completed / b[1].total))
     .slice(0, 4);
   const nextUp = weakest.flatMap(([track]) => unseen.filter(i => i.track === track).slice(0, 3)).slice(0, 8);
 
@@ -79,7 +79,7 @@ function renderFreeStudy(el, snapshot, chooser) {
           ${weakest.map(([track, m]) => `
             <div class="row" style="justify-content:space-between;">
               <span>${track}</span>
-              <span class="faint">${m.known}/${m.total} known</span>
+              <span class="faint">${m.completed}/${m.total} known</span>
             </div>`).join('') || '<p class="faint">Rate a few items to see this.</p>'}
         </div>
       </div>
