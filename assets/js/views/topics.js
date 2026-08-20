@@ -5,10 +5,15 @@ import { LEVEL_LABEL } from '../levels.js';
 import { debounce } from '../search.js';
 
 export function renderTopics(el, { snapshot, query }) {
+  // Legacy URLs may carry status values from the retired four-state reading (`known`, `learning`,
+  // `due`, `new`). Only the four values below are honoured; anything else falls back to `all` so
+  // an old bookmark shows the library rather than an empty result (research.md §8).
+  const STATUS_VALUES = ['all', 'not-started', 'completed', 'new-content'];
+  const status = STATUS_VALUES.includes(query.status) ? query.status : 'all';
   const state = {
     track: query.track || 'all',
     level: query.level || 'all',
-    status: query.status || 'all',
+    status,
     q: query.q || '',
   };
 
@@ -80,7 +85,7 @@ export function renderTopics(el, { snapshot, query }) {
   el.innerHTML = `
     <div class="eyebrow">Topics</div>
     <h1>Browse everything</h1>
-    <p class="muted">${applyFilters(browsableItems).length} of ${browsableItems.length} items match your filters.</p>
+    <p class="muted">${applyFilters(browsableItems).length} of ${browsableItems.length} questions match your filters.</p>
 
     <div class="filter-bar">
       <input type="text" id="f-q" placeholder="Filter by keyword or tag…" value="${state.q}">
@@ -94,10 +99,8 @@ export function renderTopics(el, { snapshot, query }) {
       </select>
       <select id="f-status">
         <option value="all">Any status</option>
-        <option value="new" ${state.status === 'new' ? 'selected' : ''}>Not started</option>
-        <option value="learning" ${state.status === 'learning' ? 'selected' : ''}>Learning</option>
-        <option value="due" ${state.status === 'due' ? 'selected' : ''}>Due for review</option>
-        <option value="known" ${state.status === 'known' ? 'selected' : ''}>Known</option>
+        <option value="not-started" ${state.status === 'not-started' ? 'selected' : ''}>Not started</option>
+        <option value="completed" ${state.status === 'completed' ? 'selected' : ''}>Completed</option>
         <option value="new-content" ${state.status === 'new-content' ? 'selected' : ''}>✨ New in v${snapshot.version}</option>
       </select>
     </div>

@@ -24,7 +24,7 @@ export function renderCheatsheets(el, { snapshot, param }) {
       <div class="rate-row">
         <button class="rate-btn rate-btn--complete" id="mark-complete">Mark complete</button>
       </div>
-      <p class="faint no-print" style="margin-top:8px;">Status: <strong>${statusOf(sheet.id)}</strong>${progress?.due ? ` · next review ${progress.due}` : ''}</p>
+      <p class="faint no-print" style="margin-top:8px;">Status: <strong>${progress?.due ? 'Completed' : 'Not started'}</strong>${progress?.due ? ` · next review ${progress.due}` : ''}</p>
     `;
     el.querySelector('#back').addEventListener('click', () => navigate('cheatsheets'));
     el.querySelector('#print-btn').addEventListener('click', () => window.print());

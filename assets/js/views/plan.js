@@ -1,7 +1,7 @@
 import { Store, signature } from '../store.js';
 import { navigate } from '../app.js';
 import { renderInline } from '../md.js';
-import { dueCount, coverageByTrack } from '../srs.js';
+import { isDrillable, dueCountOf, coverageTotals, coverageByTrack, notCompleted, isCompleted, weakestTracks } from '../progress.js';
 import { levelLabel } from '../levels.js';
 
 // The three study modes. `14day` keeps its id while its label reads "15-day deep plan": the id is
@@ -42,14 +42,13 @@ export function renderPlan(el, { snapshot, param }) {
 // ---------------------------------------------------------------------------
 function renderFreeStudy(el, snapshot, chooser) {
   const progress = Store.getProgress();
-  const due = dueCount(snapshot.items);
-  const unseen = snapshot.items.filter(i => !progress[i.id]);
-  const mastery = coverageByTrack(snapshot.items);
-  const weakest = Object.entries(mastery)
-    .filter(([, m]) => m.total > 0)
-    .sort((a, b) => (a[1].completed / a[1].total) - (b[1].completed / b[1].total))
-    .slice(0, 4);
-  const nextUp = weakest.flatMap(([track]) => unseen.filter(i => i.track === track).slice(0, 3)).slice(0, 8);
+  // Card 1's population is identical to the dashboard's Review queue: same call, same arguments
+  // (SC-003/SC-004). Not-started and coverage come from the same module (FR-006).
+  const due = dueCountOf(snapshot.items.filter(isDrillable), progress);
+  const totals = coverageTotals(snapshot.items, progress);
+  const coverage = coverageByTrack(snapshot.items, progress);
+  const weakest = weakestTracks(coverage, 4).map(track => [track, coverage[track]]);
+  const nextUp = weakest.flatMap(([track]) => notCompleted(snapshot.items, progress).filter(i => i.track === track).slice(0, 3)).slice(0, 8);
 
   el.innerHTML = `
     <div class="hero">
@@ -63,15 +62,15 @@ function renderFreeStudy(el, snapshot, chooser) {
 
     <div class="grid grid-3" style="margin-top:16px;">
       <div class="card">
-        <div class="eyebrow">Due now</div>
+        <div class="eyebrow">Due for review</div>
         <h2>${due}</h2>
-        <p class="faint">${due ? 'Reviews ready in your drill queue.' : 'Nothing due — pick up something new below.'}</p>
+        <p class="faint">Reviews ready in your drill queue. DSA and System Design have their own workspaces and are not counted here.</p>
         <div class="btn-row" style="margin-top:10px;"><button class="btn btn--primary" id="start-drill">Start drilling →</button></div>
       </div>
       <div class="card">
-        <div class="eyebrow">Unseen</div>
-        <h2>${unseen.length}</h2>
-        <p class="faint">Items you have not rated yet, out of ${snapshot.items.length}.</p>
+        <div class="eyebrow">Not started</div>
+        <h2>${totals.notStarted}</h2>
+        <p class="faint">Questions you have not marked complete, out of ${totals.total} in the library.</p>
       </div>
       <div class="card">
         <div class="eyebrow">Weakest tracks</div>
@@ -79,14 +78,14 @@ function renderFreeStudy(el, snapshot, chooser) {
           ${weakest.map(([track, m]) => `
             <div class="row" style="justify-content:space-between;">
               <span>${track}</span>
-              <span class="faint">${m.completed}/${m.total} known</span>
-            </div>`).join('') || '<p class="faint">Rate a few items to see this.</p>'}
+              <span class="faint">${m.completed}/${m.total} completed</span>
+            </div>`).join('') || '<p class="faint">Mark a few questions complete to see this.</p>'}
         </div>
       </div>
     </div>
 
     <h2 style="margin-top:22px;">Next up</h2>
-    <p class="muted">Unseen material from the tracks you are weakest at.</p>
+    <p class="muted">Questions you have not completed, from the tracks you have covered least.</p>
     <div class="stack" style="margin-top:10px;">
       ${nextUp.map(i => `
         <div class="item-row" data-id="${i.id}">
@@ -126,12 +125,14 @@ function renderDatedPlan(el, snapshot, planState, mode, chooser) {
   const done = planState.done || {};
   const legacy = planState.checked || {};
 
-  // A task auto-completes once every item it links to has been rated at least once.
-  // An explicit manual tick always wins, so you can mark reading/notes tasks done by hand.
+  // A task auto-completes once every item it links to is marked complete (not merely rated or
+  // noted). An explicit manual tick always wins, so you can mark reading/notes tasks done by hand.
+  // No stored tick is written, cleared or re-keyed here — tick identity stays the material
+  // signature from store.js#signature() (FR-013, FR-019).
   function autoDone(task) {
     const ids = task.itemIds || [];
     if (!ids.length) return false;
-    return ids.every(id => progress[id]);
+    return ids.every(id => isCompleted(progress, id));
   }
 
   // Completion identity is the material signature. `checked` is read only until the one-time
@@ -201,7 +202,7 @@ function renderDatedPlan(el, snapshot, planState, mode, chooser) {
               <label>
                 <input type="checkbox" data-day="${dayIdx}" data-task="${taskIdx}" data-sig="${signature(task.itemIds || [])}" ${isDone ? 'checked' : ''}>
                 <span style="${isDone ? 'text-decoration:line-through;color:var(--text-faint);' : ''}">${renderInline(task.label)}</span>
-                ${auto ? '<span class="faint" title="Auto-completed: every linked item has been rated">auto</span>' : ''}
+                ${auto ? '<span class="faint" title="Auto-completed: every question this task links to is marked complete">auto</span>' : ''}
                 ${link ? `<a href="#" class="faint task-link" data-view="${link.view}" data-param="${link.param}" style="margin-left:auto;">open →</a>` : ''}
               </label>`;
             }).join('')}
