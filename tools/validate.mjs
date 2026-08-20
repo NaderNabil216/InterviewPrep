@@ -209,6 +209,25 @@ for (const item of allItems) {
 if (!fences) console.log('  ✓ gate 15 no fenced code blocks in any prose field');
 
 // ================================================================================================
+// gate 16 — progress accounting (feature 007). Runs the check-progress battery against the real
+// assets/js/progress.js module plus the six defect stand-ins, each of which must be caught.
+// Error always, never staged: it guards a code contract (the single definition of progress), not
+// an expansion-scope metric. Standalone: node tools/check-progress.mjs
+// ================================================================================================
+try {
+  const { runProgressChecks } = await import('./check-progress.mjs');
+  const { passed, failures, defects } = await runProgressChecks();
+  const caught = defects.filter(d => d.caughtBy).length;
+  if (failures.length) {
+    for (const f of failures) err(`gate 16 ${f}`);
+  } else {
+    console.log(`  ✓ gate 16 progress accounting — ${passed} assertions, ${caught}/${defects.length} defect stand-ins caught`);
+  }
+} catch (e) {
+  err(`gate 16 could not run — ${e.message}`);
+}
+
+// ================================================================================================
 // gate 1 — id uniqueness across EVERY pack file on disk, registered or not.
 // A pack the manifest does not list does not exist to the app, but its ids are still claimed.
 // This is the blind spot that let coroutines-g-5.json sit unnoticed.
