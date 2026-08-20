@@ -165,7 +165,13 @@ function runSession(el, snapshot, modeKey, itemCount) {
       el.querySelector('#reveal-btn').style.display = 'none';
     });
     el.querySelector('#mark-complete').addEventListener('click', () => {
-      rate(item.id, 'good');
+      try {
+        rate(item.id, 'good');
+      } catch (err) {
+        // A failed write is not a completion (FR-024): no counter, no advance — the storage
+        // banner raised by store.js is the notice.
+        return;
+      }
       completedCount++;
       idx++;
       draw();

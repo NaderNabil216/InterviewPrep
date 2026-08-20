@@ -1,7 +1,7 @@
 import { Store } from '../store.js';
 import { navigate } from '../app.js';
 import { renderMarkdown, renderCodeBlock, renderInline, renderSentences, stripMarkdown } from '../md.js';
-import { rate, statusOf } from '../srs.js';
+import { rate } from '../srs.js';
 import { toast } from '../app.js';
 import { LEVEL_LABEL } from '../levels.js';
 import { SECTION_LABEL, isLabelled } from '../sections.js';
@@ -81,7 +81,7 @@ export function renderItem(el, { snapshot, param }) {
       <div class="rate-row">
         <button class="rate-btn rate-btn--complete" id="mark-complete">Mark complete</button>
       </div>
-      <p class="faint" style="margin-top:8px;">Status: <strong>${statusOf(item.id)}</strong>${progress?.due ? ` · next review ${progress.due}` : ''}</p>
+      <p class="faint" style="margin-top:8px;">Status: <strong>${progress?.due ? 'Completed' : 'Not started'}</strong>${progress?.due ? ` · next review ${progress.due}` : ''}</p>
     </div>
 
     <div class="item-nav">
@@ -92,9 +92,14 @@ export function renderItem(el, { snapshot, param }) {
 
   el.querySelector('[data-nav="topics"]').addEventListener('click', () => navigate('topics'));
   el.querySelector('#mark-complete').addEventListener('click', () => {
-    const res = rate(item.id, 'good');
-    toast(`Marked complete — next review ${res.due}.`);
-    renderItem(el, { snapshot, param });
+    try {
+      const res = rate(item.id, 'good');
+      toast(`Marked complete — next review ${res.due}.`);
+      renderItem(el, { snapshot, param });
+    } catch (e) {
+      // A failed write must never read as a completion (FR-024): no toast, no re-render — the
+      // persistent storage banner raised by store.js is the candidate's notice.
+    }
   });
   el.querySelector('#notes').addEventListener('change', (e) => {
     Store.setItemProgress(item.id, { notes: e.target.value });

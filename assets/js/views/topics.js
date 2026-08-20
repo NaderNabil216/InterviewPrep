@@ -111,7 +111,16 @@ export function renderTopics(el, { snapshot, query }) {
   const debouncedList = debounce(() => {
     el.querySelector('#topics-list').innerHTML = topicsListHTML();
   }, 150);
-  const debouncedSync = debounce(syncQuery, 400);
+  // The debounced keyword sync must not navigate(): with the same-hash force-render in
+  // app.js#navigate(), typing and deleting back to the original text would fire a full view
+  // re-mount mid-typing and steal focus and caret. replaceState updates the URL with no
+  // hashchange and no re-mount. The track/level/status selects keep using navigate() — a change
+  // event means the value genuinely differs (research.md §9).
+  const debouncedSync = debounce(() => {
+    const params = Object.fromEntries(Object.entries(state).filter(([,v]) => v && v !== 'all'));
+    const qs = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+    history.replaceState(null, '', '#/topics' + (qs ? '?' + qs : ''));
+  }, 400);
   el.querySelector('#f-q').addEventListener('input', (e) => {
     state.q = e.target.value;
     debouncedList();

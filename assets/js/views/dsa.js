@@ -113,8 +113,13 @@ function renderDetail(el, snapshot, item) {
     Store.setScratch(item.id, { ...Store.getScratch(item.id), code: e.target.value });
   });
   el.querySelector('#mark-complete').addEventListener('click', () => {
-    const res = rate(item.id, 'good');
-    toast(`Marked complete — next review ${res.due}.`);
+    try {
+      const res = rate(item.id, 'good');
+      toast(`Marked complete — next review ${res.due}.`);
+    } catch (err) {
+      // A failed write is not a completion (FR-024): no success toast — the persistent storage
+      // banner is the notice.
+    }
   });
 
   // ---- Run (Judge0 CE public instance, ce.judge0.com — no key, no account, no card) ----

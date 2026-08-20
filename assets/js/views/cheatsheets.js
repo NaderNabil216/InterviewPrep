@@ -32,9 +32,14 @@ export function renderCheatsheets(el, { snapshot, param }) {
     // has to be reachable from the view built for reading it — otherwise the cheatsheets track sits
     // at 0% for anyone who reads sheets here rather than hunting them down in Topics.
     el.querySelector('#mark-complete').addEventListener('click', () => {
-      const res = rate(sheet.id, 'good');
-      toast(`Marked complete — next review ${res.due}.`);
-      renderCheatsheets(el, { snapshot, param });
+      try {
+        const res = rate(sheet.id, 'good');
+        toast(`Marked complete — next review ${res.due}.`);
+        renderCheatsheets(el, { snapshot, param });
+      } catch (err) {
+        // A failed write is not a completion (FR-024): no success toast, no re-render claiming
+        // completion — the persistent storage banner is the notice.
+      }
     });
     return;
   }
